@@ -62,6 +62,10 @@ flutter build windows --release   # Windows
 flutter build web --release       # web
 ```
 
+Tagged builds for Android, Linux, Windows and the web are attached to each
+[release](https://github.com/tahuffman1s/OpenWord/releases); see
+[CHANGELOG.md](CHANGELOG.md).
+
 ### Checks
 
 ```bash
