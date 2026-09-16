@@ -398,7 +398,11 @@ class _NavigatorSheetState extends State<_NavigatorSheet> {
 }
 
 /// A grid of numbers, used for both chapters and verses.
-class _NumberGrid extends StatelessWidget {
+///
+/// Opening Psalm 119 and reaching for its chapter list used to start at
+/// chapter 1 with the one you were reading far below the fold, so the grid
+/// starts scrolled to whatever is current.
+class _NumberGrid extends StatefulWidget {
   const _NumberGrid({
     required this.count,
     required this.onSelected,
@@ -412,59 +416,112 @@ class _NumberGrid extends StatelessWidget {
   final int? current;
   final Set<int> marked;
 
+  static const double _maxTileExtent = 76;
+  static const double _spacing = 8;
+  static const double _aspectRatio = 1.15;
+  static const EdgeInsets _padding = EdgeInsets.fromLTRB(16, 4, 16, 32);
+
+  @override
+  State<_NumberGrid> createState() => _NumberGridState();
+}
+
+class _NumberGridState extends State<_NumberGrid> {
+  ScrollController? _controller;
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  /// Where the grid should start so that [current] is on screen, roughly
+  /// centred, without running past either end.
+  double _initialOffset(BoxConstraints constraints) {
+    final current = widget.current;
+    if (current == null || current < 1) return 0;
+
+    final width = constraints.maxWidth - _NumberGrid._padding.horizontal;
+    final columns =
+        (width / (_NumberGrid._maxTileExtent + _NumberGrid._spacing))
+            .ceil()
+            .clamp(1, widget.count);
+    final tileWidth = (width - (columns - 1) * _NumberGrid._spacing) / columns;
+    final rowStride =
+        tileWidth / _NumberGrid._aspectRatio + _NumberGrid._spacing;
+
+    final rows = (widget.count / columns).ceil();
+    final contentHeight =
+        rows * rowStride - _NumberGrid._spacing + _NumberGrid._padding.vertical;
+    final viewport = constraints.maxHeight;
+    if (contentHeight <= viewport) return 0;
+
+    final row = (current - 1) ~/ columns;
+    final target =
+        _NumberGrid._padding.top + row * rowStride - (viewport - rowStride) / 2;
+    return target.clamp(0.0, contentHeight - viewport);
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return GridView.builder(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
-      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-        maxCrossAxisExtent: 76,
-        mainAxisSpacing: 8,
-        crossAxisSpacing: 8,
-        childAspectRatio: 1.15,
-      ),
-      itemCount: count,
-      itemBuilder: (context, index) {
-        final number = index + 1;
-        final isCurrent = number == current;
-        return Material(
-          color: isCurrent
-              ? theme.colorScheme.primary
-              : theme.colorScheme.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(16),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(16),
-            onTap: () {
-              HapticFeedback.selectionClick();
-              onSelected(number);
-            },
-            child: Stack(
-              children: [
-                Center(
-                  child: Text(
-                    '$number',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      color: isCurrent
-                          ? theme.colorScheme.onPrimary
-                          : theme.colorScheme.onSurface,
-                    ),
-                  ),
-                ),
-                if (marked.contains(number))
-                  Positioned(
-                    top: 5,
-                    right: 5,
-                    child: Icon(
-                      Icons.bookmark_rounded,
-                      size: 11,
-                      color: isCurrent
-                          ? theme.colorScheme.onPrimary
-                          : theme.colorScheme.primary,
-                    ),
-                  ),
-              ],
-            ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        _controller ??= ScrollController(
+          initialScrollOffset: _initialOffset(constraints),
+        );
+        return GridView.builder(
+          controller: _controller,
+          padding: _NumberGrid._padding,
+          gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+            maxCrossAxisExtent: _NumberGrid._maxTileExtent,
+            mainAxisSpacing: _NumberGrid._spacing,
+            crossAxisSpacing: _NumberGrid._spacing,
+            childAspectRatio: _NumberGrid._aspectRatio,
           ),
+          itemCount: widget.count,
+          itemBuilder: (context, index) {
+            final number = index + 1;
+            final isCurrent = number == widget.current;
+            return Material(
+              color: isCurrent
+                  ? theme.colorScheme.primary
+                  : theme.colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(16),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  widget.onSelected(number);
+                },
+                child: Stack(
+                  children: [
+                    Center(
+                      child: Text(
+                        '$number',
+                        style: theme.textTheme.titleMedium?.copyWith(
+                          color: isCurrent
+                              ? theme.colorScheme.onPrimary
+                              : theme.colorScheme.onSurface,
+                        ),
+                      ),
+                    ),
+                    if (widget.marked.contains(number))
+                      Positioned(
+                        top: 5,
+                        right: 5,
+                        child: Icon(
+                          Icons.bookmark_rounded,
+                          size: 11,
+                          color: isCurrent
+                              ? theme.colorScheme.onPrimary
+                              : theme.colorScheme.primary,
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
         );
       },
     );

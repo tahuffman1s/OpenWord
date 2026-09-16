@@ -95,12 +95,22 @@ class VerseSegment {
 
 /// A paragraph, poetry line or heading.
 class Block {
-  const Block({required this.style, this.indent = 0, this.segments = const []});
+  const Block({
+    required this.style,
+    this.indent = 0,
+    this.indentFirstLine = true,
+    this.segments = const [],
+  });
 
   final BlockStyle style;
 
   /// Indent level; 1-based for poetry, 0 for flush-left prose.
   final int indent;
+
+  /// Whether the first line is indented, as `\p` is and `\m` is not. Some
+  /// translations set every paragraph flush to the margin, and indenting
+  /// those would misrepresent the text.
+  final bool indentFirstLine;
 
   final List<VerseSegment> segments;
 

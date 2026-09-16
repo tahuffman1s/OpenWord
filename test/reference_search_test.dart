@@ -29,7 +29,7 @@ void main() {
 
   test('clamps out-of-range chapters and verses', () {
     expect(parse('Genesis 99'), const Reference('GEN', 2));
-    expect(parse('Genesis 1:99'), const Reference('GEN', 1, 3));
+    expect(parse('Genesis 1:99'), const Reference('GEN', 1, 5));
     expect(parse('Genesis 0'), const Reference('GEN', 1));
   });
 

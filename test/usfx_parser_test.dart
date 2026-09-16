@@ -27,9 +27,12 @@ void main() {
       'r',
       'p',
       'p',
+      'p',
+      'p',
+      'd',
     ]);
     expect(chapter.blocks[0].segments.first.text, 'The Creation');
-    expect(chapter.blocks[1].segments.first.text, '(John 1:1–5)');
+    expect(chapter.blocks[1].segments.first.text, '(Psalms 1:1; Matthew 1)');
   });
 
   test('groups verses into paragraphs', () {
@@ -40,7 +43,24 @@ void main() {
     expect(paragraph.segments[0].verse, 1);
     expect(paragraph.segments[0].startsVerse, isTrue);
     expect(paragraph.segments[1].verse, 2);
-    expect(chapter.verseCount, 3);
+    expect(chapter.verseCount, 5);
+  });
+
+  test('marks which paragraphs indent their first line', () {
+    final blocks = bible.bookByCode('GEN')!.chapter(1)!.blocks;
+    // Plain \p indents; \m sits flush, which is what a translation that
+    // sets every paragraph to the margin uses throughout.
+    expect(blocks[2].indentFirstLine, isTrue);
+    expect(blocks[4].indentFirstLine, isFalse);
+    // \pi is indented as a block rather than on its first line.
+    expect(blocks[5].indentFirstLine, isFalse);
+    expect(blocks[5].indent, 1);
+  });
+
+  test('a speaker label is set like a title, not like prose', () {
+    final blocks = bible.bookByCode('GEN')!.chapter(1)!.blocks;
+    expect(blocks.last.style, BlockStyle.descriptiveTitle);
+    expect(blocks.last.segments.first.text, 'Eliphaz the Temanite');
   });
 
   test('numbers chapters and finds them by number', () {

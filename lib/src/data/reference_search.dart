@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../model/bible.dart';
 
 /// Matching book names and parsing references typed by hand.
@@ -16,7 +18,7 @@ class ReferenceSearch {
   static final RegExp _notAlphanumeric = RegExp(r'[^a-z0-9]');
 
   /// Spellings people type that are not the book's name or abbreviation.
-  static const Map<String, String> _aliases = {
+  static const Map<String, String> aliases = {
     'psalm': 'PSA',
     'psalms': 'PSA',
     'ps': 'PSA',
@@ -103,7 +105,7 @@ class ReferenceSearch {
     final abbreviation = <Book>[];
     final contains = <Book>[];
 
-    final aliasCode = _aliases[needle];
+    final aliasCode = aliases[needle];
     for (final book in books) {
       final name = normalise(book.name);
       final code = normalise(book.code);
@@ -138,7 +140,7 @@ class ReferenceSearch {
     if (candidates.length > 1 &&
         normalise(book.name) != normalise(text) &&
         normalise(book.abbrev) != normalise(text) &&
-        _aliases[normalise(text)] != book.code) {
+        aliases[normalise(text)] != book.code) {
       return null;
     }
 
@@ -149,5 +151,82 @@ class ReferenceSearch {
       chapterData.verseCount == 0 ? 1 : chapterData.verseCount,
     );
     return Reference(book.code, targetChapter, targetVerse);
+  }
+}
+
+/// One reference found inside a piece of prose.
+@immutable
+class ReferenceMatch {
+  const ReferenceMatch({
+    required this.start,
+    required this.end,
+    required this.reference,
+  });
+
+  final int start;
+  final int end;
+  final Reference reference;
+}
+
+/// Finds citations such as `Exodus 30:12` or `2 Kings 23:21` inside footnotes
+/// and parallel-passage lines, so they can be tapped.
+///
+/// Built from the books actually loaded, and matched longest name first, so
+/// `2 John 1` is never read as `John 1`. Only a real book name followed by a
+/// number matches, which keeps ordinary prose from lighting up.
+class ReferenceMatcher {
+  ReferenceMatcher(List<Book> books) {
+    final names = <String>[];
+    for (final book in books) {
+      for (final form in {book.name, book.abbrev, book.code}) {
+        _codes[form.toLowerCase()] = book.code;
+        names.add(form);
+      }
+      _books[book.code] = book;
+    }
+    for (final entry in ReferenceSearch.aliases.entries) {
+      if (!_books.containsKey(entry.value)) continue;
+      _codes[entry.key] = entry.value;
+      names.add(entry.key);
+    }
+    names.sort((a, b) => b.length.compareTo(a.length));
+    _pattern = RegExp(
+      '(?<![A-Za-z])(${names.map(RegExp.escape).join('|')})'
+      r'\.?\s*(\d{1,3})(?:\s*[:.]\s*(\d{1,3}))?',
+      caseSensitive: false,
+    );
+  }
+
+  final Map<String, String> _codes = {};
+  final Map<String, Book> _books = {};
+  late final RegExp _pattern;
+
+  List<ReferenceMatch> findAll(String text) {
+    final found = <ReferenceMatch>[];
+    for (final match in _pattern.allMatches(text)) {
+      final code = _codes[match.group(1)!.toLowerCase()];
+      final book = code == null ? null : _books[code];
+      if (book == null) continue;
+      final chapter = int.tryParse(match.group(2)!);
+      if (chapter == null || chapter < 1 || chapter > book.chapterCount) {
+        continue;
+      }
+      final verse = match.group(3) == null
+          ? null
+          : int.tryParse(match.group(3)!);
+      final verses = book.chapter(chapter)!.verseCount;
+      found.add(
+        ReferenceMatch(
+          start: match.start,
+          end: match.end,
+          reference: Reference(
+            book.code,
+            chapter,
+            verse?.clamp(1, verses == 0 ? 1 : verses),
+          ),
+        ),
+      );
+    }
+    return found;
   }
 }

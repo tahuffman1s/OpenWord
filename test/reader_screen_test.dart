@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openword/src/app_scope.dart';
@@ -66,7 +67,10 @@ void main() {
     );
     // The section heading and its parallel reference both render.
     expect(find.text('The Creation'), findsOneWidget);
-    expect(find.text('(John 1:1–5)'), findsOneWidget);
+    expect(
+      find.textContaining('Psalms 1:1', findRichText: true),
+      findsOneWidget,
+    );
   });
 
   testWidgets('resumes where the reader left off', (tester) async {
@@ -297,6 +301,114 @@ void main() {
       find.byType(SingleChildScrollView),
     );
     expect(scroller.controller!.offset, greaterThan(200));
+  });
+
+  testWidgets('only paragraphs that continue a passage are indented', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+    // Genesis 1 in the fixture is: heading, reference, \p, \p, \m, \pi,
+    // speaker. Only the second \p continues a passage and indents; the first
+    // opens one after the heading, \m is flush by marker and \pi is indented
+    // as a block instead.
+    final indents = tester
+        .widgetList<SizedBox>(find.byType(SizedBox))
+        .where((box) => (box.width ?? 0) > 15 && (box.height == null))
+        .length;
+    expect(indents, 1);
+  });
+
+  testWidgets('the chapter grid opens at the chapter being read', (
+    tester,
+  ) async {
+    await pumpReader(
+      tester,
+      bible: parseLongFixture(verses: 4, chapters: 60),
+      resume: const Reference('GEN', 55),
+    );
+
+    await tester.tap(find.text('Genesis 55'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'gen');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Genesis').last);
+    await tester.pumpAndSettle();
+
+    final grid = tester.widget<GridView>(find.byType(GridView));
+    expect(
+      grid.controller!.offset,
+      greaterThan(100),
+      reason: 'chapter 55 would otherwise be far below the fold',
+    );
+    expect(find.widgetWithText(InkWell, '55'), findsOneWidget);
+  });
+
+  testWidgets('a short book still opens its grid at the top', (tester) async {
+    await pumpReader(tester);
+    await tester.tap(find.text('Genesis 1'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'gen');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Genesis').last);
+    await tester.pumpAndSettle();
+
+    final grid = tester.widget<GridView>(find.byType(GridView));
+    expect(grid.controller!.offset, 0);
+  });
+
+  testWidgets('a cited passage in a reference line is tappable', (
+    tester,
+  ) async {
+    final harness = await pumpReader(tester);
+
+    // Genesis 1 in the fixture carries a parallel-passage line citing two
+    // places; tapping one should take the reader there.
+    final link = find.byWidgetPredicate(
+      (widget) =>
+          widget is RichText &&
+          widget.text.toPlainText().contains('Psalms 1:1'),
+    );
+    expect(link, findsOneWidget);
+
+    // Find the span carrying the citation and fire its tap handler, rather
+    // than guessing where the glyphs landed.
+    TapGestureRecognizer? recognizer;
+    tester.widget<RichText>(link).text.visitChildren((span) {
+      if (span is TextSpan && span.text == 'Psalms 1:1') {
+        recognizer = span.recognizer as TapGestureRecognizer?;
+        return false;
+      }
+      return true;
+    });
+    expect(recognizer, isNotNull, reason: 'the citation should be a link');
+    recognizer!.onTap!();
+    await tester.pumpAndSettle();
+
+    expect(appBarText('Psalms 1'), findsOneWidget);
+    expect(harness.reading.lastPosition?.bookCode, 'PSA');
+  });
+
+  testWidgets('a footnote opens, with its citations tappable', (tester) async {
+    await pumpReader(tester);
+
+    // The footnote marker on Genesis 1:1.
+    await tester.tap(find.byIcon(Icons.circle).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Elohim'), findsOneWidget);
+  });
+
+  testWidgets('the book name opens a background note', (tester) async {
+    await pumpReader(tester);
+
+    await tester.tap(find.text('GENESIS'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Law • Old Testament'), findsOneWidget);
+    expect(
+      find.textContaining('traditionally ascribed to Moses'),
+      findsOneWidget,
+    );
+    expect(find.textContaining('editorial summary'), findsOneWidget);
   });
 
   testWidgets('saves the position when the chapter changes', (tester) async {

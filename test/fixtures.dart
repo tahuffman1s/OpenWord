@@ -35,12 +35,18 @@ const String usfxFixture = '''
 <p sfm="mt">Genesis</p><p sfm="ip">An introduction.</p>
 <c id="1"/>
 <p sfm="s">The Creation</p>
-<p sfm="r">(John 1:1–5)</p>
+<p sfm="r">(Psalms 1:1; Matthew 1)</p>
 <p><v id="1"/>In the beginning, God<f caller="+"><fr>1:1</fr><ft>Elohim.</ft></f> created the heavens.
 <ve/><v id="2"/>The earth was <add>formless</add> and empty.
 <ve/></p>
 <p><v id="3"/>God said, "Let there be light."
 <ve/></p>
+<p sfm="m"><v id="4"/>A paragraph set flush to the margin.
+<ve/></p>
+<p sfm="pi"><v id="5"/>An indented paragraph.
+<ve/></p>
+<p sfm="sp">Eliphaz the Temanite
+</p>
 <c id="2"/>
 <p><v id="1"/>The second chapter.
 <ve/></p>

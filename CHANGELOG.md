@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.2.0
+
+### Fixed
+- Paragraphs are indented the way the translation asks. A translation that
+  sets every paragraph flush to the margin (`\m`, which the Berean Standard
+  Bible uses throughout) was being given a first-line indent as though it were
+  `\p`, and `\pi` paragraphs were not indented as blocks at all. A paragraph
+  that opens a passage — the first in a chapter, or the one after a heading —
+  is now set flush, as printed Bibles do.
+- The chapter and verse grids open at what you are reading. Reaching for the
+  chapter list in Psalm 119 used to start at chapter 1, with the highlighted
+  chapter far below the fold.
+
+### Added
+- Citations are tappable. Where a translation cites another passage — in a
+  footnote, or in the parallel-passage line under a heading — the reference
+  becomes a link that takes you there. Matching is built from the books
+  actually loaded and needs a book name followed by a number, so ordinary
+  prose is left alone.
+- A background note for every book, opened from the book's name above the
+  chapter number: where it sits in the canon, how long it is, its genre, who
+  it is ascribed to and by whom, the period it is set in, and a short summary.
+  It says plainly that it is an editorial summary and that traditional
+  authorship is tradition.
+- Speaker labels (`\sp`), as in Job's dialogue, are set as titles rather than
+  run in as prose.
+
 ## 1.1.0
 
 ### Completely offline

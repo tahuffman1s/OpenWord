@@ -102,6 +102,7 @@ class UsfxParser {
   bool _blockOpen = false;
   String _blockStyle = 'p';
   int _blockIndent = 0;
+  bool _blockIndentFirstLine = true;
   List<VerseSegment> _segments = [];
   final StringBuffer _text = StringBuffer();
 
@@ -197,7 +198,12 @@ class UsfxParser {
             _flushBlock();
             _blocks.add(const Block(style: BlockStyle.blank));
           } else {
-            _openBlock(kind, _indentFor(name, _attr(event, 'sfm'), event));
+            final sfm = _attr(event, 'sfm');
+            _openBlock(
+              kind,
+              _indentFor(name, sfm, event),
+              indentFirstLine: _indentsFirstLine(name, sfm),
+            );
             frame.closesBlock = true;
           }
         } else if (name == 'wj') {
@@ -271,10 +277,11 @@ class UsfxParser {
     _write('${Markup.noteStart}${_notes.length - 1}${Markup.noteEnd}');
   }
 
-  void _openBlock(String style, int indent) {
+  void _openBlock(String style, int indent, {bool indentFirstLine = true}) {
     _flushBlock();
     _blockStyle = style;
     _blockIndent = indent;
+    _blockIndentFirstLine = indentFirstLine;
     _segments = [];
     _text.clear();
     _blockOpen = true;
@@ -299,6 +306,7 @@ class UsfxParser {
         Block(
           style: BlockStyle.fromKey(_blockStyle),
           indent: _blockIndent,
+          indentFirstLine: _blockIndentFirstLine,
           segments: List.unmodifiable(_segments),
         ),
       );
@@ -358,6 +366,7 @@ class UsfxParser {
     if (marker == 'cl' || marker == 'cp') return null;
     // Parallel-passage references are set apart from the heading above them.
     if (marker == 'r' || marker == 'mr' || marker == 'sr') return 'r';
+    if (marker == 'sp') return 'd';
     if (marker.startsWith('ms') ||
         marker.startsWith('s') && marker != 'sp' ||
         marker == 'qa' ||
@@ -366,6 +375,31 @@ class UsfxParser {
     }
     if (marker.startsWith('q')) return 'q';
     return 'p';
+  }
+
+  /// Markers that set a paragraph flush to the margin. `\p` indents its
+  /// first line; `\m` and the list and embedded-block markers do not.
+  static const Set<String> _flushParagraphs = {
+    'm',
+    'nb',
+    'mi',
+    'li',
+    'lim',
+    'pc',
+    'pm',
+    'pmo',
+    'pmc',
+    'pmr',
+    'cls',
+    'tr',
+    'ph',
+    'pi',
+  };
+
+  static bool _indentsFirstLine(String name, String? sfm) {
+    final marker = (sfm == null || sfm.isEmpty) ? name : sfm;
+    final base = marker.replaceAll(RegExp(r'\d+$'), '');
+    return !_flushParagraphs.contains(base);
   }
 
   static int _indentFor(String name, String? sfm, XmlStartElementEvent event) {

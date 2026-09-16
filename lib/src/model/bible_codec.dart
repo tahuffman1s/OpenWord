@@ -19,7 +19,8 @@ import 'book_meta.dart';
 ///     n:books
 ///       str:code n:chapters
 ///         n:number n:blocks
-///           u8:style u8:indent n:segments
+///           u8:style u8:indent u8:flags n:segments
+///             (flags bit 0: the first line is indented)
 ///             n:verse u8:startsVerse str:text
 ///           n:notes str:note...
 ///
@@ -28,7 +29,7 @@ class BibleCodec {
   const BibleCodec._();
 
   static const List<int> _magic = [0x4f, 0x57, 0x42]; // 'OWB'
-  static const int version = 1;
+  static const int version = 2;
 
   static Uint8List encode(Bible bible) {
     final out = _Writer()
@@ -53,6 +54,7 @@ class BibleCodec {
           out
             ..byte(block.style.index)
             ..byte(block.indent.clamp(0, 255))
+            ..byte(block.indentFirstLine ? 1 : 0)
             ..varint(block.segments.length);
           for (final segment in block.segments) {
             out
@@ -105,6 +107,7 @@ class BibleCodec {
         for (var i = 0; i < blockCount; i++) {
           final styleIndex = input.byte();
           final indent = input.byte();
+          final flags = input.byte();
           final segmentCount = input.varint();
           final segments = <VerseSegment>[];
           for (var s = 0; s < segmentCount; s++) {
@@ -122,6 +125,7 @@ class BibleCodec {
                   ? BlockStyle.values[styleIndex]
                   : BlockStyle.paragraph,
               indent: indent,
+              indentFirstLine: flags & 1 != 0,
               segments: segments,
             ),
           );

@@ -1,6 +1,7 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
+import '../../data/reference_search.dart';
 import '../../data/settings.dart';
 import '../../model/bible.dart';
 import '../theme.dart';
@@ -98,6 +99,8 @@ class ScriptureBlock extends StatefulWidget {
     required this.highlights,
     required this.flagged,
     required this.isFirst,
+    this.matcher,
+    this.onReferenceTap,
     super.key,
   });
 
@@ -116,8 +119,14 @@ class ScriptureBlock extends StatefulWidget {
   /// Verses carrying a bookmark or a note, flagged in the margin.
   final Set<int> flagged;
 
-  /// The first block of a chapter is not indented.
+  /// True for the first paragraph of a chapter or section: a paragraph that
+  /// opens a passage is set flush, as a printed Bible does.
   final bool isFirst;
+
+  /// Finds citations in parallel-passage lines so they can be tapped.
+  final ReferenceMatcher? matcher;
+
+  final ValueChanged<Reference>? onReferenceTap;
 
   @override
   State<ScriptureBlock> createState() => _ScriptureBlockState();
@@ -160,15 +169,26 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
       case BlockStyle.reference:
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
-          child: Text(_plain(block), style: style.reference),
+          child: LinkedText(
+            text: _plain(block),
+            style: style.reference,
+            matcher: widget.matcher,
+            onTap: widget.onReferenceTap,
+          ),
         );
       case BlockStyle.poetry:
         return _poetryLine();
       case BlockStyle.paragraph:
         return Padding(
-          padding: const EdgeInsets.only(bottom: 10),
+          padding: EdgeInsets.only(
+            left: block.indent.clamp(0, 4) * 16.0,
+            bottom: 10,
+          ),
           child: _richText(
-            indentFirstLine: style.paragraphLayout && !widget.isFirst,
+            indentFirstLine:
+                style.paragraphLayout &&
+                block.indentFirstLine &&
+                !widget.isFirst,
           ),
         );
     }
@@ -367,5 +387,87 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
         ),
       ),
     );
+  }
+}
+
+/// Prose with any Scripture citations in it turned into links.
+///
+/// Used for parallel-passage lines and footnotes, where a translation cites
+/// other passages in plain text.
+class LinkedText extends StatefulWidget {
+  const LinkedText({
+    required this.text,
+    required this.style,
+    this.matcher,
+    this.onTap,
+    super.key,
+  });
+
+  final String text;
+  final TextStyle style;
+  final ReferenceMatcher? matcher;
+  final ValueChanged<Reference>? onTap;
+
+  @override
+  State<LinkedText> createState() => _LinkedTextState();
+}
+
+class _LinkedTextState extends State<LinkedText> {
+  final List<TapGestureRecognizer> _recognizers = [];
+
+  @override
+  void dispose() {
+    _disposeRecognizers();
+    super.dispose();
+  }
+
+  void _disposeRecognizers() {
+    for (final recognizer in _recognizers) {
+      recognizer.dispose();
+    }
+    _recognizers.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final matcher = widget.matcher;
+    final onTap = widget.onTap;
+    _disposeRecognizers();
+
+    if (matcher == null || onTap == null) {
+      return Text(widget.text, style: widget.style);
+    }
+    final matches = matcher.findAll(widget.text);
+    if (matches.isEmpty) return Text(widget.text, style: widget.style);
+
+    final linkStyle = widget.style.copyWith(
+      color: Theme.of(context).colorScheme.primary,
+      decoration: TextDecoration.underline,
+      decorationColor: Theme.of(context).colorScheme.primary
+          .withValues(alpha: 0.4),
+    );
+
+    final spans = <InlineSpan>[];
+    var cursor = 0;
+    for (final match in matches) {
+      if (match.start > cursor) {
+        spans.add(TextSpan(text: widget.text.substring(cursor, match.start)));
+      }
+      final recognizer = TapGestureRecognizer()
+        ..onTap = () => onTap(match.reference);
+      _recognizers.add(recognizer);
+      spans.add(
+        TextSpan(
+          text: widget.text.substring(match.start, match.end),
+          style: linkStyle,
+          recognizer: recognizer,
+        ),
+      );
+      cursor = match.end;
+    }
+    if (cursor < widget.text.length) {
+      spans.add(TextSpan(text: widget.text.substring(cursor)));
+    }
+    return Text.rich(TextSpan(children: spans), style: widget.style);
   }
 }

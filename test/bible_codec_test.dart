@@ -31,6 +31,20 @@ void main() {
     );
     expect(psalm.blocks[3].segments.first.startsVerse, isFalse);
 
+    // Paragraph indent flags survive, or every paragraph would look alike.
+    expect(
+      restored
+          .bookByCode('GEN')!
+          .chapter(1)!
+          .blocks
+          .map((block) => block.indentFirstLine),
+      original
+          .bookByCode('GEN')!
+          .chapter(1)!
+          .blocks
+          .map((block) => block.indentFirstLine),
+    );
+
     final genesis = restored.bookByCode('GEN')!.chapter(1)!;
     expect(genesis.notes, ['Elohim.']);
     expect(genesis.verseText(1), 'In the beginning, God created the heavens.');
@@ -40,7 +54,7 @@ void main() {
           .segments
           .first
           .text,
-      '(John 1:1–5)',
+      '(Psalms 1:1; Matthew 1)',
     );
   });
 

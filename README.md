@@ -27,6 +27,11 @@ no network entitlement.
 - **Highlights in five colours, bookmarks and notes**, any combination on the
   same verse. Highlights tint the text in place; bookmarked and annotated
   verses are flagged in the margin and in the pickers.
+- **Context where the translation offers it.** Citations in footnotes and in
+  parallel-passage lines are links — tap `Ezekiel 34:11` under the heading of
+  Psalm 23 and you are there. Every book also carries a short background note,
+  opened from its name above the chapter number: canon division, length,
+  genre, ascription, the period it is set in and a summary.
 - **Your library** in one place: bookmarks, highlights, notes and the chapters
   you have been reading, each a tap away from the text.
 - **Search** the whole Bible, one testament or the book you are in, with an
@@ -106,6 +111,7 @@ lib/
       bible_codec.dart          the binary format the bundled text is read from
     data/
       translations.dart         the bundled translations
+      book_notes.dart           the per-book background notes
       usfx_parser.dart          streaming USFX → the model above (build time)
       library.dart              loads a translation from the app's assets
       reference_search.dart     book matching and "jn 3:16" parsing
@@ -116,7 +122,7 @@ lib/
       navigator_sheet.dart      go-to field, book list, chapter and verse grids
       widgets/scripture_text.dart   block and inline-markup rendering
       library_screen.dart, search_screen.dart, display_sheet.dart,
-      settings_screen.dart
+      book_sheet.dart, settings_screen.dart
 ```
 
 A chapter is stored as an ordered list of **blocks** (paragraph, poetry line,

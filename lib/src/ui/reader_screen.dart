@@ -6,9 +6,11 @@ import 'package:flutter/services.dart';
 import '../app_scope.dart';
 import '../data/library.dart';
 import '../data/marks.dart';
+import '../data/reference_search.dart';
 import '../data/settings.dart';
 import '../model/bible.dart';
 import '../model/book_meta.dart';
+import 'book_sheet.dart';
 import 'display_sheet.dart';
 import 'library_screen.dart';
 import 'navigator_sheet.dart';
@@ -39,10 +41,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
   int? _pendingPage;
 
   bool _restored = false;
+  Bible? _matcherFor;
 
   // Held directly rather than looked up on demand, so they are still
   // reachable from dispose().
   late Bible _bible;
+
+  /// Built once per translation; finds citations inside notes and
+  /// parallel-passage lines.
+  ReferenceMatcher? _matcher;
+
   late Settings _settings;
   late ReadingStore _reading;
   late LibraryController _library;
@@ -52,6 +60,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.didChangeDependencies();
     final scope = AppScope.of(context);
     _library = scope.library;
+    if (!identical(_matcherFor, scope.library.bible)) {
+      _matcherFor = scope.library.bible;
+      _matcher = ReferenceMatcher(scope.library.bible!.books);
+    }
     _bible = scope.library.bible!;
     _settings = scope.settings;
     _reading = scope.reading;
@@ -237,9 +249,16 @@ class _ReaderScreenState extends State<ReaderScreen> {
               style: Theme.of(sheetContext).textTheme.titleMedium,
             ),
             const SizedBox(height: 12),
-            Text(
-              notes[index],
-              style: Theme.of(sheetContext).textTheme.bodyLarge,
+            LinkedText(
+              text: notes[index],
+              style:
+                  Theme.of(sheetContext).textTheme.bodyLarge ??
+                  const TextStyle(),
+              matcher: _matcher,
+              onTap: (reference) {
+                Navigator.of(sheetContext).pop();
+                _goTo(reference);
+              },
             ),
           ],
         ),
@@ -338,6 +357,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       book.code,
                       chapter.number,
                     ),
+                    matcher: _matcher,
+                    onReferenceTap: _goTo,
                     comparison: comparison
                         ?.bookByCode(book.code)
                         ?.chapter(chapter.number),
@@ -374,6 +395,8 @@ class _ChapterPage extends StatefulWidget {
     required this.style,
     required this.highlights,
     required this.flagged,
+    required this.matcher,
+    required this.onReferenceTap,
     required this.comparison,
     required this.comparisonLabel,
     required this.primaryLabel,
@@ -392,6 +415,8 @@ class _ChapterPage extends StatefulWidget {
   final ScriptureStyle style;
   final Map<int, Color> highlights;
   final Set<int> flagged;
+  final ReferenceMatcher? matcher;
+  final ValueChanged<Reference>? onReferenceTap;
 
   /// The same chapter in a second translation, when comparing.
   final Chapter? comparison;
@@ -551,6 +576,8 @@ class _ChapterPageState extends State<_ChapterPage> {
           highlights: widget.highlights,
           flagged: widget.flagged,
           isFirst: isFirst,
+          matcher: widget.matcher,
+          onReferenceTap: widget.onReferenceTap,
           onVerseTap: widget.onVerseTap,
           onNoteTap: widget.onNoteTap,
         );
@@ -560,10 +587,9 @@ class _ChapterPageState extends State<_ChapterPage> {
               ? blockWidget
               : KeyedSubtree(key: key, child: blockWidget),
         );
-        if (block.style == BlockStyle.paragraph ||
-            block.style == BlockStyle.poetry) {
-          isFirst = false;
-        }
+        // A heading, title or stanza break starts a new passage, and the
+        // paragraph opening it is set flush like the chapter's first.
+        isFirst = !block.style.isVerseText;
       }
     }
 
@@ -599,11 +625,30 @@ class _ChapterPageState extends State<_ChapterPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            widget.book.name.toUpperCase(),
-            style: theme.textTheme.labelMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-              letterSpacing: 1.6,
+          // Tapping the book's name opens its background note.
+          InkWell(
+            onTap: () => showBookSheet(context, widget.book),
+            borderRadius: BorderRadius.circular(8),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 2),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    widget.book.name.toUpperCase(),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      letterSpacing: 1.6,
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 14,
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 2),
