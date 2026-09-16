@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-import 'bible_source.dart';
+import 'translations.dart';
 
-/// How the book picker is organised.
+/// How the book picker lists books.
 enum BookOrder {
-  /// A–Z with the Niagara-style letter rail.
-  alphabetical('A–Z'),
+  /// Genesis to Revelation, grouped by division.
+  canonical('Canon'),
 
-  /// Genesis to Revelation, grouped by testament.
-  canonical('Canon');
+  /// Alphabetical, with numbered books under their name.
+  alphabetical('A–Z');
 
   const BookOrder(this.label);
 
@@ -45,6 +45,7 @@ class Settings extends ChangeNotifier {
   static const _kDeuterocanon = 'deuterocanon';
   static const _kBookOrder = 'bookOrder';
   static const _kTranslation = 'translation';
+  static const _kCompare = 'compareTranslation';
 
   /// Fallback palette seeds offered where the platform has no Material You
   /// palette of its own (desktop, web, older Android, iOS).
@@ -103,13 +104,27 @@ class Settings extends ChangeNotifier {
   set showDeuterocanon(bool value) => _write(_kDeuterocanon, value);
 
   BookOrder get bookOrder =>
-      BookOrder.values[_prefs.getInt(_kBookOrder) ??
-          BookOrder.alphabetical.index];
+      BookOrder.values[_prefs.getInt(_kBookOrder) ?? BookOrder.canonical.index];
   set bookOrder(BookOrder value) => _write(_kBookOrder, value.index);
 
   String get translationId =>
-      _prefs.getString(_kTranslation) ?? BibleSource.worldEnglishBible.id;
+      _prefs.getString(_kTranslation) ?? Translations.fallback.id;
   set translationId(String value) => _write(_kTranslation, value);
+
+  /// The translation shown beside the main one, or null when not comparing.
+  String? get compareTranslationId {
+    final id = _prefs.getString(_kCompare);
+    return (id == null || id.isEmpty || id == translationId) ? null : id;
+  }
+
+  set compareTranslationId(String? value) {
+    if (value == null || value.isEmpty) {
+      _prefs.remove(_kCompare);
+      notifyListeners();
+      return;
+    }
+    _write(_kCompare, value);
+  }
 
   void _write(String key, Object value) {
     switch (value) {

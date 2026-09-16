@@ -356,10 +356,10 @@ class UsfxParser {
       return null;
     }
     if (marker == 'cl' || marker == 'cp') return null;
+    // Parallel-passage references are set apart from the heading above them.
+    if (marker == 'r' || marker == 'mr' || marker == 'sr') return 'r';
     if (marker.startsWith('ms') ||
         marker.startsWith('s') && marker != 'sp' ||
-        marker == 'mr' ||
-        marker == 'r' ||
         marker == 'qa' ||
         marker == 'cd') {
       return 'h';

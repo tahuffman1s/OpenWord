@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_scope.dart';
-import '../data/bible_source.dart';
-import '../data/library.dart';
+import '../data/marks.dart';
 import '../data/settings.dart';
+import '../data/translations.dart';
 
-/// Display, reading and library preferences.
+/// Display, reading, translation and backup preferences.
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
@@ -14,20 +15,21 @@ class SettingsScreen extends StatelessWidget {
     final scope = AppScope.of(context);
     final settings = scope.settings;
     final library = scope.library;
+    final reading = scope.reading;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Display and settings')),
+      appBar: AppBar(title: const Text('Settings')),
       body: AnimatedBuilder(
-        animation: Listenable.merge([settings, library]),
+        animation: Listenable.merge([settings, library, reading]),
         builder: (context, _) {
           final theme = Theme.of(context);
           return ListView(
             padding: const EdgeInsets.only(bottom: 32),
             children: [
               const _Header('Theme'),
-              ListTile(
-                title: const Text('Appearance'),
-                subtitle: const Text('Light, dark or follow the system'),
+              const ListTile(
+                title: Text('Appearance'),
+                subtitle: Text('Light, dark or follow the system'),
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -159,62 +161,128 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 onChanged: (value) => settings.showDeuterocanon = value,
               ),
-              const _Header('Library'),
-              ListTile(
-                title: const Text('Translation'),
-                subtitle: Text(
-                  '${library.source.info.name}\n'
-                  '${library.source.info.license}',
+              const _Header('Translation'),
+              for (final translation in Translations.all)
+                RadioGroup<String>(
+                  groupValue: settings.translationId,
+                  onChanged: (value) {
+                    if (value == null || value == settings.translationId) {
+                      return;
+                    }
+                    settings.translationId = value;
+                    library.load(value);
+                  },
+                  child: RadioListTile<String>(
+                    value: translation.id,
+                    title: Text(translation.name),
+                    subtitle: Text(
+                      '${translation.abbreviation} • ${translation.license}',
+                    ),
+                  ),
                 ),
-                isThreeLine: true,
-              ),
-              RadioGroup<String>(
-                groupValue: settings.translationId,
-                onChanged: (value) {
-                  if (library.isBusy ||
-                      value == null ||
-                      value == settings.translationId) {
-                    return;
-                  }
-                  _switchTranslation(settings, library, value);
-                },
-                child: Column(
-                  children: [
-                    for (final source in BibleSource.all)
-                      RadioListTile<String>(
-                        value: source.id,
-                        title: Text(source.info.name),
-                        subtitle: Text(source.info.abbreviation),
+              ListTile(
+                leading: const Icon(Icons.compare_arrows_rounded),
+                title: const Text('Compare with'),
+                subtitle: Text(
+                  settings.compareTranslationId == null
+                      ? 'Off'
+                      : Translations.byId(settings.compareTranslationId!).name,
+                ),
+                trailing: settings.compareTranslationId == null
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        tooltip: 'Stop comparing',
+                        onPressed: () => settings.compareTranslationId = null,
                       ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final translation in Translations.all)
+                      if (translation.id != settings.translationId)
+                        ChoiceChip(
+                          label: Text(translation.abbreviation),
+                          selected:
+                              settings.compareTranslationId == translation.id,
+                          onSelected: (selected) =>
+                              settings.compareTranslationId = selected
+                              ? translation.id
+                              : null,
+                        ),
                   ],
                 ),
               ),
+              const _Header('Bookmarks, highlights and notes'),
               ListTile(
-                leading: const Icon(Icons.delete_outline_rounded),
-                title: const Text('Delete downloaded text'),
-                subtitle: const Text(
-                  'Frees space; the app will offer to download again',
+                leading: const Icon(Icons.copy_all_rounded),
+                title: const Text('Copy a backup'),
+                subtitle: Text(
+                  '${reading.all.length} '
+                  '${reading.all.length == 1 ? 'entry' : 'entries'} as JSON on '
+                  'the clipboard',
                 ),
-                onTap: library.isBusy
+                onTap: reading.all.isEmpty
                     ? null
                     : () async {
-                        final navigator = Navigator.of(context);
-                        await library.deleteDownload();
-                        navigator.popUntil((route) => route.isFirst);
+                        await Clipboard.setData(
+                          ClipboardData(text: reading.export()),
+                        );
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Backup copied to the clipboard'),
+                          ),
+                        );
                       },
+              ),
+              ListTile(
+                leading: const Icon(Icons.paste_rounded),
+                title: const Text('Restore from the clipboard'),
+                subtitle: const Text(
+                  'Merges a backup in; nothing already here is lost',
+                ),
+                onTap: () => _restore(context, reading),
+              ),
+              ListTile(
+                leading: Icon(
+                  Icons.delete_outline_rounded,
+                  color: theme.colorScheme.error,
+                ),
+                title: Text(
+                  'Remove everything',
+                  style: TextStyle(color: theme.colorScheme.error),
+                ),
+                onTap: reading.all.isEmpty
+                    ? null
+                    : () => _confirmClear(context, reading),
               ),
               const _Header('About'),
               ListTile(
                 leading: const Icon(Icons.auto_stories_rounded),
                 title: const Text('OpenWord'),
-                subtitle: Text(
-                  'A free and open source Bible reader.\n'
-                  'Scripture: ${library.source.info.name} '
-                  '(${library.source.info.abbreviation}), '
-                  '${library.source.info.license}.\n'
-                  '${library.source.info.sourceUrl}',
+                subtitle: const Text(
+                  'A free and open source Bible reader. Every translation is '
+                  'bundled with the app, so nothing here needs a network '
+                  'connection.',
                 ),
                 isThreeLine: true,
+              ),
+              for (final translation in Translations.all)
+                ListTile(
+                  dense: true,
+                  title: Text(translation.name),
+                  subtitle: Text(
+                    '${translation.license} • ${translation.sourceUrl}',
+                  ),
+                ),
+              const ListTile(
+                dense: true,
+                title: Text('Literata'),
+                subtitle: Text('SIL Open Font License 1.1'),
               ),
             ],
           );
@@ -222,19 +290,58 @@ class SettingsScreen extends StatelessWidget {
       ),
     );
   }
-}
 
-/// Switches translation: remember the choice, then load it from the cache or
-/// download it.
-Future<void> _switchTranslation(
-  Settings settings,
-  LibraryController library,
-  String id,
-) async {
-  settings.translationId = id;
-  await library.initialize(id);
-  if (library.status == LibraryStatus.needsDownload) {
-    await library.download(BibleSource.byId(id));
+  static Future<void> _restore(
+    BuildContext context,
+    ReadingStore reading,
+  ) async {
+    final data = await Clipboard.getData(Clipboard.kTextPlain);
+    if (!context.mounted) return;
+    final text = data?.text;
+    final messenger = ScaffoldMessenger.of(context);
+    if (text == null || text.trim().isEmpty) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('The clipboard is empty')),
+      );
+      return;
+    }
+    final result = reading.import(text);
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          result.ok
+              ? 'Restored ${result.added} new and updated ${result.updated}'
+              : 'That does not look like an OpenWord backup',
+        ),
+      ),
+    );
+  }
+
+  static Future<void> _confirmClear(
+    BuildContext context,
+    ReadingStore reading,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remove everything?'),
+        content: const Text(
+          'Bookmarks, highlights and notes will all be deleted. This cannot '
+          'be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed ?? false) reading.clearAll();
   }
 }
 

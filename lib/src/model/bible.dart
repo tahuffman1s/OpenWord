@@ -47,21 +47,31 @@ enum BlockStyle {
   heading,
 
   /// A blank line used to separate stanzas (`\b`).
-  blank;
+  blank,
+
+  /// A parallel-passage reference printed under a heading (`\r`), which some
+  /// translations carry.
+  reference;
 
   static BlockStyle fromKey(String key) => switch (key) {
     'q' => BlockStyle.poetry,
     'd' => BlockStyle.descriptiveTitle,
     'h' => BlockStyle.heading,
     'b' => BlockStyle.blank,
+    'r' => BlockStyle.reference,
     _ => BlockStyle.paragraph,
   };
+
+  /// Whether blocks of this kind carry Scripture rather than apparatus.
+  bool get isVerseText =>
+      this == BlockStyle.paragraph || this == BlockStyle.poetry;
 
   String get key => switch (this) {
     BlockStyle.poetry => 'q',
     BlockStyle.descriptiveTitle => 'd',
     BlockStyle.heading => 'h',
     BlockStyle.blank => 'b',
+    BlockStyle.reference => 'r',
     BlockStyle.paragraph => 'p',
   };
 }
@@ -81,14 +91,6 @@ class VerseSegment {
   final bool startsVerse;
 
   final String text;
-
-  List<Object?> toJson() => [verse, startsVerse ? 1 : 0, text];
-
-  static VerseSegment fromJson(List<Object?> json) => VerseSegment(
-    verse: json[0]! as int,
-    startsVerse: json[1] == 1,
-    text: json[2]! as String,
-  );
 }
 
 /// A paragraph, poetry line or heading.
@@ -104,21 +106,6 @@ class Block {
 
   bool get isEmpty =>
       segments.isEmpty || segments.every((s) => s.text.trim().isEmpty);
-
-  List<Object?> toJson() => [
-    style.key,
-    indent,
-    [for (final segment in segments) segment.toJson()],
-  ];
-
-  static Block fromJson(List<Object?> json) => Block(
-    style: BlockStyle.fromKey(json[0]! as String),
-    indent: json[1]! as int,
-    segments: [
-      for (final segment in json[2]! as List)
-        VerseSegment.fromJson((segment as List).cast<Object?>()),
-    ],
-  );
 }
 
 /// One chapter: an ordered list of blocks plus the chapter's footnotes.
@@ -142,9 +129,14 @@ class Chapter {
   final int verseCount;
 
   /// Plain text of a single verse, with inline markers removed.
+  ///
+  /// Headings and psalm titles sit between verses and carry the number of
+  /// whichever verse precedes them, so they are left out: they are not part
+  /// of anyone's verse.
   String verseText(int verse) {
     final buffer = StringBuffer();
     for (final block in blocks) {
+      if (!block.style.isVerseText) continue;
       for (final segment in block.segments) {
         if (segment.verse != verse) continue;
         final text = Markup.strip(segment.text).trim();
@@ -155,21 +147,6 @@ class Chapter {
     }
     return buffer.toString().trim();
   }
-
-  Map<String, Object?> toJson() => {
-    'n': number,
-    'b': [for (final block in blocks) block.toJson()],
-    if (notes.isNotEmpty) 'f': notes,
-  };
-
-  static Chapter fromJson(Map<String, Object?> json) => Chapter(
-    number: json['n']! as int,
-    blocks: [
-      for (final block in json['b']! as List)
-        Block.fromJson((block as List).cast<Object?>()),
-    ],
-    notes: ((json['f'] as List?) ?? const []).cast<String>(),
-  );
 }
 
 /// A book of the Bible with its chapters.
@@ -189,23 +166,6 @@ class Book {
     if (number < 1 || number > chapters.length) return null;
     return chapters[number - 1];
   }
-
-  Map<String, Object?> toJson() => {
-    'c': meta.code,
-    'ch': [for (final chapter in chapters) chapter.toJson()],
-  };
-
-  static Book? fromJson(Map<String, Object?> json) {
-    final meta = BookMeta.lookup(json['c']! as String);
-    if (meta == null) return null;
-    return Book(
-      meta: meta,
-      chapters: [
-        for (final chapter in json['ch']! as List)
-          Chapter.fromJson((chapter as Map).cast<String, Object?>()),
-      ],
-    );
-  }
 }
 
 /// Identity and licensing of a translation.
@@ -223,22 +183,6 @@ class TranslationInfo {
   final String abbreviation;
   final String license;
   final String sourceUrl;
-
-  Map<String, Object?> toJson() => {
-    'id': id,
-    'name': name,
-    'abbr': abbreviation,
-    'license': license,
-    'url': sourceUrl,
-  };
-
-  static TranslationInfo fromJson(Map<String, Object?> json) => TranslationInfo(
-    id: json['id']! as String,
-    name: json['name']! as String,
-    abbreviation: json['abbr']! as String,
-    license: json['license']! as String,
-    sourceUrl: json['url']! as String,
-  );
 }
 
 /// A fully parsed Bible held in memory.
@@ -255,9 +199,6 @@ class Bible {
       _indexByCode[this.books[i].code] = i;
     }
   }
-
-  /// Bumped whenever the on-disk cache layout changes.
-  static const int formatVersion = 1;
 
   final TranslationInfo translation;
   final List<Book> books;
@@ -276,28 +217,6 @@ class Bible {
         total +
         book.chapters.fold(0, (sum, chapter) => sum + chapter.verseCount),
   );
-
-  Map<String, Object?> toJson() => {
-    'v': formatVersion,
-    't': translation.toJson(),
-    'books': [for (final book in books) book.toJson()],
-  };
-
-  static Bible? fromJson(Map<String, Object?> json) {
-    if (json['v'] != formatVersion) return null;
-    final books = <Book>[];
-    for (final entry in json['books']! as List) {
-      final book = Book.fromJson((entry as Map).cast<String, Object?>());
-      if (book != null) books.add(book);
-    }
-    if (books.isEmpty) return null;
-    return Bible(
-      translation: TranslationInfo.fromJson(
-        (json['t']! as Map).cast<String, Object?>(),
-      ),
-      books: books,
-    );
-  }
 }
 
 /// A place in the Bible: book code plus chapter, and optionally a verse.

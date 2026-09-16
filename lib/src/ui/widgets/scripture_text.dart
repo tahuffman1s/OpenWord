@@ -13,6 +13,7 @@ class ScriptureStyle {
     required this.verseNumber,
     required this.heading,
     required this.title,
+    required this.reference,
     required this.wjColor,
     required this.noteColor,
     required this.redLetter,
@@ -57,6 +58,11 @@ class ScriptureStyle {
         fontStyle: FontStyle.italic,
         color: scheme.onSurfaceVariant,
       ),
+      reference: body.copyWith(
+        fontSize: body.fontSize! * 0.8,
+        fontStyle: FontStyle.italic,
+        color: scheme.onSurfaceVariant,
+      ),
       wjColor: AppTheme.redLetter(scheme),
       noteColor: scheme.tertiary,
       redLetter: settings.redLetter,
@@ -70,6 +76,7 @@ class ScriptureStyle {
   final TextStyle verseNumber;
   final TextStyle heading;
   final TextStyle title;
+  final TextStyle reference;
   final Color wjColor;
   final Color noteColor;
   final bool redLetter;
@@ -89,6 +96,7 @@ class ScriptureBlock extends StatefulWidget {
     required this.onVerseTap,
     required this.onNoteTap,
     required this.highlights,
+    required this.flagged,
     required this.isFirst,
     super.key,
   });
@@ -102,8 +110,11 @@ class ScriptureBlock extends StatefulWidget {
   /// Called with the chapter-level note index behind a footnote marker.
   final ValueChanged<int> onNoteTap;
 
-  /// Background tints for bookmarked or highlighted verses.
+  /// Background tints for highlighted verses.
   final Map<int, Color> highlights;
+
+  /// Verses carrying a bookmark or a note, flagged in the margin.
+  final Set<int> flagged;
 
   /// The first block of a chapter is not indented.
   final bool isFirst;
@@ -145,6 +156,11 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
           child: Text(_plain(block), style: style.title),
+        );
+      case BlockStyle.reference:
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Text(_plain(block), style: style.reference),
         );
       case BlockStyle.poetry:
         return _poetryLine();
@@ -240,6 +256,22 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
     final spans = <InlineSpan>[];
     final highlight = widget.highlights[segment.verse];
     final recognizer = segment.verse > 0 ? _recognizerFor(segment.verse) : null;
+
+    if (segment.startsVerse && widget.flagged.contains(segment.verse)) {
+      spans.add(
+        WidgetSpan(
+          alignment: PlaceholderAlignment.top,
+          child: Padding(
+            padding: const EdgeInsets.only(right: 1),
+            child: Icon(
+              Icons.bookmark_rounded,
+              size: (style.body.fontSize ?? 17) * 0.5,
+              color: style.verseNumber.color,
+            ),
+          ),
+        ),
+      );
+    }
 
     if (includeNumber &&
         segment.startsVerse &&

@@ -4,14 +4,17 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_scope.dart';
-import '../data/bookmarks.dart';
+import '../data/library.dart';
+import '../data/marks.dart';
 import '../data/settings.dart';
 import '../model/bible.dart';
 import '../model/book_meta.dart';
-import 'bookmarks_screen.dart';
-import 'pickers.dart';
+import 'display_sheet.dart';
+import 'library_screen.dart';
+import 'navigator_sheet.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
+import 'theme.dart';
 import 'widgets/scripture_text.dart';
 
 /// The main reading surface: one swipeable page per chapter.
@@ -27,7 +30,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   List<Reference> _index = const [];
   int _page = 0;
+
+  /// A verse to scroll to, and the page it belongs to. Pairing them matters:
+  /// jumping to another chapter fires onPageChanged, and without the page a
+  /// pending verse would be cleared before the chapter had a chance to use
+  /// it.
   int? _pendingVerse;
+  int? _pendingPage;
+
   bool _restored = false;
 
   // Held directly rather than looked up on demand, so they are still
@@ -35,11 +45,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
   late Bible _bible;
   late Settings _settings;
   late ReadingStore _reading;
+  late LibraryController _library;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     final scope = AppScope.of(context);
+    _library = scope.library;
     _bible = scope.library.bible!;
     _settings = scope.settings;
     _reading = scope.reading;
@@ -53,9 +65,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
           ? resume
           : const Reference('GEN', 1);
       _page = _pageFor(target);
+      _pendingPage = _page;
       _pendingVerse = target.verse;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_pages.hasClients) _pages.jumpToPage(_page);
+        _syncComparison();
       });
     }
   }
@@ -76,6 +90,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
         _page = page;
         _pages.jumpToPage(page);
       }
+    }
+    _syncComparison();
+  }
+
+  /// Loads or drops the side-by-side translation to match the setting.
+  void _syncComparison() {
+    final wanted = _settings.compareTranslationId;
+    if (wanted == null) {
+      _library.clearComparison();
+    } else if (_library.comparison?.translation.id != wanted) {
+      _library.loadComparison(wanted);
     }
   }
 
@@ -117,6 +142,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final page = _pageFor(reference);
     setState(() {
       _page = page;
+      _pendingPage = page;
       _pendingVerse = reference.verse;
     });
     if (!_pages.hasClients) return;
@@ -138,11 +164,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _goTo(_index[next], animate: true);
   }
 
-  Future<void> _openBookPicker() async {
-    final marked = {
-      for (final bookmark in _reading.bookmarks) bookmark.reference.bookCode,
-    };
-    final code = await showBookPicker(
+  Future<void> _openNavigator() async {
+    final reference = await showBibleNavigator(
       context,
       books: [
         for (final book in _bible.books)
@@ -151,54 +174,37 @@ class _ReaderScreenState extends State<ReaderScreen> {
             book,
       ],
       settings: _settings,
-      currentCode: _current.bookCode,
-      markedCodes: marked,
+      reading: _reading,
+      current: _current.withVerse(_pendingVerse),
     );
-    if (code == null || !mounted) return;
-    final book = _bible.bookByCode(code);
-    if (book == null) return;
-    if (book.chapterCount == 1) {
-      _goTo(Reference(code, 1));
-      return;
-    }
-    final chapter = await showChapterPicker(
-      context,
-      book: book,
-      marked: {
-        for (final bookmark in _reading.bookmarks)
-          if (bookmark.reference.bookCode == code) bookmark.reference.chapter,
-      },
-    );
-    if (!mounted) return;
-    _goTo(Reference(code, chapter ?? 1));
+    if (reference == null || !mounted) return;
+    _goTo(reference);
   }
 
-  Future<void> _openChapterPicker() async {
-    final book = _currentBook;
-    final chapter = await showChapterPicker(
-      context,
-      book: book,
-      current: _current.chapter,
-      marked: {
-        for (final bookmark in _reading.bookmarks)
-          if (bookmark.reference.bookCode == book.code)
-            bookmark.reference.chapter,
-      },
+  Future<void> _openSearch() async {
+    final result = await Navigator.of(context).push<Reference>(
+      MaterialPageRoute(
+        builder: (_) => SearchScreen(bible: _bible, from: _current),
+      ),
     );
-    if (chapter == null || !mounted) return;
-    _goTo(Reference(book.code, chapter));
+    if (result != null && mounted) _goTo(result);
   }
 
-  Future<void> _openVersePicker() async {
-    final verse = await showVersePicker(
+  Future<void> _openLibrary() async {
+    final result = await Navigator.of(
       context,
-      book: _currentBook,
-      chapter: _currentChapter,
-      current: _pendingVerse,
-      marked: _reading.bookmarkedVerses(_current.bookCode, _current.chapter),
+    ).push<Reference>(MaterialPageRoute(builder: (_) => const LibraryScreen()));
+    if (result != null && mounted) _goTo(result);
+  }
+
+  void _openDisplay() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) =>
+          DisplaySheet(settings: _settings, current: _bible.translation),
     );
-    if (verse == null || !mounted) return;
-    _goTo(_current.withVerse(verse));
   }
 
   void _onVerseTap(int verse) {
@@ -206,7 +212,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
-      builder: (sheetContext) => _VerseSheet(
+      builder: (_) => _VerseSheet(
         reference: reference,
         text: _currentChapter.verseText(verse),
         reading: _reading,
@@ -250,61 +256,38 @@ class _ReaderScreenState extends State<ReaderScreen> {
         const SingleActivator(LogicalKeyboardKey.arrowLeft): () => _step(-1),
         const SingleActivator(LogicalKeyboardKey.pageDown): () => _step(1),
         const SingleActivator(LogicalKeyboardKey.pageUp): () => _step(-1),
+        const SingleActivator(LogicalKeyboardKey.keyG): _openNavigator,
+        const SingleActivator(LogicalKeyboardKey.slash): _openSearch,
       },
       child: Focus(
         autofocus: true,
         child: Scaffold(
           appBar: AppBar(
             titleSpacing: 12,
-            title: Row(
-              children: [
-                Flexible(
-                  child: _NavChip(
-                    label: _currentBook.name,
-                    onTap: _openBookPicker,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _NavChip(
-                  label: '${_current.chapter}',
-                  onTap: _currentBook.chapterCount > 1
-                      ? _openChapterPicker
-                      : null,
-                ),
-                const SizedBox(width: 8),
-                _NavChip(
-                  icon: Icons.format_list_numbered_rounded,
-                  onTap: _openVersePicker,
-                  tooltip: 'Go to verse',
-                ),
-              ],
+            title: _ReferenceButton(
+              label: '${_currentBook.name} ${_current.chapter}',
+              badge: _library.comparison?.translation.abbreviation,
+              onTap: _openNavigator,
             ),
             actions: [
               IconButton(
                 icon: const Icon(Icons.search_rounded),
-                tooltip: 'Search',
-                onPressed: () async {
-                  final result = await Navigator.of(context).push<Reference>(
-                    MaterialPageRoute(
-                      builder: (_) => SearchScreen(bible: _bible),
-                    ),
-                  );
-                  if (result != null && mounted) _goTo(result);
-                },
+                tooltip: 'Search (/)',
+                onPressed: _openSearch,
               ),
               IconButton(
                 icon: const Icon(Icons.bookmarks_rounded),
-                tooltip: 'Bookmarks',
-                onPressed: () async {
-                  final result = await Navigator.of(context).push<Reference>(
-                    MaterialPageRoute(builder: (_) => const BookmarksScreen()),
-                  );
-                  if (result != null && mounted) _goTo(result);
-                },
+                tooltip: 'Bookmarks, highlights and notes',
+                onPressed: _openLibrary,
               ),
               IconButton(
-                icon: const Icon(Icons.tune_rounded),
-                tooltip: 'Display and settings',
+                icon: const Icon(Icons.text_fields_rounded),
+                tooltip: 'Display',
+                onPressed: _openDisplay,
+              ),
+              IconButton(
+                icon: const Icon(Icons.settings_rounded),
+                tooltip: 'Settings',
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const SettingsScreen()),
                 ),
@@ -312,50 +295,70 @@ class _ReaderScreenState extends State<ReaderScreen> {
             ],
           ),
           body: AnimatedBuilder(
-            animation: Listenable.merge([_settings, _reading]),
-            builder: (context, _) => PageView.builder(
-              controller: _pages,
-              itemCount: _index.length,
-              onPageChanged: (page) {
-                setState(() {
-                  _page = page;
-                  _pendingVerse = null;
-                });
-                _reading.savePosition(_index[page]);
-              },
-              itemBuilder: (context, page) {
-                final reference = _index[page];
-                final book = _bible.bookByCode(reference.bookCode)!;
-                final chapter = book.chapter(reference.chapter)!;
-                return _ChapterPage(
-                  key: ValueKey('${reference.bookCode}/${reference.chapter}'),
-                  book: book,
-                  chapter: chapter,
-                  style: ScriptureStyle.of(context, _settings),
-                  highlights: {
-                    for (final verse in _reading.bookmarkedVerses(
+            animation: Listenable.merge([_settings, _reading, _library]),
+            builder: (context, _) {
+              final comparison = _library.comparison;
+              return PageView.builder(
+                controller: _pages,
+                itemCount: _index.length,
+                onPageChanged: (page) {
+                  final programmatic = page == _pendingPage;
+                  setState(() {
+                    _page = page;
+                    if (!programmatic) {
+                      _pendingPage = null;
+                      _pendingVerse = null;
+                    }
+                  });
+                  // A jump has already saved its own position, verse and all.
+                  if (!programmatic) _reading.savePosition(_index[page]);
+                },
+                itemBuilder: (context, page) {
+                  final reference = _index[page];
+                  final book = _bible.bookByCode(reference.bookCode)!;
+                  final chapter = book.chapter(reference.chapter)!;
+                  return _ChapterPage(
+                    key: ValueKey(
+                      '${reference.bookCode}/${reference.chapter}'
+                      '/${comparison?.translation.id ?? ''}',
+                    ),
+                    book: book,
+                    chapter: chapter,
+                    style: ScriptureStyle.of(context, _settings),
+                    highlights: {
+                      for (final entry
+                          in _reading
+                              .highlightsIn(book.code, chapter.number)
+                              .entries)
+                        entry.key: AppTheme.highlights(
+                          theme.colorScheme,
+                        )[entry.value % ReadingStore.paletteSize],
+                    },
+                    flagged: _reading.flaggedVersesIn(
                       book.code,
                       chapter.number,
-                    ))
-                      verse: theme.colorScheme.primaryContainer.withValues(
-                        alpha: 0.55,
-                      ),
-                  },
-                  scrollToVerse: page == _page ? _pendingVerse : null,
-                  onVerseTap: _onVerseTap,
-                  onNoteTap: _onNoteTap,
-                  onTopVerseChanged: (verse) {
-                    if (page != _page) return;
-                    _reading.savePosition(
-                      Reference(book.code, chapter.number, verse),
-                    );
-                  },
-                  onStep: _step,
-                  hasPrevious: page > 0,
-                  hasNext: page < _index.length - 1,
-                );
-              },
-            ),
+                    ),
+                    comparison: comparison
+                        ?.bookByCode(book.code)
+                        ?.chapter(chapter.number),
+                    comparisonLabel: comparison?.translation.abbreviation ?? '',
+                    primaryLabel: _bible.translation.abbreviation,
+                    scrollToVerse: page == _pendingPage ? _pendingVerse : null,
+                    onVerseTap: _onVerseTap,
+                    onNoteTap: _onNoteTap,
+                    onTopVerseChanged: (verse) {
+                      if (page != _page) return;
+                      _reading.savePosition(
+                        Reference(book.code, chapter.number, verse),
+                      );
+                    },
+                    onStep: _step,
+                    hasPrevious: page > 0,
+                    hasNext: page < _index.length - 1,
+                  );
+                },
+              );
+            },
           ),
         ),
       ),
@@ -370,6 +373,10 @@ class _ChapterPage extends StatefulWidget {
     required this.chapter,
     required this.style,
     required this.highlights,
+    required this.flagged,
+    required this.comparison,
+    required this.comparisonLabel,
+    required this.primaryLabel,
     required this.scrollToVerse,
     required this.onVerseTap,
     required this.onNoteTap,
@@ -384,6 +391,13 @@ class _ChapterPage extends StatefulWidget {
   final Chapter chapter;
   final ScriptureStyle style;
   final Map<int, Color> highlights;
+  final Set<int> flagged;
+
+  /// The same chapter in a second translation, when comparing.
+  final Chapter? comparison;
+  final String comparisonLabel;
+  final String primaryLabel;
+
   final int? scrollToVerse;
   final ValueChanged<int> onVerseTap;
   final ValueChanged<int> onNoteTap;
@@ -421,7 +435,8 @@ class _ChapterPageState extends State<_ChapterPage> {
   @override
   void didUpdateWidget(_ChapterPage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.chapter != oldWidget.chapter) {
+    if (widget.chapter != oldWidget.chapter ||
+        widget.comparison != oldWidget.comparison) {
       _buildAnchors();
       _reportedVerse = 0;
     }
@@ -430,8 +445,25 @@ class _ChapterPageState extends State<_ChapterPage> {
     }
   }
 
+  @override
+  void dispose() {
+    _debounce?.cancel();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  bool get _comparing => widget.comparison != null;
+
   void _buildAnchors() {
     _verseKeys.clear();
+    if (_comparing) {
+      // The compare view is one row per verse, so every verse is an anchor.
+      _blockKeys = const [];
+      for (var verse = 1; verse <= widget.chapter.verseCount; verse++) {
+        _verseKeys[verse] = GlobalKey();
+      }
+      return;
+    }
     final keys = <GlobalKey?>[];
     for (final block in widget.chapter.blocks) {
       final firstVerse = block.segments
@@ -449,18 +481,22 @@ class _ChapterPageState extends State<_ChapterPage> {
     _blockKeys = keys;
   }
 
-  @override
-  void dispose() {
-    _debounce?.cancel();
-    _scroll.dispose();
-    super.dispose();
+  /// The anchor for [verse], or the paragraph it sits inside. Only verses
+  /// that begin a block carry an anchor, and in prose most verses do not.
+  GlobalKey? _anchorFor(int verse) {
+    final exact = _verseKeys[verse];
+    if (exact != null) return exact;
+    var best = 0;
+    for (final candidate in _verseKeys.keys) {
+      if (candidate < verse && candidate > best) best = candidate;
+    }
+    return best == 0 ? null : _verseKeys[best];
   }
 
   void _jumpToVerse() {
     final verse = widget.scrollToVerse;
     if (verse == null || verse <= 1) return;
-    final key = _verseKeys[verse];
-    final context = key?.currentContext;
+    final context = _anchorFor(verse)?.currentContext;
     if (context == null) return;
     Scrollable.ensureVisible(
       context,
@@ -500,55 +536,34 @@ class _ChapterPageState extends State<_ChapterPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final style = widget.style;
+    final children = <Widget>[_chapterHeading(theme)];
 
-    final children = <Widget>[
-      Padding(
-        padding: const EdgeInsets.only(top: 8, bottom: 18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              widget.book.name.toUpperCase(),
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-                letterSpacing: 1.6,
-              ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              widget.book.chapterCount > 1
-                  ? 'Chapter ${widget.chapter.number}'
-                  : widget.book.name,
-              style: theme.textTheme.headlineMedium?.copyWith(
-                fontWeight: FontWeight.w600,
-                color: theme.colorScheme.primary,
-              ),
-            ),
-          ],
-        ),
-      ),
-    ];
-
-    var isFirst = true;
-    final blocks = widget.chapter.blocks;
-    for (var i = 0; i < blocks.length; i++) {
-      final block = blocks[i];
-      final blockWidget = ScriptureBlock(
-        block: block,
-        style: style,
-        highlights: widget.highlights,
-        isFirst: isFirst,
-        onVerseTap: widget.onVerseTap,
-        onNoteTap: widget.onNoteTap,
-      );
-      final key = i < _blockKeys.length ? _blockKeys[i] : null;
-      children.add(
-        key == null ? blockWidget : KeyedSubtree(key: key, child: blockWidget),
-      );
-      if (block.style == BlockStyle.paragraph ||
-          block.style == BlockStyle.poetry) {
-        isFirst = false;
+    if (_comparing) {
+      children.add(_compareBody(theme));
+    } else {
+      var isFirst = true;
+      final blocks = widget.chapter.blocks;
+      for (var i = 0; i < blocks.length; i++) {
+        final block = blocks[i];
+        final blockWidget = ScriptureBlock(
+          block: block,
+          style: widget.style,
+          highlights: widget.highlights,
+          flagged: widget.flagged,
+          isFirst: isFirst,
+          onVerseTap: widget.onVerseTap,
+          onNoteTap: widget.onNoteTap,
+        );
+        final key = i < _blockKeys.length ? _blockKeys[i] : null;
+        children.add(
+          key == null
+              ? blockWidget
+              : KeyedSubtree(key: key, child: blockWidget),
+        );
+        if (block.style == BlockStyle.paragraph ||
+            block.style == BlockStyle.poetry) {
+          isFirst = false;
+        }
       }
     }
 
@@ -567,12 +582,159 @@ class _ChapterPageState extends State<_ChapterPage> {
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 48),
         child: Center(
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
+            constraints: BoxConstraints(maxWidth: _comparing ? 1000 : 720),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: children,
             ),
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _chapterHeading(ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 18),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            widget.book.name.toUpperCase(),
+            style: theme.textTheme.labelMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+              letterSpacing: 1.6,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            widget.book.chapterCount > 1
+                ? 'Chapter ${widget.chapter.number}'
+                : widget.book.name,
+            style: theme.textTheme.headlineMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: theme.colorScheme.primary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Verse-by-verse view of two translations. Wide windows put them in
+  /// columns; narrow ones stack each pair.
+  Widget _compareBody(ThemeData theme) {
+    final other = widget.comparison!;
+    final style = widget.style;
+    final count = widget.chapter.verseCount > other.verseCount
+        ? widget.chapter.verseCount
+        : other.verseCount;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final columns = constraints.maxWidth >= 620;
+        final rows = <Widget>[
+          Padding(
+            padding: const EdgeInsets.only(bottom: 10),
+            child: Row(
+              children: [
+                _translationChip(theme, widget.primaryLabel, true),
+                const SizedBox(width: 8),
+                _translationChip(theme, widget.comparisonLabel, false),
+              ],
+            ),
+          ),
+        ];
+
+        for (var verse = 1; verse <= count; verse++) {
+          final mine = widget.chapter.verseText(verse);
+          final theirs = other.verseText(verse);
+          if (mine.isEmpty && theirs.isEmpty) continue;
+          final tint = widget.highlights[verse];
+          final left = _compareCell(theme, style, verse, mine, tint, true);
+          final right = _compareCell(theme, style, verse, theirs, tint, false);
+          rows.add(
+            KeyedSubtree(
+              key: _verseKeys[verse],
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 14),
+                child: columns
+                    ? Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: left),
+                          const SizedBox(width: 20),
+                          Expanded(child: right),
+                        ],
+                      )
+                    : Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [left, const SizedBox(height: 6), right],
+                      ),
+              ),
+            ),
+          );
+        }
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: rows,
+        );
+      },
+    );
+  }
+
+  Widget _translationChip(ThemeData theme, String label, bool primary) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: primary
+            ? theme.colorScheme.primaryContainer
+            : theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        label,
+        style: theme.textTheme.labelMedium?.copyWith(
+          color: primary
+              ? theme.colorScheme.onPrimaryContainer
+              : theme.colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _compareCell(
+    ThemeData theme,
+    ScriptureStyle style,
+    int verse,
+    String text,
+    Color? tint,
+    bool primary,
+  ) {
+    return GestureDetector(
+      onTap: primary ? () => widget.onVerseTap(verse) : null,
+      child: Container(
+        decoration: BoxDecoration(
+          color: primary ? tint : null,
+          borderRadius: BorderRadius.circular(6),
+        ),
+        child: Text.rich(
+          TextSpan(
+            children: [
+              WidgetSpan(
+                alignment: PlaceholderAlignment.top,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 4),
+                  child: Text('$verse', style: style.verseNumber),
+                ),
+              ),
+              TextSpan(text: text.isEmpty ? '—' : text),
+            ],
+          ),
+          style: primary
+              ? style.body
+              : style.body.copyWith(color: theme.colorScheme.onSurfaceVariant),
         ),
       ),
     );
@@ -614,59 +776,80 @@ class _ChapterFooter extends StatelessWidget {
   }
 }
 
-/// A book / chapter / verse button in the app bar.
-class _NavChip extends StatelessWidget {
-  const _NavChip({this.label, this.icon, this.onTap, this.tooltip});
+/// The book-and-chapter button in the app bar.
+class _ReferenceButton extends StatelessWidget {
+  const _ReferenceButton({
+    required this.label,
+    required this.onTap,
+    this.badge,
+  });
 
-  final String? label;
-  final IconData? icon;
-  final VoidCallback? onTap;
-  final String? tooltip;
+  final String label;
+  final VoidCallback onTap;
+
+  /// Abbreviation of the translation being compared, when there is one.
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final child = Material(
-      color: theme.colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Material(
+        color: theme.colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(14),
-        child: Padding(
-          padding: EdgeInsets.symmetric(
-            horizontal: label == null ? 8 : 12,
-            vertical: 8,
-          ),
-          child: label == null
-              ? Icon(icon, size: 20, color: theme.colorScheme.onSurfaceVariant)
-              : Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        label!,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.w600,
-                        ),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    label,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (badge != null) ...[
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 1,
+                    ),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Text(
+                      badge!,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onPrimaryContainer,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    if (onTap != null)
-                      Icon(
-                        Icons.arrow_drop_down_rounded,
-                        size: 20,
-                        color: theme.colorScheme.onSurfaceVariant,
-                      ),
-                  ],
+                  ),
+                ],
+                Icon(
+                  Icons.arrow_drop_down_rounded,
+                  size: 20,
+                  color: theme.colorScheme.onSurfaceVariant,
                 ),
+              ],
+            ),
+          ),
         ),
       ),
     );
-    return tooltip == null ? child : Tooltip(message: tooltip!, child: child);
   }
 }
 
-/// Actions for a tapped verse.
+/// Actions for a tapped verse: highlight, bookmark, note, copy.
 class _VerseSheet extends StatelessWidget {
   const _VerseSheet({
     required this.reference,
@@ -681,67 +864,202 @@ class _VerseSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final bookmarked = reading.isBookmarked(reference);
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(reference.label, style: theme.textTheme.titleMedium),
-            const SizedBox(height: 8),
-            Text(
-              text,
-              maxLines: 4,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.bodyMedium?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
+    return AnimatedBuilder(
+      animation: reading,
+      builder: (context, _) {
+        final mark = reading.markFor(reference);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                FilledButton.tonalIcon(
-                  onPressed: () {
-                    final added = reading.toggle(reference);
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          added
-                              ? 'Bookmarked ${reference.label}'
-                              : 'Removed ${reference.label}',
+                Text(reference.label, style: theme.textTheme.titleMedium),
+                const SizedBox(height: 8),
+                Text(
+                  text,
+                  maxLines: 4,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    for (var i = 0; i < ReadingStore.paletteSize; i++)
+                      Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: _Swatch(
+                          color: AppTheme.highlightSwatch(i),
+                          name: AppTheme.highlightNames[i],
+                          selected: mark?.colorIndex == i,
+                          onTap: () => reading.setHighlight(
+                            reference,
+                            mark?.colorIndex == i ? null : i,
+                          ),
                         ),
                       ),
-                    );
-                  },
-                  icon: Icon(
-                    bookmarked
-                        ? Icons.bookmark_remove_rounded
-                        : Icons.bookmark_add_rounded,
+                    if (mark?.highlighted ?? false)
+                      IconButton(
+                        tooltip: 'Remove highlight',
+                        icon: const Icon(Icons.format_color_reset_rounded),
+                        onPressed: () => reading.setHighlight(reference, null),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: [
+                    FilledButton.tonalIcon(
+                      onPressed: () {
+                        final added = reading.toggleBookmark(reference);
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              added
+                                  ? 'Bookmarked ${reference.label}'
+                                  : 'Bookmark removed',
+                            ),
+                          ),
+                        );
+                      },
+                      icon: Icon(
+                        (mark?.bookmarked ?? false)
+                            ? Icons.bookmark_remove_rounded
+                            : Icons.bookmark_add_rounded,
+                      ),
+                      label: Text(
+                        (mark?.bookmarked ?? false) ? 'Bookmarked' : 'Bookmark',
+                      ),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: () => _editNote(context),
+                      icon: Icon(
+                        (mark?.hasNote ?? false)
+                            ? Icons.edit_note_rounded
+                            : Icons.note_add_outlined,
+                      ),
+                      label: Text(
+                        (mark?.hasNote ?? false) ? 'Note' : 'Add note',
+                      ),
+                    ),
+                    FilledButton.tonalIcon(
+                      onPressed: () async {
+                        await Clipboard.setData(
+                          ClipboardData(text: '${reference.label} — $text'),
+                        );
+                        if (!context.mounted) return;
+                        Navigator.of(context).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Verse copied')),
+                        );
+                      },
+                      icon: const Icon(Icons.copy_rounded),
+                      label: const Text('Copy'),
+                    ),
+                  ],
+                ),
+                if (mark?.hasNote ?? false)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 14),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Text(
+                        mark!.note,
+                        style: theme.textTheme.bodyMedium,
+                      ),
+                    ),
                   ),
-                  label: Text(bookmarked ? 'Remove bookmark' : 'Bookmark'),
-                ),
-                FilledButton.tonalIcon(
-                  onPressed: () async {
-                    await Clipboard.setData(
-                      ClipboardData(text: '${reference.label} — $text'),
-                    );
-                    if (!context.mounted) return;
-                    Navigator.of(context).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Verse copied')),
-                    );
-                  },
-                  icon: const Icon(Icons.copy_rounded),
-                  label: const Text('Copy'),
-                ),
               ],
             ),
-          ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _editNote(BuildContext context) async {
+    final controller = TextEditingController(
+      text: reading.markFor(reference)?.note ?? '',
+    );
+    final note = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(reference.label),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLines: 5,
+          minLines: 2,
+          decoration: const InputDecoration(
+            hintText: 'Your note',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (note == null) return;
+    reading.setNote(reference, note);
+  }
+}
+
+class _Swatch extends StatelessWidget {
+  const _Swatch({
+    required this.color,
+    required this.name,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final Color color;
+  final String name;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Tooltip(
+      message: selected ? 'Remove $name highlight' : 'Highlight $name',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(22),
+        onTap: onTap,
+        child: Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: color,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: selected
+                  ? theme.colorScheme.onSurface
+                  : Colors.transparent,
+              width: 3,
+            ),
+          ),
+          child: selected
+              ? const Icon(Icons.check_rounded, size: 18, color: Colors.black87)
+              : null,
         ),
       ),
     );

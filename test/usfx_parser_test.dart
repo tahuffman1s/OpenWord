@@ -17,16 +17,29 @@ void main() {
         .map((segment) => segment.text)
         .join(' ');
     expect(text, isNot(contains('introduction')));
-    expect(chapter.blocks.length, 2);
+    expect(text, isNot(contains('Front matter')));
+  });
+
+  test('keeps section headings and parallel-passage references apart', () {
+    final chapter = bible.bookByCode('GEN')!.chapter(1)!;
+    expect(chapter.blocks.map((block) => block.style.key), [
+      'h',
+      'r',
+      'p',
+      'p',
+    ]);
+    expect(chapter.blocks[0].segments.first.text, 'The Creation');
+    expect(chapter.blocks[1].segments.first.text, '(John 1:1–5)');
   });
 
   test('groups verses into paragraphs', () {
     final chapter = bible.bookByCode('GEN')!.chapter(1)!;
-    expect(chapter.blocks.first.style, BlockStyle.paragraph);
-    expect(chapter.blocks.first.segments.length, 2);
-    expect(chapter.blocks.first.segments[0].verse, 1);
-    expect(chapter.blocks.first.segments[0].startsVerse, isTrue);
-    expect(chapter.blocks.first.segments[1].verse, 2);
+    final paragraph = chapter.blocks[2];
+    expect(paragraph.style, BlockStyle.paragraph);
+    expect(paragraph.segments.length, 2);
+    expect(paragraph.segments[0].verse, 1);
+    expect(paragraph.segments[0].startsVerse, isTrue);
+    expect(paragraph.segments[1].verse, 2);
     expect(chapter.verseCount, 3);
   });
 
@@ -41,7 +54,7 @@ void main() {
     final chapter = bible.bookByCode('GEN')!.chapter(1)!;
     expect(chapter.notes, ['Elohim.']);
     expect(
-      chapter.blocks.first.segments.first.text,
+      chapter.blocks[2].segments.first.text,
       contains('${Markup.noteStart}0${Markup.noteEnd}'),
     );
     expect(chapter.verseText(1), 'In the beginning, God created the heavens.');
@@ -51,8 +64,7 @@ void main() {
     final text = bible
         .bookByCode('GEN')!
         .chapter(1)!
-        .blocks
-        .first
+        .blocks[2]
         .segments[1]
         .text;
     expect(text, contains('${Markup.addStart}formless${Markup.addEnd}'));
@@ -102,8 +114,27 @@ void main() {
     expect(Markup.strip(text), 'He said, Follow me. Then they followed.');
   });
 
-  test('ignores an unparseable document instead of throwing', () {
-    final empty = Bible(translation: testTranslation, books: const []);
-    expect(empty.books, isEmpty);
+  test('headings and psalm titles are not part of a verse', () {
+    // The heading sits before verse 1 and would otherwise be glued to it.
+    expect(
+      bible.bookByCode('GEN')!.chapter(1)!.verseText(1),
+      isNot(contains('The Creation')),
+    );
+    expect(
+      bible.bookByCode('PSA')!.chapter(1)!.verseText(1),
+      isNot(contains('A Psalm by David')),
+    );
+    expect(
+      bible.bookByCode('PSA')!.chapter(1)!.verseText(1),
+      isNot(contains('BOOK 1')),
+    );
+  });
+
+  test('joins a verse split across poetry lines', () {
+    expect(
+      bible.bookByCode('PSA')!.chapter(1)!.verseText(1),
+      'Blessed is the man who does not walk in the counsel of the '
+      'wicked. Selah.',
+    );
   });
 }

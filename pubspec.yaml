@@ -1,7 +1,7 @@
 name: openword
 description: "OpenWord — a free and open source Bible app with Material You theming."
 publish_to: 'none'
-version: 1.0.0+1
+version: 1.1.0+2
 
 environment:
   sdk: ^3.13.3
@@ -14,22 +14,26 @@ dependencies:
 
   # Material You: reads the platform's dynamic color palette when available.
   dynamic_color: ^1.7.0
-  # Bible download.
-  http: ^1.2.2
-  # Streaming USFX (XML) parsing.
-  xml: ^6.5.0
-  # Where the parsed Bible is cached on disk (native platforms).
-  path_provider: ^2.1.4
-  # Reading position, bookmarks and settings.
+  # Gunzips the bundled Scripture; pure Dart, so it works on the web too.
+  archive: ^4.0.0
+  # Reading position, marks and settings.
   shared_preferences: ^2.3.2
+  # USFX parsing. Only tool/build_assets.dart and the tests reach for this;
+  # the app itself reads the built assets, so it is tree-shaken out of
+  # release binaries.
+  xml: ^6.5.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
 
+
 flutter:
   uses-material-design: true
+
+  assets:
+    - assets/bible/
 
   # Literata (SIL Open Font License 1.1) is bundled so the reading typeface is
   # identical on every platform, including the web build where the generic

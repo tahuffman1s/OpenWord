@@ -73,10 +73,31 @@ class AppTheme {
       ? const Color(0xFFFF8A80)
       : const Color(0xFFB3261E);
 
-  /// Highlight tints for bookmarks, in palette order.
-  static List<Color> highlights(ColorScheme scheme) => [
-    scheme.primaryContainer,
-    scheme.tertiaryContainer,
-    scheme.secondaryContainer,
+  /// Names of the highlight colours, in palette order.
+  static const List<String> highlightNames = [
+    'Yellow',
+    'Green',
+    'Blue',
+    'Pink',
+    'Purple',
   ];
+
+  static const List<Color> _highlightHues = [
+    Color(0xFFFFD54F),
+    Color(0xFF81C784),
+    Color(0xFF64B5F6),
+    Color(0xFFF48FB1),
+    Color(0xFFB39DDB),
+  ];
+
+  /// Highlight tints, translucent so the text stays readable and the page
+  /// colour still shows through in either theme.
+  static List<Color> highlights(ColorScheme scheme) {
+    final alpha = scheme.brightness == Brightness.dark ? 0.32 : 0.55;
+    return [for (final hue in _highlightHues) hue.withValues(alpha: alpha)];
+  }
+
+  /// A solid version for swatches and chips.
+  static Color highlightSwatch(int index) =>
+      _highlightHues[index % _highlightHues.length];
 }
