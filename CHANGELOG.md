@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.1.0
+
+### Completely offline
+- Three public-domain translations now ship inside the app — the World English
+  Bible, the Berean Standard Bible and the World English Bible, British
+  Edition — so there is no first-launch download and no network code at all.
+  The Android build no longer requests the internet permission and the macOS
+  build no longer carries the network entitlement.
+- The bundled text is a compact binary rather than JSON: about 75 ms to load
+  instead of 1.5 s, and a peak heap of tens of megabytes instead of hundreds.
+
+### Navigation
+- The alphabet rail is gone. In its place is a single field that both filters
+  the book list and parses references: `jn 3:16`, `1 co 13`, `ps 23`, `gen1:1`
+  and `Genesis 1 2` all resolve, with out-of-range chapters and verses clamped
+  to what the book has. Choosing a book leads to chapter and verse grids, and
+  a one-chapter book opens straight away.
+- Books are grouped by division (Law, History, Gospels …) or sorted A–Z, with
+  numbered books under their name.
+
+### Added
+- Compare two translations verse by verse, in columns on a wide window and
+  stacked on a phone.
+- Highlights in five colours alongside bookmarks and notes, any combination on
+  one verse; highlights tint the text where it flows.
+- A library screen with bookmarks, highlights, notes and recently read
+  chapters.
+- Search scoped to the whole Bible, a testament or the current book, with an
+  optional whole-word match and results grouped by book.
+- Backup and restore: copy everything as JSON to the clipboard and paste it
+  back anywhere; restoring merges by recency instead of overwriting.
+- A display sheet in the reader for size, spacing, typeface and comparison
+  without leaving the page.
+- Parallel-passage references (`\r`) are kept and set apart from headings.
+
+### Fixed
+- Jumping to a verse in another chapter landed at the top of that chapter: the
+  page change discarded the verse before the chapter could scroll to it.
+- Jumping to a verse inside a paragraph did nothing, because only verses that
+  begin a paragraph carry a scroll anchor; it now scrolls to the paragraph
+  holding the verse.
+- Section headings were being absorbed into the text of whichever verse
+  preceded them, which showed up in the compare view, in search results and
+  when copying a verse.
+
 ## 1.0.0
 
 First release.
