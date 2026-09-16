@@ -5,20 +5,41 @@ on:
     tags: ['v*']
   workflow_dispatch:
     inputs:
-      tag:
-        description: Existing tag to build and publish
+      version:
+        description: Version to release, e.g. 1.0.0
         required: true
 
 env:
-  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+  TAG: >-
+    ${{ github.event_name == 'workflow_dispatch'
+        && format('v{0}', github.event.inputs.version)
+        || github.ref_name }}
 
 jobs:
+  # Running this by hand creates the tag; a tag push finds it already there.
+  tag:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Ensure the tag exists
+        run: |
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" \
+              >/dev/null 2>&1; then
+            echo "$TAG already exists"
+            exit 0
+          fi
+          git tag -a "$TAG" -m "OpenWord $TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+
   android:
     runs-on: ubuntu-latest
+    needs: tag
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ github.sha }}
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -40,10 +61,11 @@ jobs:
 
   web:
     runs-on: ubuntu-latest
+    needs: tag
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ github.sha }}
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -61,10 +83,11 @@ jobs:
 
   linux:
     runs-on: ubuntu-latest
+    needs: tag
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ github.sha }}
       - run: |
           sudo apt-get update
           sudo apt-get install -y ninja-build libgtk-3-dev
@@ -85,10 +108,11 @@ jobs:
 
   windows:
     runs-on: windows-latest
+    needs: tag
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ github.sha }}
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
@@ -113,7 +137,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ github.sha }}
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
