@@ -30,6 +30,9 @@ jobs:
             echo "$TAG already exists"
             exit 0
           fi
+          git config user.name 'github-actions[bot]'
+          git config user.email \
+            '41898282+github-actions[bot]@users.noreply.github.com'
           git tag -a "$TAG" -m "OpenWord $TAG" "$GITHUB_SHA"
           git push origin "refs/tags/$TAG"
 
