@@ -29,9 +29,9 @@ no network entitlement.
   verses are flagged in the margin and in the pickers.
 - **Context where the translation offers it.** Citations in footnotes and in
   parallel-passage lines are links — tap `Ezekiel 34:11` under the heading of
-  Psalm 23 and you are there. Every book also carries a short background note,
-  opened from its name above the chapter number: canon division, length,
-  genre, ascription, the period it is set in and a summary.
+  Psalm 23 and you are there. Every book also opens an introduction from its
+  name above the chapter number — canon division, length, and a full essay on
+  the book's setting, authorship, structure and themes.
 - **Your library** in one place: bookmarks, highlights, notes and the chapters
   you have been reading, each a tap away from the text.
 - **Search** the whole Bible, one testament or the book you are in, with an
@@ -70,6 +70,32 @@ dart run tool/build_assets.dart <directory-with-usfx-files>
 `tool/build_assets.dart` expects `<translation id>.usfx.xml` in that directory
 and writes `assets/bible/<id>.owb.gz`, checking that what it wrote decodes
 back to the same verse count.
+
+## Book introductions
+
+Each of the sixty-six books of the Protestant canon opens with an
+introduction of a few hundred words. These are the
+[Aquifer Open Study Notes book introductions](https://github.com/BibleAquifer/AquiferOpenStudyNotesBookIntros)
+— an adaptation by Mission Mutual of Tyndale Open Study Notes © 2023 Tyndale
+House Publishers, both licensed
+[CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). They ship as
+one gzipped JSON asset (about 200 kB) and are read only when a book sheet is
+opened. The deuterocanonical books are not covered by that resource, so they
+fall back to the short notes in `lib/src/data/book_notes.dart`.
+
+To rebuild the asset from source:
+
+```bash
+mkdir -p intros && cd intros
+for i in $(seq -w 1 66); do
+  curl -sSLO "https://raw.githubusercontent.com/BibleAquifer/AquiferOpenStudyNotesBookIntros/main/eng/md/$i.content.md"
+done
+cd .. && dart run tool/build_notes.dart intros
+```
+
+It writes `assets/notes/book-intros-eng.json.gz`, dropping each file's licence
+preamble and title line — the licence is shown by the app from its own copy,
+in the book sheet and in Settings, as CC BY-SA requires.
 
 ## Building
 
@@ -143,6 +169,11 @@ and navigation instant.
 
 - Application code: [MIT](LICENSE).
 - Scripture text: public domain (see the table above).
+- Book introductions: Aquifer Open Study Notes (Book Intros) © Mission Mutual,
+  an adaptation of Tyndale Open Study Notes © 2023 Tyndale House Publishers,
+  both [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Shared
+  alike: any redistribution of these introductions, adapted or not, must carry
+  the same licence and this attribution.
 - Bundled typeface: [Literata](https://fonts.google.com/specimen/Literata),
   SIL Open Font License 1.1 — see `assets/fonts/Literata-OFL.txt`. It is
   subset to Latin, Greek and the punctuation the text uses.

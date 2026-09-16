@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.3.0
+
+### Added
+- A proper introduction to every book of the Protestant canon, opened from the
+  book's name above the chapter number: a few hundred words on its setting,
+  authorship, structure and themes, with sub-headings, in place of the
+  four-line editorial note that was there before. These are the
+  [Aquifer Open Study Notes book introductions](https://github.com/BibleAquifer/AquiferOpenStudyNotesBookIntros)
+  — an adaptation by Mission Mutual of Tyndale Open Study Notes © 2023 Tyndale
+  House Publishers, both CC BY-SA 4.0. They ship with the app as one 200 kB
+  asset, read only when a book sheet is opened, so nothing here needs a
+  network connection either.
+- The attribution the licence requires, in the book sheet and under Settings →
+  About.
+
+### Changed
+- The app's own book notes are now only for the deuterocanonical books, which
+  the introductions do not cover.
+
 ## 1.2.0
 
 ### Fixed

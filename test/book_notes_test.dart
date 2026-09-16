@@ -3,12 +3,14 @@ import 'package:openword/src/data/book_notes.dart';
 import 'package:openword/src/model/book_meta.dart';
 
 void main() {
-  test('every book in the canon table has a note', () {
-    final missing = [
+  test('covers exactly the books the bundled introductions do not', () {
+    // The Protestant canon is covered by the Aquifer introductions; these
+    // notes exist for the deuterocanonical books alone.
+    final deuterocanon = [
       for (final book in BookMeta.all)
-        if (!bookNotes.containsKey(book.code)) book.code,
+        if (book.section == BookSection.deuterocanon) book.code,
     ];
-    expect(missing, isEmpty, reason: 'books without a background note');
+    expect(bookNotes.keys.toSet(), deuterocanon.toSet());
   });
 
   test('no note is written for a book that does not exist', () {
@@ -28,16 +30,24 @@ void main() {
     }
   });
 
-  test('authorship is hedged where the book is anonymous', () {
-    // A claim as firm as "by Moses" would be a scholarly assertion the app
-    // has no business making.
-    for (final code in ['GEN', 'EXO', 'LEV', 'NUM', 'DEU', 'JOS', 'JDG']) {
+  test('authorship is hedged rather than asserted', () {
+    // A claim as firm as "by Solomon" would be a scholarly assertion the app
+    // has no business making. Sirach is the exception the rule allows for: it
+    // names its own author, so saying so is reporting the book, not taking a
+    // side.
+    for (final entry in bookNotes.entries) {
+      final attribution = entry.value.attribution.toLowerCase();
       expect(
-        bookNotes[code]!.attribution.toLowerCase(),
-        contains('traditionally'),
-        reason: code,
+        attribution.contains('anonymous') ||
+            attribution.contains('ascribed') ||
+            attribution.contains('presented as') ||
+            attribution.contains('voice') ||
+            attribution.contains('adaptation') ||
+            attribution.contains('abridgement') ||
+            attribution.contains('names himself'),
+        isTrue,
+        reason: '${entry.key}: "${entry.value.attribution}"',
       );
     }
-    expect(bookNotes['HEB']!.attribution.toLowerCase(), contains('unknown'));
   });
 }

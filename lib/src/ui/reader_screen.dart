@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../app_scope.dart';
 import '../data/library.dart';
+import '../data/book_intros.dart';
 import '../data/marks.dart';
 import '../data/reference_search.dart';
 import '../data/settings.dart';
@@ -51,6 +52,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// parallel-passage lines.
   ReferenceMatcher? _matcher;
 
+  /// Book introductions, read from the bundle the first time one is opened.
+  BookIntros? _intros;
+
   late Settings _settings;
   late ReadingStore _reading;
   late LibraryController _library;
@@ -60,6 +64,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     super.didChangeDependencies();
     final scope = AppScope.of(context);
     _library = scope.library;
+    _intros ??= BookIntros(bundle: scope.library.bundle);
     if (!identical(_matcherFor, scope.library.bible)) {
       _matcherFor = scope.library.bible;
       _matcher = ReferenceMatcher(scope.library.bible!.books);
@@ -359,6 +364,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ),
                     matcher: _matcher,
                     onReferenceTap: _goTo,
+                    intros: _intros,
                     comparison: comparison
                         ?.bookByCode(book.code)
                         ?.chapter(chapter.number),
@@ -397,6 +403,7 @@ class _ChapterPage extends StatefulWidget {
     required this.flagged,
     required this.matcher,
     required this.onReferenceTap,
+    required this.intros,
     required this.comparison,
     required this.comparisonLabel,
     required this.primaryLabel,
@@ -417,6 +424,7 @@ class _ChapterPage extends StatefulWidget {
   final Set<int> flagged;
   final ReferenceMatcher? matcher;
   final ValueChanged<Reference>? onReferenceTap;
+  final BookIntros? intros;
 
   /// The same chapter in a second translation, when comparing.
   final Chapter? comparison;
@@ -627,7 +635,8 @@ class _ChapterPageState extends State<_ChapterPage> {
         children: [
           // Tapping the book's name opens its background note.
           InkWell(
-            onTap: () => showBookSheet(context, widget.book),
+            onTap: () =>
+                showBookSheet(context, widget.book, intros: widget.intros),
             borderRadius: BorderRadius.circular(8),
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 2),

@@ -1,6 +1,8 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:openword/src/data/book_intros.dart';
 import 'package:openword/src/data/usfx_parser.dart';
 import 'package:openword/src/model/bible.dart';
 import 'package:openword/src/model/bible_codec.dart';
@@ -161,6 +163,7 @@ class FixtureBundle extends CachingAssetBundle {
             'assets/bible/${otherTranslation.id}.owb.gz': _pack(
               parseOtherFixture(),
             ),
+            BookIntros.assetPath: packIntros(fixtureIntros),
           };
 
   final Map<String, Uint8List> assets;
@@ -168,6 +171,10 @@ class FixtureBundle extends CachingAssetBundle {
 
   static Uint8List _pack(Bible bible) =>
       Uint8List.fromList(gzip.encode(BibleCodec.encode(bible)));
+
+  /// The book introductions in the shape the asset uses: gzipped JSON.
+  static Uint8List packIntros(Map<String, String> intros) =>
+      Uint8List.fromList(gzip.encode(utf8.encode(jsonEncode(intros))));
 
   @override
   Future<ByteData> load(String key) async {
@@ -179,3 +186,11 @@ class FixtureBundle extends CachingAssetBundle {
     return ByteData.sublistView(data);
   }
 }
+
+/// Stand-ins for the bundled introductions. Short, but with a heading, an
+/// underlined heading and bold text, so the sheet is exercised the way the
+/// real markdown exercises it.
+const Map<String, String> fixtureIntros = {
+  'GEN': 'Setting\n=======\n\nGenesis is a book of **beginnings**.\n',
+  'PSA': '## Psalms\n\nA collection of prayers and songs.\n',
+};

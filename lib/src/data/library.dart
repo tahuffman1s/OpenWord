@@ -18,6 +18,11 @@ class LibraryController extends ChangeNotifier {
 
   final AssetBundle _bundle;
 
+  /// The bundle the Scripture was read from. Anything else that ships as an
+  /// asset — the book introductions, for one — reads from the same place, so
+  /// a test can swap both at once.
+  AssetBundle get bundle => _bundle;
+
   LibraryStatus _status = LibraryStatus.loading;
   String? _errorMessage;
   Bible? _bible;

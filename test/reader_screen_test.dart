@@ -404,11 +404,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Law • Old Testament'), findsOneWidget);
-    expect(
-      find.textContaining('traditionally ascribed to Moses'),
-      findsOneWidget,
-    );
-    expect(find.textContaining('editorial summary'), findsOneWidget);
+    // The bundled introduction, rendered from its markdown.
+    expect(find.text('Setting'), findsOneWidget);
+    expect(find.textContaining('book of beginnings'), findsOneWidget);
+    expect(find.textContaining('CC BY-SA 4.0'), findsOneWidget);
   });
 
   testWidgets('saves the position when the chapter changes', (tester) async {

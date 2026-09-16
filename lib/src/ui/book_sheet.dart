@@ -1,24 +1,30 @@
 import 'package:flutter/material.dart';
 
+import '../data/book_intros.dart';
 import '../data/book_notes.dart';
 import '../model/bible.dart';
 import '../model/book_meta.dart';
+import 'widgets/simple_markdown.dart';
 
-/// A short orientation for the book being read: where it sits in the canon,
-/// how big it is, and a few lines of historical context.
-void showBookSheet(BuildContext context, Book book) {
+/// A background sheet for the book being read: where it sits in the canon,
+/// how big it is, and an introduction to it.
+void showBookSheet(BuildContext context, Book book, {BookIntros? intros}) {
   showModalBottomSheet<void>(
     context: context,
     showDragHandle: true,
     isScrollControlled: true,
-    builder: (sheetContext) => _BookSheet(book: book),
+    builder: (sheetContext) => FractionallySizedBox(
+      heightFactor: 0.88,
+      child: _BookSheet(book: book, intros: intros),
+    ),
   );
 }
 
 class _BookSheet extends StatelessWidget {
-  const _BookSheet({required this.book});
+  const _BookSheet({required this.book, this.intros});
 
   final Book book;
+  final BookIntros? intros;
 
   @override
   Widget build(BuildContext context) {
@@ -58,32 +64,8 @@ class _BookSheet extends StatelessWidget {
                   if (note != null) _Fact(label: '', value: note.genre),
                 ],
               ),
-              if (note == null)
-                Padding(
-                  padding: const EdgeInsets.only(top: 20),
-                  child: Text(
-                    'No background note for this book yet.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                    ),
-                  ),
-                )
-              else ...[
-                const SizedBox(height: 20),
-                Text(note.summary, style: theme.textTheme.bodyLarge),
-                const SizedBox(height: 18),
-                _Row(label: 'Ascribed to', value: note.attribution),
-                _Row(label: 'Setting', value: note.setting),
-                const SizedBox(height: 18),
-                Text(
-                  'A brief editorial summary, not a commentary. Traditional '
-                  'authorship is noted as tradition; scholarly views on '
-                  'authorship and dating differ.',
-                  style: theme.textTheme.bodySmall?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ],
+              const SizedBox(height: 20),
+              _Introduction(book: book, intros: intros, fallback: note),
             ],
           ),
         ),
@@ -140,6 +122,92 @@ class _Row extends StatelessWidget {
           Text(value, style: theme.textTheme.bodyMedium),
         ],
       ),
+    );
+  }
+}
+
+/// The bundled introduction for a book, or the app's own short note where
+/// there is none — the deuterocanonical books are not covered by the
+/// introductions resource.
+class _Introduction extends StatelessWidget {
+  const _Introduction({
+    required this.book,
+    required this.intros,
+    required this.fallback,
+  });
+
+  final Book book;
+  final BookIntros? intros;
+  final BookNote? fallback;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final source = intros;
+    if (source == null) return _fallback(theme);
+
+    final alreadyLoaded = source.loaded(book.code);
+    if (alreadyLoaded != null) return _intro(theme, alreadyLoaded);
+
+    return FutureBuilder<String?>(
+      future: source.forBook(book.code),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Center(child: CircularProgressIndicator()),
+          );
+        }
+        final markdown = snapshot.data;
+        if (markdown == null || markdown.isEmpty) return _fallback(theme);
+        return _intro(theme, markdown);
+      },
+    );
+  }
+
+  Widget _intro(ThemeData theme, String markdown) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SimpleMarkdown(source: markdown, baseStyle: theme.textTheme.bodyLarge),
+        const SizedBox(height: 20),
+        Text(
+          BookIntros.attribution,
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _fallback(ThemeData theme) {
+    final note = fallback;
+    if (note == null) {
+      return Text(
+        'No background note for this book yet.',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(note.summary, style: theme.textTheme.bodyLarge),
+        const SizedBox(height: 18),
+        _Row(label: 'Ascribed to', value: note.attribution),
+        _Row(label: 'Setting', value: note.setting),
+        const SizedBox(height: 18),
+        Text(
+          'A brief editorial summary written for this app, not a commentary. '
+          'Traditional authorship is noted as tradition; scholarly views on '
+          'authorship and dating differ.',
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: theme.colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
     );
   }
 }
