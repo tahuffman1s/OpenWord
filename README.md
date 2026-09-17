@@ -27,6 +27,9 @@ no network entitlement.
 - **Highlights in five colours, bookmarks and notes**, any combination on the
   same verse. Highlights tint the text in place; bookmarked and annotated
   verses are flagged in the margin and in the pickers.
+- **Maps of the places a chapter names**, drawn from open data and bundled
+  with the app: markers over coastline, lakes and rivers, with the ones
+  scholars dispute marked as such.
 - **Context where the translation offers it.** Citations in footnotes and in
   parallel-passage lines are links — tap `Ezekiel 34:11` under the heading of
   Psalm 23 and you are there. Every book also opens an introduction from its
@@ -96,6 +99,31 @@ cd .. && dart run tool/build_notes.dart intros
 It writes `assets/notes/book-intros-eng.json.gz`, dropping each file's licence
 preamble and title line — the licence is shown by the app from its own copy,
 in the book sheet and in Settings, as CC BY-SA requires.
+
+## Maps
+
+A chapter that names somewhere on the ground says so above its number — *8
+places* — and opens a map of them: coastline, lakes and rivers, a marker per
+place, pinch to zoom, and a tap on a marker or a name for what is known about
+it. A hollow marker is a location scholars have not settled.
+
+- Places: [OpenBible.info Bible Geocoding](https://github.com/openbibleinfo/Bible-Geocoding-Data),
+  CC BY 4.0 — every place named in the Protestant canon, the verses naming it,
+  and how confident the identification is. 1,276 of them resolve to a point
+  and reach the app.
+- Base map: [Natural Earth](https://www.naturalearthdata.com/) 1:50m land,
+  lakes and river centrelines, public domain, by way of
+  [natural-earth-geojson](https://github.com/martynafford/natural-earth-geojson).
+
+Both are clipped to the world the Bible names, simplified, and written as one
+70 kB asset, read the first time a reader opens a chapter. As with everything
+else here, no tiles are fetched and nothing needs a connection.
+
+```bash
+git clone --depth 1 https://github.com/openbibleinfo/Bible-Geocoding-Data
+git clone --depth 1 https://github.com/martynafford/natural-earth-geojson
+dart run tool/build_maps.dart Bible-Geocoding-Data natural-earth-geojson
+```
 
 ## Building
 
@@ -169,6 +197,10 @@ and navigation instant.
 
 - Application code: [MIT](LICENSE).
 - Scripture text: public domain (see the table above).
+- Place locations: [OpenBible.info Bible Geocoding](https://www.openbible.info/geo/),
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Base map:
+  [Natural Earth](https://www.naturalearthdata.com/about/terms-of-use/), public
+  domain.
 - Book introductions: Aquifer Open Study Notes (Book Intros) © Mission Mutual,
   an adaptation of Tyndale Open Study Notes © 2023 Tyndale House Publishers,
   both [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Shared

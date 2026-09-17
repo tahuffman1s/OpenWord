@@ -1,7 +1,7 @@
 name: openword
 description: "OpenWord — a free and open source Bible app with Material You theming."
 publish_to: 'none'
-version: 1.3.0+4
+version: 1.4.0+5
 
 environment:
   sdk: ^3.13.3
@@ -35,6 +35,7 @@ flutter:
   assets:
     - assets/bible/
     - assets/notes/
+    - assets/maps/
 
   # Literata (SIL Open Font License 1.1) is bundled so the reading typeface is
   # identical on every platform, including the web build where the generic

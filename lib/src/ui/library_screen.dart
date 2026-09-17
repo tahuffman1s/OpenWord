@@ -123,18 +123,23 @@ class _MarkList extends StatelessWidget {
               SnackBar(content: Text('Removed ${mark.reference.label}')),
             );
           },
-          child: ListTile(
-            leading: _leading(theme, mark),
-            title: Text(mark.reference.label),
-            subtitle: Text(
-              subtitle,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
+          // Its own Material, so the tap highlight scrolls with the row
+          // instead of being drawn on the screen behind the list.
+          child: Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              leading: _leading(theme, mark),
+              title: Text(mark.reference.label),
+              subtitle: Text(
+                subtitle,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: mark.hasNote && !showNotesFirst
+                  ? const Icon(Icons.sticky_note_2_outlined, size: 18)
+                  : null,
+              onTap: () => Navigator.of(context).pop(mark.reference),
             ),
-            trailing: mark.hasNote && !showNotesFirst
-                ? const Icon(Icons.sticky_note_2_outlined, size: 18)
-                : null,
-            onTap: () => Navigator.of(context).pop(mark.reference),
           ),
         );
       },
@@ -192,10 +197,13 @@ class _RecentList extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 24),
       children: [
         for (final reference in history)
-          ListTile(
-            leading: const Icon(Icons.history_rounded),
-            title: Text(reference.label),
-            onTap: () => Navigator.of(context).pop(reference),
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              leading: const Icon(Icons.history_rounded),
+              title: Text(reference.label),
+              onTap: () => Navigator.of(context).pop(reference),
+            ),
           ),
         Padding(
           padding: const EdgeInsets.all(16),

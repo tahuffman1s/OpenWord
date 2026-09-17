@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_scope.dart';
+import '../data/atlas.dart';
 import '../data/book_intros.dart';
 import '../data/marks.dart';
 import '../data/settings.dart';
@@ -284,6 +285,12 @@ class SettingsScreen extends StatelessWidget {
                 dense: true,
                 title: Text('Book introductions'),
                 subtitle: Text(BookIntros.attribution),
+                isThreeLine: true,
+              ),
+              const ListTile(
+                dense: true,
+                title: Text('Maps'),
+                subtitle: Text(Atlas.attribution),
                 isThreeLine: true,
               ),
               const ListTile(

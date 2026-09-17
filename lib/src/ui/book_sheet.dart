@@ -38,7 +38,7 @@ class _BookSheet extends StatelessWidget {
     return SafeArea(
       child: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 0, 24, 28),
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
@@ -166,11 +166,33 @@ class _Introduction extends StatelessWidget {
   }
 
   Widget _intro(ThemeData theme, String markdown) {
+    final intro = BookIntro.parse(markdown);
+    if (intro.isEmpty) return _fallback(theme);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SimpleMarkdown(source: markdown, baseStyle: theme.textTheme.bodyLarge),
-        const SizedBox(height: 20),
+        if (intro.lead.isNotEmpty)
+          SimpleMarkdown(
+            source: intro.lead,
+            baseStyle: theme.textTheme.bodyLarge,
+          ),
+        if (intro.sections.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          for (var i = 0; i < intro.sections.length; i++)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: _Section(
+                section: intro.sections[i],
+                // Where there is a lead, it is already the summary and the
+                // sections below it are an outline to choose from; where
+                // there is not, the first section is opened so the sheet
+                // does not read as a row of shut doors.
+                initiallyExpanded: i == 0 && intro.lead.isEmpty,
+              ),
+            ),
+        ],
+        const SizedBox(height: 12),
         Text(
           BookIntros.attribution,
           style: theme.textTheme.bodySmall?.copyWith(
@@ -208,6 +230,49 @@ class _Introduction extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// One section of an introduction, folded away until it is wanted.
+class _Section extends StatelessWidget {
+  const _Section({required this.section, this.initiallyExpanded = false});
+
+  final IntroSection section;
+  final bool initiallyExpanded;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainerHigh,
+      borderRadius: BorderRadius.circular(16),
+      clipBehavior: Clip.antiAlias,
+      child: Theme(
+        // ExpansionTile draws a hairline above and below itself by default,
+        // which fights with the rounded card it sits in.
+        data: theme.copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          initiallyExpanded: initiallyExpanded,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+          childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          expandedCrossAxisAlignment: CrossAxisAlignment.start,
+          iconColor: theme.colorScheme.primary,
+          collapsedIconColor: theme.colorScheme.onSurfaceVariant,
+          title: Text(
+            section.title,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          children: [
+            SimpleMarkdown(
+              source: section.body,
+              baseStyle: theme.textTheme.bodyMedium,
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

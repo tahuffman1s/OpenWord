@@ -282,16 +282,21 @@ class _SearchScreenState extends State<SearchScreen> {
       );
       for (final hit in entry.value) {
         rows.add(
-          ListTile(
-            dense: true,
-            title: Text(
-              '${hit.reference.chapter}:${hit.reference.verse}',
-              style: theme.textTheme.labelLarge?.copyWith(
-                color: theme.colorScheme.onSurfaceVariant,
+          // As in the navigator: the row owns its highlight, so it does not
+          // linger over the list when the row scrolls away under a press.
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              dense: true,
+              title: Text(
+                '${hit.reference.chapter}:${hit.reference.verse}',
+                style: theme.textTheme.labelLarge?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
               ),
+              subtitle: _Snippet(hit: hit),
+              onTap: () => Navigator.of(context).pop(hit.reference),
             ),
-            subtitle: _Snippet(hit: hit),
-            onTap: () => Navigator.of(context).pop(hit.reference),
           ),
         );
       }

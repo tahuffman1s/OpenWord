@@ -63,3 +63,69 @@ class BookIntros {
     }
   }
 }
+
+/// A book introduction, split into its sections.
+///
+/// The source is consistent about its shape: a paragraph or two of lead, then
+/// top-level sections — Setting, Summary, Author, Date, Meaning and Message —
+/// some with sub-headings of their own. Splitting on those headings lets the
+/// sheet show the outline at a glance rather than several screens of prose.
+class BookIntro {
+  const BookIntro({required this.lead, required this.sections});
+
+  /// What comes before the first section heading.
+  final String lead;
+
+  final List<IntroSection> sections;
+
+  bool get isEmpty => lead.isEmpty && sections.isEmpty;
+
+  static BookIntro parse(String markdown) {
+    final lines = markdown.replaceAll('\r\n', '\n').split('\n');
+    final lead = <String>[];
+    final sections = <IntroSection>[];
+    String? title;
+    final body = <String>[];
+
+    void close() {
+      final heading = title;
+      if (heading == null) return;
+      sections.add(IntroSection(title: heading, body: body.join('\n').trim()));
+      body.clear();
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      final line = lines[i];
+      final trimmed = line.trim();
+
+      // A line of `=` underneath text makes it a top-level heading; the
+      // source uses `-` for the level below, which stays inside its section.
+      final next = i + 1 < lines.length ? lines[i + 1].trim() : '';
+      final underlined = trimmed.isNotEmpty && RegExp(r'^=+$').hasMatch(next);
+      final hashed = RegExp(r'^#\s+(.*)$').firstMatch(trimmed);
+
+      if (underlined || hashed != null) {
+        close();
+        title = hashed?.group(1)?.trim() ?? trimmed;
+        if (underlined) i++;
+        continue;
+      }
+
+      if (title == null) {
+        lead.add(line);
+      } else {
+        body.add(line);
+      }
+    }
+    close();
+
+    return BookIntro(lead: lead.join('\n').trim(), sections: sections);
+  }
+}
+
+class IntroSection {
+  const IntroSection({required this.title, required this.body});
+
+  final String title;
+  final String body;
+}

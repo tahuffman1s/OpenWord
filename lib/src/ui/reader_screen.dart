@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 
 import '../app_scope.dart';
 import '../data/library.dart';
+import '../data/atlas.dart';
 import '../data/book_intros.dart';
 import '../data/marks.dart';
 import '../data/reference_search.dart';
@@ -12,6 +13,7 @@ import '../data/settings.dart';
 import '../model/bible.dart';
 import '../model/book_meta.dart';
 import 'book_sheet.dart';
+import 'map_sheet.dart';
 import 'display_sheet.dart';
 import 'library_screen.dart';
 import 'navigator_sheet.dart';
@@ -55,9 +57,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// Book introductions, read from the bundle the first time one is opened.
   BookIntros? _intros;
 
+  /// The atlas, read once in the background: the chapter heading has to know
+  /// whether there is anything to show before it can offer a map.
+  Atlas? _atlas;
+  AtlasData? _atlasData;
+
   late Settings _settings;
   late ReadingStore _reading;
   late LibraryController _library;
+
+  /// Reads the atlas in the background and rebuilds once it is there, so
+  /// opening a chapter never waits on it.
+  void _loadAtlas(AssetBundle bundle) {
+    if (_atlas != null) return;
+    final atlas = Atlas(bundle: bundle);
+    _atlas = atlas;
+    atlas.load().then((data) {
+      if (!mounted || data.isEmpty) return;
+      setState(() => _atlasData = data);
+    });
+  }
 
   @override
   void didChangeDependencies() {
@@ -65,6 +84,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     final scope = AppScope.of(context);
     _library = scope.library;
     _intros ??= BookIntros(bundle: scope.library.bundle);
+    _loadAtlas(scope.library.bundle);
     if (!identical(_matcherFor, scope.library.bible)) {
       _matcherFor = scope.library.bible;
       _matcher = ReferenceMatcher(scope.library.bible!.books);
@@ -365,6 +385,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     matcher: _matcher,
                     onReferenceTap: _goTo,
                     intros: _intros,
+                    atlas: _atlasData,
                     comparison: comparison
                         ?.bookByCode(book.code)
                         ?.chapter(chapter.number),
@@ -404,6 +425,7 @@ class _ChapterPage extends StatefulWidget {
     required this.matcher,
     required this.onReferenceTap,
     required this.intros,
+    required this.atlas,
     required this.comparison,
     required this.comparisonLabel,
     required this.primaryLabel,
@@ -425,6 +447,9 @@ class _ChapterPage extends StatefulWidget {
   final ReferenceMatcher? matcher;
   final ValueChanged<Reference>? onReferenceTap;
   final BookIntros? intros;
+
+  /// Read once the atlas asset is decoded; null until then.
+  final AtlasData? atlas;
 
   /// The same chapter in a second translation, when comparing.
   final Chapter? comparison;
@@ -609,8 +634,10 @@ class _ChapterPageState extends State<_ChapterPage> {
       ),
     );
 
-    return Scrollbar(
-      controller: _scroll,
+    // No scrollbar over the text: a page of Scripture is read, not scrubbed,
+    // and the desktop and web defaults would draw one down the margin.
+    return ScrollConfiguration(
+      behavior: ScrollConfiguration.of(context).copyWith(scrollbars: false),
       child: SingleChildScrollView(
         controller: _scroll,
         padding: const EdgeInsets.fromLTRB(20, 4, 20, 48),
@@ -627,38 +654,87 @@ class _ChapterPageState extends State<_ChapterPage> {
     );
   }
 
+  /// The places this chapter names, once the atlas has been read.
+  List<Place> get _places =>
+      widget.atlas?.inChapter(widget.book.code, widget.chapter.number) ??
+      const [];
+
   Widget _chapterHeading(ThemeData theme) {
+    final places = _places;
     return Padding(
       padding: const EdgeInsets.only(top: 8, bottom: 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Tapping the book's name opens its background note.
-          InkWell(
-            onTap: () =>
-                showBookSheet(context, widget.book, intros: widget.intros),
-            borderRadius: BorderRadius.circular(8),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 2),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    widget.book.name.toUpperCase(),
-                    style: theme.textTheme.labelMedium?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant,
-                      letterSpacing: 1.6,
+          Row(
+            children: [
+              // Tapping the book's name opens its background note.
+              InkWell(
+                onTap: () =>
+                    showBookSheet(context, widget.book, intros: widget.intros),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        widget.book.name.toUpperCase(),
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: theme.colorScheme.onSurfaceVariant,
+                          letterSpacing: 1.6,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.info_outline_rounded,
+                        size: 14,
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              // Offered only where the chapter names somewhere on the map.
+              if (places.isNotEmpty) ...[
+                const SizedBox(width: 10),
+                InkWell(
+                  onTap: () => showMapSheet(
+                    context,
+                    data: widget.atlas!,
+                    title: '${widget.book.name} ${widget.chapter.number}',
+                    places: places,
+                  ),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.map_outlined,
+                          size: 14,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          places.length == 1
+                              ? '1 PLACE'
+                              : '${places.length} PLACES',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.primary,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(width: 6),
-                  Icon(
-                    Icons.info_outline_rounded,
-                    size: 14,
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ],
-              ),
-            ),
+                ),
+              ],
+            ],
           ),
           const SizedBox(height: 2),
           Text(

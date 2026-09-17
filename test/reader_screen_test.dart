@@ -7,6 +7,7 @@ import 'package:openword/src/data/marks.dart';
 import 'package:openword/src/data/settings.dart';
 import 'package:openword/src/model/bible.dart';
 import 'package:openword/src/ui/reader_screen.dart';
+import 'package:openword/src/ui/widgets/atlas_map.dart';
 import 'package:openword/src/ui/widgets/scripture_text.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -404,10 +405,36 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Law • Old Testament'), findsOneWidget);
-    // The bundled introduction, rendered from its markdown.
-    expect(find.text('Setting'), findsOneWidget);
+    // The bundled introduction: its lead, then its sections as an outline.
     expect(find.textContaining('book of beginnings'), findsOneWidget);
+    expect(find.text('Setting'), findsOneWidget);
+    expect(find.text('Author'), findsOneWidget);
     expect(find.textContaining('CC BY-SA 4.0'), findsOneWidget);
+
+    // A section is folded away until it is asked for.
+    expect(find.textContaining('Ur of the Chaldees'), findsNothing);
+    await tester.tap(find.text('Setting'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Ur of the Chaldees'), findsOneWidget);
+  });
+
+  testWidgets('a chapter that names places offers its map', (tester) async {
+    await pumpReader(tester);
+
+    // The fixture atlas puts one place in Genesis 1 and two in Genesis 2.
+    expect(find.text('1 PLACE'), findsOneWidget);
+
+    await tester.tap(find.text('1 PLACE'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Genesis 1'), findsWidgets);
+    expect(find.text('One place named here'), findsOneWidget);
+    expect(find.byType(AtlasMap), findsOneWidget);
+    expect(find.textContaining('OpenBible.info'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Bethel'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('31.93°N'), findsOneWidget);
   });
 
   testWidgets('saves the position when the chapter changes', (tester) async {

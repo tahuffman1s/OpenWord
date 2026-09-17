@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
+import 'package:openword/src/data/atlas.dart';
 import 'package:openword/src/data/book_intros.dart';
 import 'package:openword/src/data/usfx_parser.dart';
 import 'package:openword/src/model/bible.dart';
@@ -164,6 +165,7 @@ class FixtureBundle extends CachingAssetBundle {
               parseOtherFixture(),
             ),
             BookIntros.assetPath: packIntros(fixtureIntros),
+            Atlas.assetPath: packJson(fixtureAtlas),
           };
 
   final Map<String, Uint8List> assets;
@@ -173,8 +175,10 @@ class FixtureBundle extends CachingAssetBundle {
       Uint8List.fromList(gzip.encode(BibleCodec.encode(bible)));
 
   /// The book introductions in the shape the asset uses: gzipped JSON.
-  static Uint8List packIntros(Map<String, String> intros) =>
-      Uint8List.fromList(gzip.encode(utf8.encode(jsonEncode(intros))));
+  static Uint8List packIntros(Map<String, String> intros) => packJson(intros);
+
+  static Uint8List packJson(Object? value) =>
+      Uint8List.fromList(gzip.encode(utf8.encode(jsonEncode(value))));
 
   @override
   Future<ByteData> load(String key) async {
@@ -187,10 +191,48 @@ class FixtureBundle extends CachingAssetBundle {
   }
 }
 
-/// Stand-ins for the bundled introductions. Short, but with a heading, an
-/// underlined heading and bold text, so the sheet is exercised the way the
-/// real markdown exercises it.
+/// Stand-ins for the bundled introductions, in the shape the real ones take:
+/// a lead paragraph, then underlined top-level sections, one of them with a
+/// sub-heading below it.
 const Map<String, String> fixtureIntros = {
-  'GEN': 'Setting\n=======\n\nGenesis is a book of **beginnings**.\n',
-  'PSA': '## Psalms\n\nA collection of prayers and songs.\n',
+  'GEN':
+      'Genesis is a book of **beginnings**.\n'
+      '\n'
+      'Setting\n'
+      '=======\n'
+      '\n'
+      'It opens in Ur of the Chaldees.\n'
+      '\n'
+      'Author\n'
+      '======\n'
+      '\n'
+      'Traditionally Moses.\n'
+      '\n'
+      'Genres\n'
+      '------\n'
+      '\n'
+      'Narrative, with genealogies.\n',
+  'PSA': 'A collection of prayers and songs.\n',
+};
+
+/// A stand-in atlas: two places in the fixture's first book, a scrap of
+/// coastline and a river, in the same shape the real asset takes.
+const Map<String, Object?> fixtureAtlas = {
+  'version': 1,
+  'bounds': [34000, 31000, 36000, 33000],
+  'places': [
+    ['Bethel', 'settlement', 35220, 31930, 1000],
+    ['Ai', 'settlement', 35270, 31917, 300],
+  ],
+  'chapters': {
+    'GEN 1': [0],
+    'GEN 2': [0, 1],
+  },
+  'land': [
+    [34000, 31000, 36000, 31000, 36000, 33000, 34000, 33000],
+  ],
+  'lakes': <Object?>[],
+  'rivers': [
+    [35000, 31000, 35100, 32000, 35200, 33000],
+  ],
 };

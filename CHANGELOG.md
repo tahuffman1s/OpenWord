@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.4.0
+
+### Added
+- **Maps.** A chapter that names somewhere on the ground says so above its
+  number — *8 places* — and opens a map of them: coastline, lakes and rivers,
+  a marker for each place, pinch to zoom, and a tap on a marker or a name for
+  its type and coordinates. A hollow marker is a location scholars have not
+  settled. The places are
+  [OpenBible.info Bible Geocoding](https://github.com/openbibleinfo/Bible-Geocoding-Data)
+  (CC BY 4.0) and the base map is [Natural Earth](https://www.naturalearthdata.com/)
+  (public domain); both are bundled, so the maps work with no connection like
+  everything else here.
+
+### Changed
+- Book introductions are laid out as an outline: the opening paragraphs, then
+  the book's own sections — Setting, Summary, Author, Meaning and Message —
+  each folded away until it is wanted, instead of several screens of unbroken
+  prose.
+
+### Fixed
+- Pressing a book in the navigator while the list was still moving left the
+  highlight behind, hanging over the header after the book itself had scrolled
+  away. The highlight now belongs to its row and is clipped to the list, in
+  the navigator and in the library and search lists as well.
+- The reader no longer draws a scrollbar down the margin of the text.
+- A heading inside a book introduction was rendered as body text: the style
+  reached the paragraph but not the span inside it.
+
 ## 1.3.0
 
 ### Added

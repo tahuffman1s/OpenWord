@@ -345,22 +345,31 @@ class _NavigatorSheetState extends State<_NavigatorSheet> {
 
   Widget _bookTile(ThemeData theme, Book book, Set<String> marked) {
     final selected = book.code == widget.current?.bookCode;
-    return ListTile(
-      dense: true,
-      visualDensity: VisualDensity.compact,
-      selected: selected,
-      title: Text(book.name),
-      subtitle: Text(
-        book.chapterCount == 1 ? '1 chapter' : '${book.chapterCount} chapters',
+    // The tile carries its own Material so that the tap highlight belongs to
+    // the row. Left to the sheet's Material it is drawn outside the list's
+    // clip, and pressing a book while the list is moving leaves the highlight
+    // hanging over the header after the row itself has scrolled away.
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        dense: true,
+        visualDensity: VisualDensity.compact,
+        selected: selected,
+        title: Text(book.name),
+        subtitle: Text(
+          book.chapterCount == 1
+              ? '1 chapter'
+              : '${book.chapterCount} chapters',
+        ),
+        trailing: marked.contains(book.code)
+            ? Icon(
+                Icons.bookmark_rounded,
+                size: 16,
+                color: theme.colorScheme.primary,
+              )
+            : null,
+        onTap: () => _chooseBook(book),
       ),
-      trailing: marked.contains(book.code)
-          ? Icon(
-              Icons.bookmark_rounded,
-              size: 16,
-              color: theme.colorScheme.primary,
-            )
-          : null,
-      onTap: () => _chooseBook(book),
     );
   }
 

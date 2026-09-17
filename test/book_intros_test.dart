@@ -9,6 +9,47 @@ import 'package:openword/src/data/book_intros.dart';
 import 'fixtures.dart';
 
 void main() {
+  group('parsing', () {
+    test('splits an introduction into its sections', () {
+      final intro = BookIntro.parse(fixtureIntros['GEN']!);
+
+      expect(intro.lead, 'Genesis is a book of **beginnings**.');
+      expect(intro.sections.map((section) => section.title), [
+        'Setting',
+        'Author',
+      ]);
+      expect(intro.sections.first.body, 'It opens in Ur of the Chaldees.');
+    });
+
+    test('keeps sub-headings inside the section they belong to', () {
+      final intro = BookIntro.parse(fixtureIntros['GEN']!);
+
+      // "Genres" is underlined with dashes, which is the level below.
+      expect(intro.sections.last.body, contains('Genres'));
+      expect(intro.sections.last.body, contains('Narrative, with'));
+    });
+
+    test('an introduction with no headings is all lead', () {
+      final intro = BookIntro.parse(fixtureIntros['PSA']!);
+
+      expect(intro.lead, 'A collection of prayers and songs.');
+      expect(intro.sections, isEmpty);
+      expect(intro.isEmpty, isFalse);
+    });
+
+    test('hash headings split it too', () {
+      final intro = BookIntro.parse('Lead.\n\n# Author\n\nAnonymous.');
+
+      expect(intro.lead, 'Lead.');
+      expect(intro.sections.single.title, 'Author');
+      expect(intro.sections.single.body, 'Anonymous.');
+    });
+
+    test('nothing at all parses to nothing', () {
+      expect(BookIntro.parse('').isEmpty, isTrue);
+    });
+  });
+
   test('reads the introductions out of the bundle', () async {
     final bundle = FixtureBundle();
     final intros = BookIntros(bundle: bundle);
