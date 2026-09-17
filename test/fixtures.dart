@@ -216,18 +216,35 @@ const Map<String, String> fixtureIntros = {
   'PSA': 'A collection of prayers and songs.\n',
 };
 
-/// A stand-in atlas: two places in the fixture's first book, a scrap of
-/// coastline and a river, in the same shape the real asset takes.
+/// A stand-in atlas in the shape the real asset takes: two places in the
+/// fixture's first book, with the verses naming them, a scrap of coastline
+/// and a river.
 const Map<String, Object?> fixtureAtlas = {
-  'version': 1,
-  'bounds': [34000, 31000, 36000, 33000],
+  'version': 2,
+  'bounds': [30000, 28000, 40000, 36000],
+  'detail': [34000, 31000, 36000, 33000],
   'places': [
-    ['Bethel', 'settlement', 35220, 31930, 1000],
-    ['Ai', 'settlement', 35270, 31917, 300],
+    [
+      'Bethel',
+      'settlement',
+      35220,
+      31930,
+      1000,
+      'Beitin',
+      'Beth-el|Luz',
+      'twelve miles north of Jerusalem',
+      71,
+    ],
+    ['Ai', 'settlement|ruin', 35270, 31917, 300, 'et-Tell', '', '', 39],
   ],
   'chapters': {
-    'GEN 1': [0],
-    'GEN 2': [0, 1],
+    'GEN 1': [
+      [0, 1],
+    ],
+    'GEN 2': [
+      [0, 2, 5],
+      [1, 5],
+    ],
   },
   'land': [
     [34000, 31000, 36000, 31000, 36000, 33000, 34000, 33000],
@@ -235,6 +252,18 @@ const Map<String, Object?> fixtureAtlas = {
   'lakes': <Object?>[],
   'rivers': [
     [35000, 31000, 35100, 32000, 35200, 33000],
+  ],
+  'fineLand': [
+    [34500, 31500, 35500, 31500, 35500, 32500, 34500, 32500],
+  ],
+  'fineLakes': <Object?>[],
+  'fineRivers': <Object?>[],
+  'urban': [
+    [35200, 31900, 35240, 31900, 35240, 31940, 35200, 31940],
+  ],
+  'towns': [
+    [35213, 31768, 0, 'Jerusalem'],
+    [35300, 32000, 7, 'Beitin'],
   ],
 };
 

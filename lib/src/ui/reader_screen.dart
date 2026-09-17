@@ -579,8 +579,12 @@ class _ChapterPageState extends State<_ChapterPage> {
     return best == 0 ? null : _verseKeys[best];
   }
 
-  void _jumpToVerse() {
-    final verse = widget.scrollToVerse;
+  void _jumpToVerse() => _scrollToVerse(widget.scrollToVerse);
+
+  /// Scrolls the chapter to a verse, or to its paragraph where the verse
+  /// itself carries no anchor. Used by the pending-jump machinery and by the
+  /// map, where tapping a reference should land on the words.
+  void _scrollToVerse(int? verse) {
     if (verse == null || verse <= 1) return;
     final context = _anchorFor(verse)?.currentContext;
     if (context == null) return;
@@ -682,8 +686,9 @@ class _ChapterPageState extends State<_ChapterPage> {
     );
   }
 
-  /// The places this chapter names, once the atlas has been read.
-  List<Place> get _places =>
+  /// The places this chapter names, with their verses, once the atlas has
+  /// been read.
+  List<ChapterPlace> get _places =>
       widget.atlas?.inChapter(widget.book.code, widget.chapter.number) ??
       const [];
 
@@ -732,6 +737,9 @@ class _ChapterPageState extends State<_ChapterPage> {
                     data: widget.atlas!,
                     title: '${widget.book.name} ${widget.chapter.number}',
                     places: places,
+                    // A verse tapped on the map is somewhere to read, so the
+                    // map gets out of the way and the chapter scrolls to it.
+                    onVerse: (verse) => _scrollToVerse(verse),
                   ),
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(

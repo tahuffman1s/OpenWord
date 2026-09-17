@@ -1,5 +1,29 @@
 # Changelog
 
+## 1.6.0
+
+### Changed
+- **The map moves.** Drag to pan, pinch or scroll to zoom, double-tap to zoom
+  in, with buttons for zoom and back-to-the-passage and a scale bar in the
+  corner. It goes from the whole biblical world down to half a metre to the
+  pixel, and the lettering stays the same size all the way: the map is drawn
+  at each zoom rather than scaled like a photograph.
+- **Ten times the detail when you zoom in.** The 1:10m Natural Earth
+  coastlines, lakes and rivers now come in past a country or two, along with
+  built-up areas and the towns that are there now, so a close-up of an inland
+  site has some country around it. All bundled; still no tiles, still no
+  connection.
+- The list of places under the map scrolls sideways in a single row. Wrapped
+  rows of long names were being cut off at the bottom of the sheet.
+
+### Added
+- What the open data knows about each place: its kind, the modern site it is
+  identified with, what other translations call it, the source's own note, its
+  coordinates and how many verses name it in all.
+- **The verses of the chapter that name it**, as links. Tapping one closes the
+  map and scrolls the chapter to that verse.
+- Choosing a place from the list brings it to the middle of the map.
+
 ## 1.5.0
 
 ### Added

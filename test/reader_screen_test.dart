@@ -444,7 +444,44 @@ void main() {
 
     await tester.tap(find.widgetWithText(ChoiceChip, 'Bethel'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('31.93°N'), findsOneWidget);
+
+    // What the open data knows about the place, and where the chapter names
+    // it.
+    expect(find.textContaining('31.930°N'), findsOneWidget);
+    expect(find.textContaining('Beitin', findRichText: true), findsOneWidget);
+    expect(
+      find.textContaining('Beth-el, Luz', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.textContaining('north of Jerusalem'), findsOneWidget);
+    expect(
+      find.textContaining('71 verses', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.widgetWithText(ActionChip, 'verse 1'), findsOneWidget);
+  });
+
+  testWidgets('a verse on the map is somewhere to read', (tester) async {
+    await pumpReader(tester, resume: const Reference('GEN', 2));
+
+    await tester.tap(find.text('2 PLACES'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ChoiceChip, 'Bethel'));
+    await tester.pumpAndSettle();
+
+    // Bethel is named at verses 2 and 5 of the fixture's second chapter.
+    expect(find.widgetWithText(ActionChip, 'verse 2'), findsOneWidget);
+    final verse = find.widgetWithText(ActionChip, 'verse 5');
+    // The details pane scrolls; on a test-sized window the chips start below
+    // its fold.
+    await tester.ensureVisible(verse);
+    await tester.pumpAndSettle();
+    await tester.tap(verse);
+    await tester.pumpAndSettle();
+
+    // The map gets out of the way and the chapter is left on screen.
+    expect(find.byType(AtlasMap), findsNothing);
+    expect(appBarText('Genesis 2'), findsOneWidget);
   });
 
   testWidgets('a new release is mentioned, not forced', (tester) async {

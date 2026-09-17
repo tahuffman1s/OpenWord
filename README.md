@@ -32,8 +32,9 @@ no network entitlement.
   to the system installer. It is the only thing here that uses the network,
   and Settings can turn it off.
 - **Maps of the places a chapter names**, drawn from open data and bundled
-  with the app: markers over coastline, lakes and rivers, with the ones
-  scholars dispute marked as such.
+  with the app. Drag, pinch, scroll or double-tap to move about; tap a place
+  for what the data knows about it and for the verses of the chapter that name
+  it. Locations scholars dispute are marked as such.
 - **Context where the translation offers it.** Citations in footnotes and in
   parallel-passage lines are links — tap `Ezekiel 34:11` under the heading of
   Psalm 23 and you are there. Every book also opens an introduction from its
@@ -106,22 +107,35 @@ in the book sheet and in Settings, as CC BY-SA requires.
 
 ## Maps
 
-A chapter that names somewhere on the ground says so above its number — *8
-places* — and opens a map of them: coastline, lakes and rivers, a marker per
-place, pinch to zoom, and a tap on a marker or a name for what is known about
-it. A hollow marker is a location scholars have not settled.
+A chapter that names somewhere on the ground says so above its number — *5
+places* — and opens a map of them. The map behaves as a map should: drag to
+move, pinch or scroll to zoom, double-tap to zoom in, buttons for zoom and for
+back-to-the-passage, and a scale bar. It zooms from the whole of the biblical
+world down to half a metre to the pixel; the lettering stays the same size
+however far in you go, because it is drawn rather than scaled.
+
+Tap a marker, or a name in the row under the map, and you get what the open
+data knows about the place — what kind of place it is, the modern site it is
+identified with, what other translations call it, the source's own note, its
+coordinates, how many verses name it in all — and the verses of *this* chapter
+that name it, each one a link into the text.
 
 - Places: [OpenBible.info Bible Geocoding](https://github.com/openbibleinfo/Bible-Geocoding-Data),
   CC BY 4.0 — every place named in the Protestant canon, the verses naming it,
-  and how confident the identification is. 1,276 of them resolve to a point
-  and reach the app.
-- Base map: [Natural Earth](https://www.naturalearthdata.com/) 1:50m land,
-  lakes and river centrelines, public domain, by way of
-  [natural-earth-geojson](https://github.com/martynafford/natural-earth-geojson).
+  competing identifications and how confident each is. 1,276 of them resolve
+  to a point and reach the app, over 852 chapters. A location scholars have
+  not settled is drawn as a hollow marker and labelled as uncertain.
+- Base map: [Natural Earth](https://www.naturalearthdata.com/), public domain,
+  by way of [natural-earth-geojson](https://github.com/martynafford/natural-earth-geojson).
+  The 1:50m land, lakes and rivers cover the whole region for the zoomed-out
+  view; the 1:10m ones, plus built-up areas and the towns that are there now,
+  are drawn once you zoom in past a country or two, so that a close-up of an
+  inland site is not a blank page.
 
-Both are clipped to the world the Bible names, simplified, and written as one
-70 kB asset, read the first time a reader opens a chapter. As with everything
-else here, no tiles are fetched and nothing needs a connection.
+Everything is clipped to the world the Bible names, simplified with
+Ramer–Douglas–Peucker, and written as one 600 kB asset — read in a background
+isolate the first time a chapter is opened. No tiles are fetched and nothing
+needs a connection.
 
 ```bash
 git clone --depth 1 https://github.com/openbibleinfo/Bible-Geocoding-Data
@@ -229,9 +243,10 @@ and navigation instant.
 - Application code: [MIT](LICENSE).
 - Scripture text: public domain (see the table above).
 - Place locations: [OpenBible.info Bible Geocoding](https://www.openbible.info/geo/),
-  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Base map:
-  [Natural Earth](https://www.naturalearthdata.com/about/terms-of-use/), public
-  domain.
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — attribution is
+  shown on the map itself and in Settings. Base map, built-up areas and modern
+  towns: [Natural Earth](https://www.naturalearthdata.com/about/terms-of-use/),
+  public domain.
 - Book introductions: Aquifer Open Study Notes (Book Intros) © Mission Mutual,
   an adaptation of Tyndale Open Study Notes © 2023 Tyndale House Publishers,
   both [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Shared

@@ -9,9 +9,12 @@
 // modern identifications it resolves to, with coordinates.
 //
 // The base map is Natural Earth (public domain), by way of
-// https://github.com/martynafford/natural-earth-geojson — the 50m land,
-// lakes and river centrelines, clipped to the world the Bible names and
-// simplified until a phone can draw them without noticing.
+// https://github.com/martynafford/natural-earth-geojson. Two levels of it:
+// the 1:50m land, lakes and rivers for the whole padded region, drawn when
+// the map is zoomed out, and the 1:10m ones over the ground the Bible
+// actually covers, drawn once the reader zooms past a country or two. Both
+// are clipped and simplified, because a phone redraws them on every frame of
+// a pinch.
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -24,12 +27,20 @@ const String assetName = 'atlas.json.gz';
 /// far finer than a map this size can show, and much smaller than decimals.
 const int _scale = 1000;
 
-/// How far a point may sit from the simplified line, in degrees.
-const double _tolerance = 0.02;
+/// How far a point may sit from the simplified line, in degrees: coarse for
+/// the zoomed-out map, fine for the detail drawn over the Levant and its
+/// neighbours.
+const double _coarseTolerance = 0.02;
+const double _fineTolerance = 0.0025;
 
-/// Rings and lines smaller than this are dropped; at the scale a phone draws
-/// them they are a single pixel of noise.
-const double _minExtent = 0.15;
+/// Rings and lines smaller than this are dropped; at the scale they are drawn
+/// they would be a single pixel of noise.
+const double _coarseMinExtent = 0.15;
+const double _fineMinExtent = 0.02;
+
+/// How far around the places the fine detail reaches. Wide enough for Rome,
+/// Babylon and the Nile without carrying the whole of Europe at 1:10m.
+const double _finePad = 4.0;
 
 void main(List<String> args) {
   if (args.length < 2) {
@@ -57,57 +68,93 @@ void main(List<String> args) {
     return;
   }
 
-  // The base map has to cover more than the places themselves: the reader's
-  // view is fitted to a chapter's places and then grown to fill the screen,
-  // and past the edge of the data there would be nothing to draw.
-  final bounds = _Bounds.around(places)..pad(12);
+  // The coarse map has to cover more than the places themselves: the reader
+  // can pan and zoom out, and past the edge of the data there would be
+  // nothing to draw.
+  final coarseBounds = _Bounds.around(places)..pad(12);
+  final fineBounds = _Bounds.around(places)..pad(_finePad);
 
-  final physical = '${naturalEarth.path}/50m/physical';
-  final land = _readGeometry(
-    '$physical/ne_50m_land.json',
-    bounds,
-    polygons: true,
+  final coarse = _baseMap(
+    naturalEarth,
+    scale: '50m',
+    bounds: coarseBounds,
+    tolerance: _coarseTolerance,
+    minExtent: _coarseMinExtent,
   );
-  final lakes = _readGeometry(
-    '$physical/ne_50m_lakes.json',
-    bounds,
-    polygons: true,
-  );
-  final rivers = _readGeometry(
-    '$physical/ne_50m_rivers_lake_centerlines.json',
-    bounds,
-    polygons: false,
+  final fine = _baseMap(
+    naturalEarth,
+    scale: '10m',
+    bounds: fineBounds,
+    tolerance: _fineTolerance,
+    minExtent: _fineMinExtent,
   );
 
-  final chapters = <String, List<int>>{};
+  // Modern ground, for the reader who zooms all the way in: the towns that
+  // are there now, and the shape of the built-up areas. Without them the
+  // close-up view of an inland site is a blank page.
+  final towns = _readTowns(naturalEarth, fineBounds);
+  final urban = _readGeometry(
+    '${naturalEarth.path}/10m/cultural/ne_10m_urban_areas.json',
+    fineBounds,
+    polygons: true,
+    tolerance: _fineTolerance,
+    minExtent: 0.004,
+  );
+
+  // Each chapter lists the places it names and the verses that name them, so
+  // the map can offer "1 Kings 1:9" as somewhere to go.
+  final chapters = <String, List<List<int>>>{};
   for (var i = 0; i < places.length; i++) {
-    for (final reference in places[i].chapters) {
-      (chapters[reference] ??= <int>[]).add(i);
+    for (final entry in places[i].verses.entries) {
+      final verses = entry.value.toList()..sort();
+      (chapters[entry.key] ??= <List<int>>[]).add([i, ...verses]);
     }
   }
 
   final atlas = <String, Object?>{
-    'version': 1,
+    'version': 2,
     'bounds': [
-      _fixed(bounds.west),
-      _fixed(bounds.south),
-      _fixed(bounds.east),
-      _fixed(bounds.north),
+      _fixed(coarseBounds.west),
+      _fixed(coarseBounds.south),
+      _fixed(coarseBounds.east),
+      _fixed(coarseBounds.north),
     ],
+    'detail': [
+      _fixed(fineBounds.west),
+      _fixed(fineBounds.south),
+      _fixed(fineBounds.east),
+      _fixed(fineBounds.north),
+    ],
+    // Fixed positions, read back in the same order by AtlasData.fromJson:
+    // name, kind, longitude, latitude, confidence, modern identification,
+    // other names, the source's note, how many verses name it in all.
     'places': [
       for (final place in places)
         [
           place.name,
-          place.type,
+          place.types.join('|'),
           _fixed(place.lon),
           _fixed(place.lat),
           place.confidence,
+          place.modern,
+          place.otherNames.join('|'),
+          place.comment,
+          place.verseCount,
         ],
     ],
-    'chapters': {for (final entry in chapters.entries) entry.key: entry.value},
-    'land': land,
-    'lakes': lakes,
-    'rivers': rivers,
+    'chapters': chapters,
+    'land': coarse.land,
+    'lakes': coarse.lakes,
+    'rivers': coarse.rivers,
+    'fineLand': fine.land,
+    'fineLakes': fine.lakes,
+    'fineRivers': fine.rivers,
+    'urban': urban,
+    // longitude, latitude, how important Natural Earth rates it, its name.
+    'towns': [
+      for (final town in towns)
+        [_fixed(town.lon), _fixed(town.lat), town.rank, town.name],
+    ],
   };
 
   final json = jsonEncode(atlas);
@@ -118,8 +165,10 @@ void main(List<String> args) {
 
   stdout.writeln(
     'wrote ${places.length} places over ${chapters.length} chapters, '
-    '${land.length} land rings, ${lakes.length} lakes, '
-    '${rivers.length} rivers — ${_kb(json.length)} of JSON, '
+    '${towns.length} modern towns, ${urban.length} built-up areas; '
+    'coarse ${coarse.land.length}/${coarse.lakes.length}/'
+    '${coarse.rivers.length}, fine ${fine.land.length}/${fine.lakes.length}/'
+    '${fine.rivers.length} (land/lakes/rivers) — ${_kb(json.length)} of JSON, '
     '${_kb(bytes.length)} gzipped -> ${output.path}',
   );
 }
@@ -133,26 +182,125 @@ String _displayName(String friendlyId) =>
 
 String _kb(int bytes) => '${(bytes / 1024).toStringAsFixed(0)} kB';
 
+/// One level of the base map.
+class _BaseMap {
+  const _BaseMap(this.land, this.lakes, this.rivers);
+
+  final List<List<int>> land;
+  final List<List<int>> lakes;
+  final List<List<int>> rivers;
+}
+
+_BaseMap _baseMap(
+  Directory naturalEarth, {
+  required String scale,
+  required _Bounds bounds,
+  required double tolerance,
+  required double minExtent,
+}) {
+  final physical = '${naturalEarth.path}/$scale/physical';
+  List<List<int>> read(String name, {required bool polygons}) => _readGeometry(
+    '$physical/ne_${scale}_$name.json',
+    bounds,
+    polygons: polygons,
+    tolerance: tolerance,
+    minExtent: minExtent,
+  );
+
+  return _BaseMap(
+    read('land', polygons: true),
+    read('lakes', polygons: true),
+    read('rivers_lake_centerlines', polygons: false),
+  );
+}
+
+class _Town {
+  const _Town(this.name, this.lon, this.lat, this.rank);
+
+  final String name;
+  final double lon;
+  final double lat;
+
+  /// Natural Earth's own ranking, 0 for a capital and up for smaller places.
+  final int rank;
+}
+
+/// The towns that are there now, so that zooming in on a biblical site shows
+/// the country around it rather than an empty page.
+List<_Town> _readTowns(Directory naturalEarth, _Bounds bounds) {
+  final file = File(
+    '${naturalEarth.path}/10m/cultural/ne_10m_populated_places.json',
+  );
+  if (!file.existsSync()) {
+    stderr.writeln('missing ${file.path}');
+    exitCode = 1;
+    return const [];
+  }
+
+  final decoded = jsonDecode(file.readAsStringSync()) as Map<String, Object?>;
+  final towns = <_Town>[];
+  for (final feature in (decoded['features'] as List<Object?>?) ?? const []) {
+    final record = feature! as Map<String, Object?>;
+    final geometry = record['geometry'] as Map<String, Object?>?;
+    final properties = record['properties'] as Map<String, Object?>?;
+    if (geometry == null || properties == null) continue;
+    final coordinates = geometry['coordinates'] as List<Object?>?;
+    if (coordinates == null || coordinates.length < 2) continue;
+
+    final lon = (coordinates[0]! as num).toDouble();
+    final lat = (coordinates[1]! as num).toDouble();
+    if (!bounds.contains(lon, lat)) continue;
+
+    final name =
+        properties['NAME_EN'] as String? ?? properties['NAME'] as String?;
+    if (name == null || name.isEmpty) continue;
+    towns.add(
+      _Town(name, lon, lat, (properties['SCALERANK'] as num?)?.toInt() ?? 10),
+    );
+  }
+
+  towns.sort((a, b) => a.rank.compareTo(b.rank));
+  return towns;
+}
+
 class _Place {
   _Place({
     required this.name,
-    required this.type,
+    required this.types,
     required this.lat,
     required this.lon,
     required this.confidence,
-    required this.chapters,
+    required this.modern,
+    required this.otherNames,
+    required this.comment,
+    required this.verses,
+    required this.verseCount,
   });
 
   final String name;
-  final String type;
+
+  /// settlement, region, spring and so on, as the source classes them.
+  final List<String> types;
   final double lat;
   final double lon;
 
   /// How sure the identification is, 0–1000 as the source scores it.
   final int confidence;
 
-  /// `GEN 12` and so on, one per chapter naming the place.
-  final Set<String> chapters;
+  /// The modern place it is identified with, where there is one.
+  final String modern;
+
+  /// What translations call it, where they differ from the name used here.
+  final List<String> otherNames;
+
+  /// The source's own note on the place, with its markup stripped.
+  final String comment;
+
+  /// `1KI 1` to the verses of that chapter naming the place.
+  final Map<String, Set<int>> verses;
+
+  /// How many verses name it in the whole Bible.
+  final int verseCount;
 }
 
 /// Reads the ancient places, keeping those that resolve to a point on the
@@ -187,7 +335,8 @@ List<_Place> _readPlaces(Directory geocoding) {
     }
     if (bestId == null) continue;
 
-    final lonlat = modern[bestId]?['lonlat'] as String?;
+    final identification = modern[bestId];
+    final lonlat = identification?['lonlat'] as String?;
     if (lonlat == null) continue;
     final parts = lonlat.split(',');
     if (parts.length != 2) continue;
@@ -195,32 +344,39 @@ List<_Place> _readPlaces(Directory geocoding) {
     final lat = double.tryParse(parts[1].trim());
     if (lon == null || lat == null) continue;
 
-    final chapters = <String>{};
+    final byChapter = <String, Set<int>>{};
     for (final verse in verses) {
       final usx = (verse! as Map<String, Object?>)['usx'] as String?;
-      if (usx == null) continue;
-      final space = usx.indexOf(' ');
-      final colon = usx.indexOf(':');
-      if (space < 0 || colon < 0) continue;
-      chapters.add(
-        '${usx.substring(0, space)} '
-        '${usx.substring(space + 1, colon)}',
-      );
+      final reference = _reference(usx);
+      if (reference == null) continue;
+      (byChapter[reference.chapter] ??= <int>{}).add(reference.verse);
     }
-    if (chapters.isEmpty) continue;
+    if (byChapter.isEmpty) continue;
 
-    final types = (record['types'] as List<Object?>?) ?? const [];
+    // The source numbers the places that share a name — "Bethlehem 1" in
+    // Judah, "Bethlehem 2" in Zebulun. On a map they are told apart by where
+    // they are, so the number is only clutter.
+    final name = _displayName(record['friendly_id']! as String);
+    final types = [
+      for (final type in (record['types'] as List<Object?>?) ?? const [])
+        type! as String,
+    ];
+
     places.add(
       _Place(
-        // The source numbers the places that share a name — "Bethlehem 1" in
-        // Judah, "Bethlehem 2" in Zebulun. On a map they are told apart by
-        // where they are, so the number is only clutter.
-        name: _displayName(record['friendly_id']! as String),
-        type: types.isEmpty ? 'place' : types.first! as String,
+        name: name,
+        types: types.isEmpty ? const ['place'] : types,
         lat: lat,
         lon: lon,
         confidence: bestScore,
-        chapters: chapters,
+        modern:
+            (associations[bestId]! as Map<String, Object?>)['name']
+                as String? ??
+            '',
+        otherNames: _otherNames(record, name),
+        comment: _plainText(record['comment'] as String? ?? ''),
+        verses: byChapter,
+        verseCount: verses.length,
       ),
     );
   }
@@ -229,12 +385,57 @@ List<_Place> _readPlaces(Directory geocoding) {
   return places;
 }
 
+/// What the translations call a place, commonest first, leaving out the name
+/// already shown and anything that is only a spelling away from it.
+List<String> _otherNames(Map<String, Object?> record, String name) {
+  final counts =
+      (record['translation_name_counts'] as Map<String, Object?>?) ?? const {};
+  final entries = counts.entries.toList()
+    ..sort(
+      (a, b) => ((b.value as num?) ?? 0).compareTo((a.value as num?) ?? 0),
+    );
+
+  String flatten(String text) =>
+      text.toLowerCase().replaceAll(RegExp('[^a-z]'), '');
+
+  final seen = <String>{flatten(name)};
+  final names = <String>[];
+  for (final entry in entries) {
+    if (seen.add(flatten(entry.key))) names.add(entry.key);
+    if (names.length == 3) break;
+  }
+  return names;
+}
+
+/// `GEN 12:1` to its chapter key and verse number.
+({String chapter, int verse})? _reference(String? usx) {
+  if (usx == null) return null;
+  final space = usx.indexOf(' ');
+  final colon = usx.indexOf(':');
+  if (space < 0 || colon < 0) return null;
+  final verse = int.tryParse(usx.substring(colon + 1).split('-').first.trim());
+  if (verse == null) return null;
+  return (
+    chapter: '${usx.substring(0, space)} ${usx.substring(space + 1, colon)}',
+    verse: verse,
+  );
+}
+
+/// The source's notes carry markup linking other places and Wikidata. The app
+/// is offline and has no use for the links, but the words are worth keeping.
+String _plainText(String markup) => markup
+    .replaceAll(RegExp('<[^>]*>'), '')
+    .replaceAll(RegExp(r'\s+'), ' ')
+    .trim();
+
 /// Clips a GeoJSON file to [bounds], simplifies what is left and flattens it
 /// into lists of thousandths of a degree.
 List<List<int>> _readGeometry(
   String path,
   _Bounds bounds, {
   required bool polygons,
+  required double tolerance,
+  required double minExtent,
 }) {
   final file = File(path);
   if (!file.existsSync()) {
@@ -258,9 +459,9 @@ List<List<int>> _readGeometry(
           ? [if (_clipRing(line, bounds) case final ring?) ring]
           : _clipLine(line, bounds);
       for (final piece in pieces) {
-        final simplified = _simplify(piece, _tolerance);
+        final simplified = _simplify(piece, tolerance);
         if (simplified.length < 2) continue;
-        if (_extent(simplified) < _minExtent) continue;
+        if (_extent(simplified) < minExtent) continue;
         out.add([
           for (final point in simplified) ...[
             _fixed(point[0]),
