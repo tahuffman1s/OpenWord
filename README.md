@@ -27,6 +27,10 @@ no network entitlement.
 - **Highlights in five colours, bookmarks and notes**, any combination on the
   same verse. Highlights tint the text in place; bookmarked and annotated
   verses are flagged in the margin and in the pickers.
+- **Updates from GitHub.** OpenWord asks GitHub once a day whether a newer
+  release is out, shows what is in it, and on Android downloads and hands it
+  to the system installer. It is the only thing here that uses the network,
+  and Settings can turn it off.
 - **Maps of the places a chapter names**, drawn from open data and bundled
   with the app: markers over coastline, lakes and rivers, with the ones
   scholars dispute marked as such.
@@ -124,6 +128,33 @@ git clone --depth 1 https://github.com/openbibleinfo/Bible-Geocoding-Data
 git clone --depth 1 https://github.com/martynafford/natural-earth-geojson
 dart run tool/build_maps.dart Bible-Geocoding-Data natural-earth-geojson
 ```
+
+## Updates
+
+Releases are published on GitHub, and the app can find them itself.
+
+- Once a day, and on launch, it reads
+  `api.github.com/repos/tahuffman1s/OpenWord/releases/latest` — one small JSON
+  document — and mentions a newer version in a snack bar you can ignore. The
+  version is compared numerically, so `1.10.0` is newer than `1.9.0`, and
+  pre-releases and drafts are skipped.
+- On **Android** it downloads the APK from the release, with progress, into
+  its own cache and hands it to the system package installer, which asks you
+  to confirm. Nothing is installed silently — a sideloaded app cannot do that,
+  and this one does not try. The first time, Android will want OpenWord
+  allowed to install unknown apps.
+- Everywhere else it offers the release page, since desktop archives are
+  unpacked wherever you keep them and the Apple builds need a signing identity
+  the project does not have.
+- **Settings → Updates** turns the whole thing off, after which the app makes
+  no network calls at all. The version it reports lives in
+  `lib/src/app_version.dart`, and a test fails if it drifts from
+  `pubspec.yaml`.
+
+This is why the Android build now asks for `INTERNET` and
+`REQUEST_INSTALL_PACKAGES`, and the macOS build carries the outgoing-network
+entitlement. Nothing else here touches a network: the Scripture, the
+introductions and the maps are all bundled.
 
 ## Building
 

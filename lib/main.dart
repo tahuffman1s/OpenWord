@@ -5,6 +5,7 @@ import 'src/app_scope.dart';
 import 'src/data/library.dart';
 import 'src/data/marks.dart';
 import 'src/data/settings.dart';
+import 'src/data/updates.dart';
 import 'src/ui/reader_screen.dart';
 import 'src/ui/theme.dart';
 
@@ -16,7 +17,14 @@ Future<void> main() async {
   // Reading the bundled Scripture takes a fraction of a second; start it
   // while the first frame is being built.
   library.load(settings.translationId);
-  runApp(OpenWordApp(settings: settings, reading: reading, library: library));
+  runApp(
+    OpenWordApp(
+      settings: settings,
+      reading: reading,
+      library: library,
+      updates: UpdateService(settings: settings),
+    ),
+  );
 }
 
 class OpenWordApp extends StatelessWidget {
@@ -24,12 +32,14 @@ class OpenWordApp extends StatelessWidget {
     required this.settings,
     required this.reading,
     required this.library,
+    required this.updates,
     super.key,
   });
 
   final Settings settings;
   final ReadingStore reading;
   final LibraryController library;
+  final UpdateService updates;
 
   @override
   Widget build(BuildContext context) {
@@ -37,6 +47,7 @@ class OpenWordApp extends StatelessWidget {
       settings: settings,
       library: library,
       reading: reading,
+      updates: updates,
       child: AnimatedBuilder(
         animation: settings,
         builder: (context, _) {

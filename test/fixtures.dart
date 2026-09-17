@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:openword/src/data/atlas.dart';
 import 'package:openword/src/data/book_intros.dart';
+import 'package:openword/src/data/update_backend.dart';
 import 'package:openword/src/data/usfx_parser.dart';
 import 'package:openword/src/model/bible.dart';
 import 'package:openword/src/model/bible_codec.dart';
@@ -236,3 +237,104 @@ const Map<String, Object?> fixtureAtlas = {
     [35000, 31000, 35100, 32000, 35200, 33000],
   ],
 };
+
+/// A stand-in for the platform: no sockets, no installer, and a record of
+/// what the service asked it to do.
+class FakeUpdateBackend implements UpdateBackend {
+  FakeUpdateBackend({
+    this.body = '{}',
+    this.target = TargetKind.android,
+    this.isSupported = true,
+    this.canInstall = true,
+    this.failWith,
+  });
+
+  String body;
+  @override
+  TargetKind target;
+  @override
+  bool isSupported;
+  @override
+  bool canInstall;
+
+  /// Thrown by every call when set, standing in for a dead network.
+  Object? failWith;
+
+  int reads = 0;
+  final List<Uri> downloads = [];
+  final List<String> installs = [];
+  final List<Uri> opened = [];
+
+  /// Fed to the progress callback, as (received, total) pairs.
+  List<List<int>> progress = const [
+    [50, 100],
+    [100, 100],
+  ];
+
+  @override
+  Future<String> readString(Uri url) async {
+    reads++;
+    final failure = failWith;
+    if (failure != null) throw failure;
+    return body;
+  }
+
+  @override
+  Future<String> download(
+    Uri url, {
+    required String fileName,
+    void Function(int received, int total)? onProgress,
+  }) async {
+    downloads.add(url);
+    final failure = failWith;
+    if (failure != null) throw failure;
+    for (final step in progress) {
+      onProgress?.call(step[0], step[1]);
+    }
+    return '/tmp/$fileName';
+  }
+
+  @override
+  Future<void> install(String path) async {
+    installs.add(path);
+    final failure = failWith;
+    if (failure != null) throw failure;
+  }
+
+  @override
+  Future<void> openExternal(Uri url) async {
+    opened.add(url);
+    final failure = failWith;
+    if (failure != null) throw failure;
+  }
+}
+
+/// The shape of GitHub's `releases/latest`, trimmed to what is read.
+String releaseJson({
+  String tag = 'v9.9.9',
+  String? name,
+  String notes = '### Added\n- Something new.\n',
+  bool draft = false,
+  bool prerelease = false,
+  List<String>? assets,
+}) {
+  final files = assets ?? ['OpenWord-$tag-android.apk'];
+  return jsonEncode({
+    'tag_name': tag,
+    'name': name ?? 'OpenWord $tag',
+    'body': notes,
+    'draft': draft,
+    'prerelease': prerelease,
+    'html_url': 'https://github.com/tahuffman1s/OpenWord/releases/tag/$tag',
+    'assets': [
+      for (final file in files)
+        {
+          'name': file,
+          'browser_download_url':
+              'https://github.com/tahuffman1s/OpenWord/releases/download/'
+              '$tag/$file',
+          'size': 57957565,
+        },
+    ],
+  });
+}

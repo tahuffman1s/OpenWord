@@ -3,8 +3,9 @@ import 'package:flutter/widgets.dart';
 import 'data/marks.dart';
 import 'data/library.dart';
 import 'data/settings.dart';
+import 'data/updates.dart';
 
-/// Makes the three app-wide stores available to the widget tree.
+/// Makes the app-wide stores available to the widget tree.
 ///
 /// Each store is a [ChangeNotifier]; widgets listen to the one they care about
 /// with an [AnimatedBuilder] rather than rebuilding the whole app.
@@ -13,6 +14,7 @@ class AppScope extends InheritedWidget {
     required this.settings,
     required this.library,
     required this.reading,
+    required this.updates,
     required super.child,
     super.key,
   });
@@ -20,6 +22,7 @@ class AppScope extends InheritedWidget {
   final Settings settings;
   final LibraryController library;
   final ReadingStore reading;
+  final UpdateService updates;
 
   static AppScope of(BuildContext context) {
     final scope = context.dependOnInheritedWidgetOfExactType<AppScope>();
@@ -31,5 +34,6 @@ class AppScope extends InheritedWidget {
   bool updateShouldNotify(AppScope oldWidget) =>
       settings != oldWidget.settings ||
       library != oldWidget.library ||
-      reading != oldWidget.reading;
+      reading != oldWidget.reading ||
+      updates != oldWidget.updates;
 }

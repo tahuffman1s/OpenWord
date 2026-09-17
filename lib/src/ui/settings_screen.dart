@@ -2,11 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_scope.dart';
+import '../app_version.dart';
 import '../data/atlas.dart';
 import '../data/book_intros.dart';
 import '../data/marks.dart';
 import '../data/settings.dart';
 import '../data/translations.dart';
+import '../data/updates.dart';
+import 'update_sheet.dart';
 
 /// Display, reading, translation and backup preferences.
 class SettingsScreen extends StatelessWidget {
@@ -18,11 +21,12 @@ class SettingsScreen extends StatelessWidget {
     final settings = scope.settings;
     final library = scope.library;
     final reading = scope.reading;
+    final updates = scope.updates;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: AnimatedBuilder(
-        animation: Listenable.merge([settings, library, reading]),
+        animation: Listenable.merge([settings, library, reading, updates]),
         builder: (context, _) {
           final theme = Theme.of(context);
           return ListView(
@@ -262,14 +266,29 @@ class SettingsScreen extends StatelessWidget {
                     ? null
                     : () => _confirmClear(context, reading),
               ),
+              if (updates.isSupported) ...[
+                const _Header('Updates'),
+                SwitchListTile(
+                  title: const Text('Check for updates'),
+                  subtitle: const Text(
+                    'Asks GitHub once a day whether a newer release is out. '
+                    'This is the only thing OpenWord uses the network for.',
+                  ),
+                  value: settings.checkForUpdates,
+                  onChanged: (value) => settings.checkForUpdates = value,
+                  isThreeLine: true,
+                ),
+                _UpdateRow(updates: updates),
+              ],
               const _Header('About'),
               ListTile(
                 leading: const Icon(Icons.auto_stories_rounded),
                 title: const Text('OpenWord'),
+                // The version is shown under Updates, where it is useful.
                 subtitle: const Text(
-                  'A free and open source Bible reader. Every translation is '
-                  'bundled with the app, so nothing here needs a network '
-                  'connection.',
+                  'A free and open source Bible reader. The translations, the '
+                  'book introductions and the maps are all bundled, so '
+                  'reading needs no connection.',
                 ),
                 isThreeLine: true,
               ),
@@ -427,5 +446,64 @@ class _SliderTile extends StatelessWidget {
         ],
       ),
     );
+  }
+}
+
+/// The state of the update check: what is installed, whether anything newer
+/// is out, and the button that goes and looks.
+class _UpdateRow extends StatelessWidget {
+  const _UpdateRow({required this.updates});
+
+  final UpdateService updates;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final release = updates.release;
+
+    final (String subtitle, Widget? trailing) = switch (updates.stage) {
+      UpdateStage.checking => (
+        'Asking GitHub…',
+        const SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      ),
+      UpdateStage.failed => (updates.error ?? 'The check did not work.', null),
+      UpdateStage.upToDate => ('This is the newest release.', null),
+      _ when updates.updateAvailable && release != null => (
+        '${release.version} is out.',
+        FilledButton(
+          onPressed: () => showUpdateSheet(context, updates),
+          child: const Text('See it'),
+        ),
+      ),
+      _ => ('Last checked ${_when(updates.settings.lastUpdateCheck)}.', null),
+    };
+
+    return ListTile(
+      title: Text('Version $appVersion'),
+      subtitle: Text(subtitle),
+      trailing:
+          trailing ??
+          TextButton(
+            onPressed: updates.stage == UpdateStage.checking
+                ? null
+                : () => updates.check(force: true),
+            child: const Text('Check now'),
+          ),
+      textColor: updates.stage == UpdateStage.failed
+          ? theme.colorScheme.error
+          : null,
+    );
+  }
+
+  static String _when(DateTime? at) {
+    if (at == null) return 'never';
+    final days = DateTime.now().difference(at).inDays;
+    if (days == 0) return 'today';
+    if (days == 1) return 'yesterday';
+    return '$days days ago';
   }
 }

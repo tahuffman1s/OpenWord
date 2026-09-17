@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The one directory OpenWord shares: where an update is downloaded to,
+     inside the app's own cache. -->
+<paths>
+    <cache-path name="updates" path="updates/"/>
+</paths>

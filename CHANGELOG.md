@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.5.0
+
+### Added
+- **Updates from GitHub.** OpenWord asks GitHub once a day whether a newer
+  release is out and mentions it in a snack bar you can ignore, with the
+  release notes a tap away. On Android it downloads the APK, with progress,
+  and hands it to the system installer, which asks you to confirm — nothing
+  installs silently. Everywhere else it offers the release page.
+- Settings → Updates: the switch that turns the check off, the version you are
+  running, when it last looked, and a "Check now" button. A version can also
+  be skipped, which quiets the launch announcement without hiding it in
+  Settings.
+
+### Changed
+- This is the first release that uses the network at all. The Android build
+  now asks for `INTERNET` and `REQUEST_INSTALL_PACKAGES`, and the macOS build
+  carries the outgoing-network entitlement. Turning the check off in Settings
+  leaves the app entirely offline again; the Scripture, the introductions and
+  the maps are still bundled and are never fetched.
+
 ## 1.4.0
 
 ### Added

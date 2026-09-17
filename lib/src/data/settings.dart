@@ -46,6 +46,9 @@ class Settings extends ChangeNotifier {
   static const _kBookOrder = 'bookOrder';
   static const _kTranslation = 'translation';
   static const _kCompare = 'compareTranslation';
+  static const _kCheckUpdates = 'checkForUpdates';
+  static const _kLastCheck = 'lastUpdateCheck';
+  static const _kSkippedUpdate = 'skippedUpdate';
 
   /// Fallback palette seeds offered where the platform has no Material You
   /// palette of its own (desktop, web, older Android, iOS).
@@ -124,6 +127,37 @@ class Settings extends ChangeNotifier {
       return;
     }
     _write(_kCompare, value);
+  }
+
+  /// Whether to ask GitHub, once a day, whether there is a newer release.
+  /// This is the only thing in the app that uses the network; turning it off
+  /// leaves OpenWord entirely offline again.
+  bool get checkForUpdates => _prefs.getBool(_kCheckUpdates) ?? true;
+  set checkForUpdates(bool value) => _write(_kCheckUpdates, value);
+
+  DateTime? get lastUpdateCheck {
+    final millis = _prefs.getInt(_kLastCheck);
+    return millis == null ? null : DateTime.fromMillisecondsSinceEpoch(millis);
+  }
+
+  set lastUpdateCheck(DateTime? value) {
+    if (value == null) {
+      _prefs.remove(_kLastCheck);
+      notifyListeners();
+      return;
+    }
+    _write(_kLastCheck, value.millisecondsSinceEpoch);
+  }
+
+  /// A version the reader has told the app not to nag about again.
+  String? get skippedUpdate => _prefs.getString(_kSkippedUpdate);
+  set skippedUpdate(String? value) {
+    if (value == null) {
+      _prefs.remove(_kSkippedUpdate);
+      notifyListeners();
+      return;
+    }
+    _write(_kSkippedUpdate, value);
   }
 
   void _write(String key, Object value) {

@@ -10,10 +10,12 @@ import '../data/book_intros.dart';
 import '../data/marks.dart';
 import '../data/reference_search.dart';
 import '../data/settings.dart';
+import '../data/updates.dart';
 import '../model/bible.dart';
 import '../model/book_meta.dart';
 import 'book_sheet.dart';
 import 'map_sheet.dart';
+import 'update_sheet.dart';
 import 'display_sheet.dart';
 import 'library_screen.dart';
 import 'navigator_sheet.dart';
@@ -62,9 +64,31 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Atlas? _atlas;
   AtlasData? _atlasData;
 
+  /// The launch check runs once per session, not on every rebuild.
+  bool _askedAboutUpdates = false;
+
   late Settings _settings;
   late ReadingStore _reading;
   late LibraryController _library;
+
+  /// Looks for a newer release, at most once a day and only while the reader
+  /// leaves the switch on, and mentions one in passing rather than standing
+  /// in the way of the text.
+  Future<void> _announceUpdate(UpdateService updates) async {
+    await updates.check();
+    if (!mounted || !updates.shouldAnnounce) return;
+    final release = updates.release!;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('OpenWord ${release.version} is out'),
+        duration: const Duration(seconds: 8),
+        action: SnackBarAction(
+          label: 'See what’s new',
+          onPressed: () => showUpdateSheet(context, updates),
+        ),
+      ),
+    );
+  }
 
   /// Reads the atlas in the background and rebuilds once it is there, so
   /// opening a chapter never waits on it.
@@ -85,6 +109,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _library = scope.library;
     _intros ??= BookIntros(bundle: scope.library.bundle);
     _loadAtlas(scope.library.bundle);
+    if (!_askedAboutUpdates) {
+      _askedAboutUpdates = true;
+      _announceUpdate(scope.updates);
+    }
     if (!identical(_matcherFor, scope.library.bible)) {
       _matcherFor = scope.library.bible;
       _matcher = ReferenceMatcher(scope.library.bible!.books);

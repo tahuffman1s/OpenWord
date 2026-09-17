@@ -5,6 +5,7 @@ import 'package:openword/src/app_scope.dart';
 import 'package:openword/src/data/library.dart';
 import 'package:openword/src/data/marks.dart';
 import 'package:openword/src/data/settings.dart';
+import 'package:openword/src/data/updates.dart';
 import 'package:openword/src/model/bible.dart';
 import 'package:openword/src/ui/reader_screen.dart';
 import 'package:openword/src/ui/widgets/atlas_map.dart';
@@ -24,11 +25,12 @@ Finder verseNumber(String number) => find.descendant(
 );
 
 class Harness {
-  Harness(this.settings, this.reading, this.library);
+  Harness(this.settings, this.reading, this.library, this.updates);
 
   final Settings settings;
   final ReadingStore reading;
   final LibraryController library;
+  final UpdateService updates;
 }
 
 Future<Harness> pumpReader(
@@ -36,6 +38,7 @@ Future<Harness> pumpReader(
   Reference? resume,
   Map<String, Object> prefs = const {},
   Bible? bible,
+  FakeUpdateBackend? updateBackend,
 }) async {
   SharedPreferences.setMockInitialValues({
     ...prefs,
@@ -45,17 +48,24 @@ Future<Harness> pumpReader(
   final reading = await ReadingStore.load();
   final library = LibraryController(bundle: FixtureBundle(bible: bible));
   await library.load(testTranslation.id);
+  // Never the real backend in a test: that would reach for the network.
+  final updates = UpdateService(
+    settings: settings,
+    backend: updateBackend ?? FakeUpdateBackend(isSupported: false),
+    currentVersion: '1.0.0',
+  );
 
   await tester.pumpWidget(
     AppScope(
       settings: settings,
       library: library,
       reading: reading,
+      updates: updates,
       child: const MaterialApp(home: ReaderScreen()),
     ),
   );
   await tester.pumpAndSettle();
-  return Harness(settings, reading, library);
+  return Harness(settings, reading, library, updates);
 }
 
 void main() {
@@ -435,6 +445,36 @@ void main() {
     await tester.tap(find.widgetWithText(ChoiceChip, 'Bethel'));
     await tester.pumpAndSettle();
     expect(find.textContaining('31.93°N'), findsOneWidget);
+  });
+
+  testWidgets('a new release is mentioned, not forced', (tester) async {
+    final harness = await pumpReader(
+      tester,
+      updateBackend: FakeUpdateBackend(body: releaseJson(tag: 'v2.0.0')),
+    );
+
+    // The text is still what is on screen; the update is a snack bar.
+    expect(
+      find.textContaining('In the beginning', findRichText: true),
+      findsOneWidget,
+    );
+    expect(find.text('OpenWord 2.0.0 is out'), findsOneWidget);
+
+    await tester.tap(find.text('See what’s new'));
+    await tester.pumpAndSettle();
+    expect(find.text('You have 1.0.0'), findsOneWidget);
+    expect(harness.updates.release!.tag, 'v2.0.0');
+  });
+
+  testWidgets('a skipped version is not mentioned again', (tester) async {
+    await pumpReader(
+      tester,
+      prefs: const {'skippedUpdate': '2.0.0'},
+      updateBackend: FakeUpdateBackend(body: releaseJson(tag: 'v2.0.0')),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('OpenWord 2.0.0 is out'), findsNothing);
   });
 
   testWidgets('saves the position when the chapter changes', (tester) async {
