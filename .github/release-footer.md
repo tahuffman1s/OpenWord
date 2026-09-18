@@ -12,10 +12,8 @@ for you. That is the only reason it now asks for the internet and
 install-packages permissions, and it can be switched off in Settings, after
 which nothing reaches the network at all.
 
-The Android APK is signed with Flutter's debug key, which is enough to
-sideload but not to publish on Play. Install it with
-`adb install OpenWord-*-android.apk`, or enable installation from unknown
-sources on the device.
+Install the Android APK with `adb install OpenWord-*-android.apk`, or allow
+installation from unknown sources on the device. It is not published on Play.
 
 iOS and macOS builds are not attached because they need an Apple signing
 identity; build them yourself with `flutter build ipa` / `flutter build macos`.

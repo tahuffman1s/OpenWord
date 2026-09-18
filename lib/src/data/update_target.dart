@@ -36,6 +36,11 @@ abstract class UpdateBackend {
   /// Hands a downloaded file to the system installer.
   Future<void> install(String path);
 
+  /// Opens the system's prompt to remove the installed copy. Needed where a
+  /// release was signed with a different key than the copy on the device:
+  /// Android will not replace one with the other.
+  Future<void> uninstall();
+
   /// Opens a link outside the app.
   Future<void> openExternal(Uri url);
 }

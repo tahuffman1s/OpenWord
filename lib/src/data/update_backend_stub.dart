@@ -30,6 +30,10 @@ class WebUpdateBackend implements UpdateBackend {
       throw UnsupportedError('nothing to install on the web');
 
   @override
+  Future<void> uninstall() =>
+      throw UnsupportedError('nothing to uninstall on the web');
+
+  @override
   Future<void> openExternal(Uri url) =>
       throw UnsupportedError('no link to open on the web');
 }

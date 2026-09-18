@@ -131,6 +131,44 @@ class _Actions extends StatelessWidget {
           ],
         );
 
+      // Downloaded, sound, and refused by the system because the keys
+      // differ. The way through is back up, remove, install, restore — and
+      // saying so beats the installer's bare "App not installed".
+      case UpdateStage.blocked:
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              updates.error ??
+                  'The system will not install this over the '
+                      'copy you have.',
+              style: theme.textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              'To move across: copy a backup from Settings, remove the copy '
+              'you have, install this release from its page, then restore the '
+              'backup. Releases from here on are signed with the same key, so '
+              'this is the last time.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: updates.openReleasePage,
+              icon: const Icon(Icons.open_in_new_rounded),
+              label: const Text('Open the release page'),
+            ),
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: updates.uninstall,
+              icon: const Icon(Icons.delete_outline_rounded),
+              label: const Text('Remove the copy you have'),
+            ),
+          ],
+        );
+
       case UpdateStage.failed:
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

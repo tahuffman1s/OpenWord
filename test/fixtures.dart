@@ -289,10 +289,14 @@ class FakeUpdateBackend implements UpdateBackend {
   /// Thrown by every call when set, standing in for a dead network.
   Object? failWith;
 
+  /// Thrown by [install] alone, for the platform's own refusals.
+  Object? installFailsWith;
+
   int reads = 0;
   final List<Uri> downloads = [];
   final List<String> installs = [];
   final List<Uri> opened = [];
+  int uninstalls = 0;
 
   /// Fed to the progress callback, as (received, total) pairs.
   List<List<int>> progress = const [
@@ -326,6 +330,15 @@ class FakeUpdateBackend implements UpdateBackend {
   @override
   Future<void> install(String path) async {
     installs.add(path);
+    final refusal = installFailsWith;
+    if (refusal != null) throw refusal;
+    final failure = failWith;
+    if (failure != null) throw failure;
+  }
+
+  @override
+  Future<void> uninstall() async {
+    uninstalls++;
     final failure = failWith;
     if (failure != null) throw failure;
   }

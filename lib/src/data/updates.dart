@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 
 import '../app_version.dart';
 import 'settings.dart';
@@ -176,6 +177,11 @@ enum UpdateStage {
   available,
   downloading,
   readyToInstall,
+
+  /// The update is downloaded and sound, but the system will not install it
+  /// over the copy on the device — the two were signed with different keys.
+  /// Installing it means removing the old copy first.
+  blocked,
   failed,
 }
 
@@ -299,15 +305,44 @@ class UpdateService extends ChangeNotifier {
 
   /// Hands the downloaded file to the system installer. Android shows its own
   /// confirmation; nothing is installed behind the reader's back.
+  ///
+  /// Where the app has no permission to install, the platform asks for it and
+  /// carries on by itself once it is granted, so there is nothing to report
+  /// in between.
   Future<void> install() async {
     final path = _downloaded;
     if (path == null) return;
     try {
       await _backend.install(path);
+      _set(UpdateStage.readyToInstall);
+    } on PlatformException catch (error) {
+      // A release signed with another key cannot replace the installed copy.
+      // The system says only "App not installed", so the reason has to come
+      // from here, along with a way through it.
+      if (error.code == 'signature-mismatch') {
+        _set(UpdateStage.blocked, error: error.message ?? _mismatch);
+        return;
+      }
+      _set(UpdateStage.failed, error: error.message ?? error.code);
     } on Object catch (error) {
       _set(UpdateStage.failed, error: _readable(error));
     }
   }
+
+  /// Opens the system's prompt to remove the installed copy, for the case
+  /// above. Back up first: uninstalling takes the bookmarks and notes with
+  /// it, and Settings can copy them to the clipboard.
+  Future<void> uninstall() async {
+    try {
+      await _backend.uninstall();
+    } on Object catch (error) {
+      _set(UpdateStage.failed, error: _readable(error));
+    }
+  }
+
+  static const String _mismatch =
+      'This release was signed with a different key than the copy you have, '
+      'and Android will not replace an app with one signed by another key.';
 
   /// Opens the release page, for the platforms the app cannot install itself.
   Future<void> openReleasePage() async {
@@ -338,11 +373,8 @@ class UpdateService extends ChangeNotifier {
 
   void _set(UpdateStage stage, {String? error}) {
     _stage = stage;
-    if (stage != UpdateStage.failed) {
-      _error = null;
-    } else if (error != null) {
-      _error = error;
-    }
+    // The message belongs to the stage that carries it: moving on clears it.
+    _error = error;
     notifyListeners();
   }
 

@@ -45,4 +45,8 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
-      - run: flutter build apk --debug
+      # Release, not debug: the release build is the one with the signing
+      # script in it, and a mistake there should fail here rather than at
+      # release time. Without the signing secret it falls back to the debug
+      # key, which is what a CI build wants anyway.
+      - run: flutter build apk --release

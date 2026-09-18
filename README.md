@@ -143,6 +143,58 @@ git clone --depth 1 https://github.com/martynafford/natural-earth-geojson
 dart run tool/build_maps.dart Bible-Geocoding-Data natural-earth-geojson
 ```
 
+## Releases and signing
+
+Android will only replace an installed app with one signed by **the same
+key**. The Flutter debug keystore is generated afresh on every machine, so a
+debug-signed release can never update the one before it — the installer just
+says "App not installed". Releases therefore need one key that outlives the
+machine that built them.
+
+The key is never in the repository. `android/app/build.gradle.kts` looks for
+it in `android/key.properties` (for a local release build) or in the
+environment (for CI), and falls back to the debug key with a warning in the
+build log.
+
+Make one once:
+
+```bash
+keytool -genkey -v -keystore openword.jks -storetype JKS \
+  -keyalg RSA -keysize 4096 -validity 10000 -alias openword
+base64 -w0 openword.jks   # paste this into the secret below
+```
+
+Keep `openword.jks` somewhere safe and backed up: lose it and the same thing
+happens again. Then add four repository secrets (Settings → Secrets and
+variables → Actions):
+
+| Secret | What goes in it |
+|---|---|
+| `ANDROID_KEYSTORE_BASE64` | the base64 of `openword.jks` |
+| `ANDROID_KEYSTORE_PASSWORD` | the keystore password |
+| `ANDROID_KEY_ALIAS` | `openword` |
+| `ANDROID_KEY_PASSWORD` | the key password (the same one, unless you set two) |
+
+For a local release build, write `android/key.properties` instead — it is
+git-ignored:
+
+```properties
+storeFile=/absolute/path/to/openword.jks
+storePassword=…
+keyAlias=openword
+keyPassword=…
+```
+
+The release workflow prints the certificate of the APK it built, so the key
+in use can be checked against the last release. Where the secret is missing
+it still builds, and the release notes say the APK cannot update in place.
+
+**Moving from an unsigned release to a signed one** is a one-off: copy a
+backup from Settings → Bookmarks, highlights and notes, remove the copy you
+have, install the new APK, then restore the backup. The app now detects this
+case itself — it compares the certificate of the download with the installed
+one and explains it, rather than leaving you with "App not installed".
+
 ## Updates
 
 Releases are published on GitHub, and the app can find them itself.
@@ -155,8 +207,11 @@ Releases are published on GitHub, and the app can find them itself.
 - On **Android** it downloads the APK from the release, with progress, into
   its own cache and hands it to the system package installer, which asks you
   to confirm. Nothing is installed silently — a sideloaded app cannot do that,
-  and this one does not try. The first time, Android will want OpenWord
-  allowed to install unknown apps.
+  and this one does not try. The first time, Android asks for permission to
+  install apps; granting it returns to the app and the install carries on by
+  itself. If the release turns out to be signed with a different key than the
+  copy on the device, the app says so and offers the way through, rather than
+  letting the installer fail with "App not installed" (see above).
 - Everywhere else it offers the release page, since desktop archives are
   unpacked wherever you keep them and the Apple builds need a signing identity
   the project does not have.

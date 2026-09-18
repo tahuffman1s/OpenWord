@@ -1,5 +1,27 @@
 # Changelog
 
+## 1.7.0
+
+### Fixed
+- **Updates could not install.** Every release was signed with Flutter's
+  debug key, which GitHub's runners generate afresh for each build, so each
+  release carried a different signing identity — and Android will not replace
+  an app with one signed by another key. The installer gave no reason beyond
+  "App not installed". Release builds now take a signing key from a
+  repository secret (or `android/key.properties` locally), the workflow
+  prints the certificate it signed with, and a release built without the
+  secret says in its notes that it cannot update in place. See "Releases and
+  signing" in the README.
+- **Granting permission to install no longer throws.** Asking Android for
+  permission to install apps means leaving for a settings screen; the app
+  used to report a failure at that point and lose the install. It now waits,
+  and goes ahead by itself when the reader comes back with the permission
+  granted.
+- Where a release really is signed with a different key than the installed
+  copy, the app compares the two certificates before handing anything to the
+  installer, explains what is wrong, and offers to open the release page or
+  remove the old copy — with a reminder to copy a backup first.
+
 ## 1.6.0
 
 ### Changed

@@ -127,6 +127,14 @@ class NativeUpdateBackend implements UpdateBackend {
   }
 
   @override
+  Future<void> uninstall() async {
+    if (!Platform.isAndroid) {
+      throw UnsupportedError('OpenWord cannot remove itself here');
+    }
+    await _channel.invokeMethod<void>('uninstall');
+  }
+
+  @override
   Future<void> openExternal(Uri url) async {
     if (Platform.isAndroid) {
       await _channel.invokeMethod<void>('open', {'url': url.toString()});

@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openword/src/app_version.dart';
 import 'package:openword/src/data/settings.dart';
@@ -284,6 +285,68 @@ void main() {
 
       await service.install();
       expect(backend.installs.single, endsWith('OpenWord-v2.0.0-android.apk'));
+    });
+
+    test('a key that does not match is explained, not just failed', () async {
+      final backend = FakeUpdateBackend(body: releaseJson(tag: 'v2.0.0'));
+      final service = UpdateService(
+        settings: await freshSettings(),
+        backend: backend,
+        currentVersion: '1.4.0',
+      );
+
+      await service.check(force: true);
+      await service.download();
+      backend.installFailsWith = PlatformException(
+        code: 'signature-mismatch',
+        message: 'This release was signed with a different key',
+      );
+      await service.install();
+
+      // Not a plain failure: the update is sound, the system will not take
+      // it, and the reader needs to be told what to do about it.
+      expect(service.stage, UpdateStage.blocked);
+      expect(service.error, contains('different key'));
+
+      await service.uninstall();
+      expect(backend.uninstalls, 1);
+    });
+
+    test('any other refusal from the platform is reported', () async {
+      final backend = FakeUpdateBackend(body: releaseJson(tag: 'v2.0.0'));
+      final service = UpdateService(
+        settings: await freshSettings(),
+        backend: backend,
+        currentVersion: '1.4.0',
+      );
+
+      await service.check(force: true);
+      await service.download();
+      backend.installFailsWith = PlatformException(
+        code: 'not-allowed',
+        message: 'OpenWord is not allowed to install apps',
+      );
+      await service.install();
+
+      expect(service.stage, UpdateStage.failed);
+      expect(service.error, contains('not allowed'));
+    });
+
+    test('an install that starts leaves the sheet as it was', () async {
+      final backend = FakeUpdateBackend(body: releaseJson(tag: 'v2.0.0'));
+      final service = UpdateService(
+        settings: await freshSettings(),
+        backend: backend,
+        currentVersion: '1.4.0',
+      );
+
+      await service.check(force: true);
+      await service.download();
+      await service.install();
+
+      expect(service.stage, UpdateStage.readyToInstall);
+      expect(service.error, isNull);
+      expect(backend.installs, hasLength(1));
     });
 
     test('a failed download is reported, and installs nothing', () async {

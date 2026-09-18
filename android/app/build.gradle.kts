@@ -1,8 +1,39 @@
+import java.io.File
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+// Release signing. Android will only replace an installed app with one signed
+// by the same key, so a release has to be signed with a key that outlives the
+// machine that built it. The key is never in the repository: it comes from
+// android/key.properties locally, or from the environment in CI, where the
+// workflow writes it out of a secret.
+//
+// Without one the build falls back to Flutter's debug key — fine for
+// `flutter run`, useless for an update, because that keystore is generated
+// afresh on every machine.
+val keystoreProperties = Properties().apply {
+    val properties = rootProject.file("key.properties")
+    if (properties.exists()) properties.inputStream().use { load(it) }
+}
+
+fun signingValue(property: String, variable: String): String? =
+    (keystoreProperties.getProperty(property) ?: System.getenv(variable))
+        ?.takeIf { it.isNotBlank() }
+
+val releaseKeystore: File? = signingValue("storeFile", "OPENWORD_KEYSTORE")
+    ?.let { path -> file(path).takeIf { it.exists() } }
+val releaseStorePassword = signingValue("storePassword", "OPENWORD_KEYSTORE_PASSWORD")
+val releaseKeyAlias = signingValue("keyAlias", "OPENWORD_KEY_ALIAS")
+val releaseKeyPassword = signingValue("keyPassword", "OPENWORD_KEY_PASSWORD")
+val hasReleaseKey = releaseKeystore != null &&
+    releaseStorePassword != null &&
+    releaseKeyAlias != null &&
+    releaseKeyPassword != null
 
 android {
     namespace = "com.openword.openword"
@@ -29,11 +60,29 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKey) {
+            create("release") {
+                storeFile = releaseKeystore
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKey) {
+                signingConfigs.getByName("release")
+            } else {
+                logger.warn(
+                    "OpenWord: no release key, signing with the debug key. " +
+                        "An APK signed this way cannot update an installed " +
+                        "copy — see the Releases section of the README.",
+                )
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
