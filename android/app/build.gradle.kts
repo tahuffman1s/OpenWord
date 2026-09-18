@@ -64,6 +64,10 @@ android {
         if (hasReleaseKey) {
             create("release") {
                 storeFile = releaseKeystore
+                // Said rather than inferred: keytool writes PKCS12 by
+                // default now, but the JDK's default store type has moved
+                // about, and a mismatch reads as a corrupt keystore.
+                storeType = "pkcs12"
                 storePassword = releaseStorePassword
                 keyAlias = releaseKeyAlias
                 keyPassword = releaseKeyPassword

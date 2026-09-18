@@ -159,7 +159,7 @@ build log.
 Make one once:
 
 ```bash
-keytool -genkey -v -keystore openword.jks -storetype JKS \
+keytool -genkeypair -v -keystore openword.jks -storetype PKCS12 \
   -keyalg RSA -keysize 4096 -validity 10000 -alias openword
 base64 -w0 openword.jks   # paste this into the secret below
 ```
@@ -174,6 +174,15 @@ variables → Actions):
 | `ANDROID_KEYSTORE_PASSWORD` | the keystore password |
 | `ANDROID_KEY_ALIAS` | `openword` |
 | `ANDROID_KEY_PASSWORD` | the key password (the same one, unless you set two) |
+
+Or from a terminal, which keeps them off the clipboard:
+
+```bash
+gh secret set ANDROID_KEYSTORE_BASE64 < openword.jks.base64.txt
+gh secret set ANDROID_KEYSTORE_PASSWORD
+gh secret set ANDROID_KEY_ALIAS --body openword
+gh secret set ANDROID_KEY_PASSWORD
+```
 
 For a local release build, write `android/key.properties` instead — it is
 git-ignored:
