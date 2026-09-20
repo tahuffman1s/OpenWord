@@ -40,6 +40,11 @@ no network entitlement.
   Psalm 23 and you are there. Every book also opens an introduction from its
   name above the chapter number — canon division, length, and a full essay on
   the book's setting, authorship, structure and themes.
+- **Bring your own translation.** Import an EPUB of a Bible and OpenWord
+  converts it to a `.bib` file — its own single-file format — and reads it
+  like the ones that ship with it: search, compare, highlight, bookmark, map
+  and all. `.bib` files import directly, and any imported translation can be
+  saved back out as one.
 - **Your library** in one place: bookmarks, highlights, notes and the chapters
   you have been reading, each a tap away from the text.
 - **Search** the whole Bible, one testament or the book you are in, with an
@@ -78,6 +83,59 @@ dart run tool/build_assets.dart <directory-with-usfx-files>
 `tool/build_assets.dart` expects `<translation id>.usfx.xml` in that directory
 and writes `assets/bible/<id>.owb.gz`, checking that what it wrote decodes
 back to the same verse count.
+
+## Importing a translation: EPUB and `.bib`
+
+Settings → *Add a translation* takes a file from the device. Nothing is
+uploaded: the file is read where it sits, converted on the device, and kept in
+the app's own documents directory. An imported translation is then a
+translation like any other — it appears in the translation list and the
+compare chips, and search, maps, highlights, bookmarks and notes all work
+against it.
+
+### The `.bib` format
+
+A `.bib` file is one translation, whole, in one file. It is the compact binary
+encoding the app already used for its bundled assets, behind a small header
+that says what the file holds so a file can be listed without being decoded:
+
+| Offset | Size | Meaning |
+|---|---|---|
+| 0 | 3 | `BIB` |
+| 3 | 1 | Format version, currently 1 |
+| 4 | 1 | Flags; bit 0 set means the payload is gzipped |
+| 5 | 2 | Length of the metadata, big-endian |
+| 7 | … | Metadata: UTF-8 JSON — `id`, `name`, `abbreviation`, `license`, `source` |
+| … | … | Payload: the whole Bible, `BibleCodec`-encoded |
+
+The metadata is in the clear so that listing a shelf of translations means
+reading a few dozen bytes of each file. It repeats what the payload says;
+where the two disagree the payload wins, since that is what is read. The
+format is implemented in `lib/src/model/bib_file.dart` and the encoding it
+wraps in `lib/src/model/bible_codec.dart` — both MIT, like the rest of the
+app, so anything else may read or write `.bib` files.
+
+### What the EPUB converter does
+
+`lib/src/data/epub_import.dart` unzips the EPUB, follows
+`META-INF/container.xml` to the package document, and reads the spine in
+order. Headings name the books — `THE REVELATION OF ST. JOHN THE DIVINE` and
+`II Timothy` alike — and verses are found in whichever of the three usual
+shapes the file uses: a marker element (`<sup>`, or a span classed `verse`),
+a number at the head of a paragraph, or `chapter:verse` at the head of a
+paragraph. Poetry lines, section headings and italics are kept.
+
+It refuses rather than guesses. A paragraph opening "40 days later" does not
+become verse 40; a heading that is not a book of the canon is passed over; a
+book whose verses are not numbered is left out and named in the summary the
+import sheet shows. A file with no books of the Bible in it is rejected
+outright, and the licence is taken from the EPUB's own `dc:rights` — where
+there is none, the translation says its licence is not stated rather than
+inventing one.
+
+The conversion is deterministic: the same EPUB imports under the same id
+twice, so importing it again replaces the copy on the shelf instead of
+stacking up duplicates.
 
 ## Book introductions
 
@@ -232,7 +290,8 @@ Releases are published on GitHub, and the app can find them itself.
 This is why the Android build now asks for `INTERNET` and
 `REQUEST_INSTALL_PACKAGES`, and the macOS build carries the outgoing-network
 entitlement. Nothing else here touches a network: the Scripture, the
-introductions and the maps are all bundled.
+introductions and the maps are all bundled, and importing a translation reads
+the file the system picker hands over without sending it anywhere.
 
 ## Building
 
@@ -272,11 +331,14 @@ lib/
       book_meta.dart            canonical book table, sort names, divisions
       bible.dart                Bible → Book → Chapter → Block → VerseSegment
       bible_codec.dart          the binary format the bundled text is read from
+      bib_file.dart             the .bib container: header + that encoding
     data/
       translations.dart         the bundled translations
       book_notes.dart           the per-book background notes
       usfx_parser.dart          streaming USFX → the model above (build time)
-      library.dart              loads a translation from the app's assets
+      epub_import.dart          EPUB → the model above, on the device
+      shelf.dart                the imported translations, as .bib files
+      library.dart              loads a translation, bundled or imported
       reference_search.dart     book matching and "jn 3:16" parsing
       settings.dart             preferences
       marks.dart                bookmarks, highlights, notes, position, backup
@@ -284,6 +346,7 @@ lib/
       reader_screen.dart        one swipeable page per chapter, compare view
       navigator_sheet.dart      go-to field, book list, chapter and verse grids
       widgets/scripture_text.dart   block and inline-markup rendering
+      import_sheet.dart        picks a file and reports what came of it
       library_screen.dart, search_screen.dart, display_sheet.dart,
       book_sheet.dart, settings_screen.dart
 ```
@@ -304,8 +367,11 @@ and navigation instant.
 
 ## Licences
 
-- Application code: [MIT](LICENSE).
-- Scripture text: public domain (see the table above).
+- Application code: [MIT](LICENSE) — including the `.bib` format and its
+  implementation, so anything else may read or write one.
+- Scripture text: public domain (see the table above). An imported translation
+  carries whatever licence its own file states; OpenWord shows it and does not
+  guess at one.
 - Place locations: [OpenBible.info Bible Geocoding](https://www.openbible.info/geo/),
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — attribution is
   shown on the map itself and in Settings. Base map, built-up areas and modern

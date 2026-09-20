@@ -1,14 +1,19 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_scope.dart';
 import '../app_version.dart';
 import '../data/atlas.dart';
+import '../data/library.dart';
 import '../data/book_intros.dart';
 import '../data/marks.dart';
 import '../data/settings.dart';
+import '../data/shelf.dart';
 import '../data/translations.dart';
 import '../data/updates.dart';
+import '../model/bib_file.dart';
+import 'import_sheet.dart';
 import 'update_sheet.dart';
 
 /// Display, reading, translation and backup preferences.
@@ -26,7 +31,13 @@ class SettingsScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: AnimatedBuilder(
-        animation: Listenable.merge([settings, library, reading, updates]),
+        animation: Listenable.merge([
+          settings,
+          library,
+          reading,
+          updates,
+          if (library.shelf != null) library.shelf!,
+        ]),
         builder: (context, _) {
           final theme = Theme.of(context);
           return ListView(
@@ -168,7 +179,7 @@ class SettingsScreen extends StatelessWidget {
                 onChanged: (value) => settings.showDeuterocanon = value,
               ),
               const _Header('Translation'),
-              for (final translation in Translations.all)
+              for (final translation in library.available)
                 RadioGroup<String>(
                   groupValue: settings.translationId,
                   onChanged: (value) {
@@ -184,6 +195,29 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: Text(
                       '${translation.abbreviation} • ${translation.license}',
                     ),
+                    secondary: library.isImported(translation.id)
+                        ? _ImportedMenu(
+                            id: translation.id,
+                            name: translation.name,
+                            shelf: library.shelf!,
+                            settings: settings,
+                            library: library,
+                          )
+                        : null,
+                  ),
+                ),
+              if (library.shelf != null)
+                ListTile(
+                  leading: const Icon(Icons.add_rounded),
+                  title: const Text('Add a translation'),
+                  subtitle: const Text(
+                    'Import an EPUB of a Bible, or a .bib file',
+                  ),
+                  onTap: () => showImportSheet(
+                    context,
+                    shelf: library.shelf!,
+                    library: library,
+                    settings: settings,
                   ),
                 ),
               ListTile(
@@ -192,7 +226,7 @@ class SettingsScreen extends StatelessWidget {
                 subtitle: Text(
                   settings.compareTranslationId == null
                       ? 'Off'
-                      : Translations.byId(settings.compareTranslationId!).name,
+                      : library.infoFor(settings.compareTranslationId!).name,
                 ),
                 trailing: settings.compareTranslationId == null
                     ? null
@@ -208,7 +242,7 @@ class SettingsScreen extends StatelessWidget {
                   spacing: 8,
                   runSpacing: 8,
                   children: [
-                    for (final translation in Translations.all)
+                    for (final translation in library.available)
                       if (translation.id != settings.translationId)
                         ChoiceChip(
                           label: Text(translation.abbreviation),
@@ -506,4 +540,75 @@ class _UpdateRow extends StatelessWidget {
     if (days == 1) return 'yesterday';
     return '$days days ago';
   }
+}
+
+/// What can be done with a translation the reader imported: keep a copy of
+/// the `.bib`, or take it off the shelf again.
+class _ImportedMenu extends StatelessWidget {
+  const _ImportedMenu({
+    required this.id,
+    required this.name,
+    required this.shelf,
+    required this.settings,
+    required this.library,
+  });
+
+  final String id;
+  final String name;
+  final Shelf shelf;
+  final Settings settings;
+  final LibraryController library;
+
+  @override
+  Widget build(BuildContext context) {
+    final shelved = shelf.byId(id);
+    return PopupMenuButton<String>(
+      tooltip: 'Imported translation',
+      icon: const Icon(Icons.inventory_2_outlined),
+      itemBuilder: (context) => [
+        PopupMenuItem(
+          value: 'about',
+          enabled: false,
+          child: Text(shelved == null ? 'Imported' : shelved.readableSize),
+        ),
+        const PopupMenuItem(value: 'save', child: Text('Save a copy…')),
+        const PopupMenuItem(value: 'remove', child: Text('Remove')),
+      ],
+      onSelected: (choice) async {
+        final messenger = ScaffoldMessenger.of(context);
+        if (choice == 'save') {
+          final bytes = await shelf.fileBytes(id);
+          if (bytes == null) return;
+          final saved = await FilePicker.saveFile(
+            dialogTitle: 'Save $name',
+            fileName: '$id${BibFile.extension}',
+            bytes: bytes,
+          );
+          if (saved == null) return;
+          messenger.showSnackBar(
+            SnackBar(content: Text('Saved to ${_where(saved)}')),
+          );
+          return;
+        }
+        if (choice == 'remove') {
+          await shelf.remove(id);
+          // Whatever was being read has just gone; fall back to a bundled
+          // translation rather than an empty screen.
+          if (settings.translationId == id) {
+            settings.translationId = Translations.fallback.id;
+            await library.load(Translations.fallback.id);
+          }
+          if (settings.compareTranslationId == id) {
+            settings.compareTranslationId = null;
+          }
+          messenger.showSnackBar(SnackBar(content: Text('Removed $name')));
+        }
+      },
+    );
+  }
+
+  /// A file:// URI reads as a path; anything else (the browser's download,
+  /// a content:// URI on Android) is better shown as it is.
+  static String _where(Uri saved) =>
+      saved.isScheme('file') ? saved.toFilePath() : saved.toString();
 }

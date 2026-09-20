@@ -4,19 +4,25 @@ import 'package:flutter/services.dart';
 
 import '../model/bible.dart';
 import '../model/bible_codec.dart';
+import 'shelf.dart';
 import 'translations.dart';
 
 enum LibraryStatus { loading, ready, failed }
 
 /// Holds the Scripture the app is reading.
 ///
-/// Every translation ships inside the app, so this never touches the network:
-/// the only work is reading an asset, gunzipping it and decoding it, which
-/// takes well under a tenth of a second.
+/// Three translations ship inside the app; a reader can put more on the
+/// [Shelf] by importing them. Either way the work is the same — read the
+/// bytes, gunzip, decode — and nothing touches the network.
 class LibraryController extends ChangeNotifier {
-  LibraryController({AssetBundle? bundle}) : _bundle = bundle ?? rootBundle;
+  LibraryController({AssetBundle? bundle, this.shelf})
+    : _bundle = bundle ?? rootBundle;
 
   final AssetBundle _bundle;
+
+  /// The imported translations, where there are any. Null on the web, which
+  /// has no filesystem to keep them on.
+  final Shelf? shelf;
 
   /// The bundle the Scripture was read from. Anything else that ships as an
   /// asset — the book introductions, for one — reads from the same place, so
@@ -92,7 +98,33 @@ class LibraryController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// True where this id names a translation that can actually be read.
+  bool knows(String translationId) =>
+      Translations.all.any((t) => t.id == translationId) ||
+      (shelf?.has(translationId) ?? false);
+
+  /// Everything that can be read: what ships with the app, then whatever the
+  /// reader has imported.
+  List<TranslationInfo> get available => [
+    ...Translations.all,
+    if (shelf != null)
+      for (final shelved in shelf!.translations) shelved.info,
+  ];
+
+  /// What a translation id is called, bundled or imported.
+  TranslationInfo infoFor(String id) => available.firstWhere(
+    (translation) => translation.id == id,
+    orElse: () => Translations.fallback,
+  );
+
+  /// True where the reader brought this one themselves.
+  bool isImported(String id) => shelf?.has(id) ?? false;
+
   Future<Bible> _read(String translationId) async {
+    final imported = shelf;
+    if (imported != null && imported.has(translationId)) {
+      return imported.read(translationId);
+    }
     final data = await _bundle.load(Translations.assetFor(translationId));
     final compressed = Uint8List.sublistView(data);
     return BibleCodec.decode(const GZipDecoder().decodeBytes(compressed));

@@ -1,5 +1,37 @@
 # Changelog
 
+## 1.8.0
+
+### Added
+- **Import a Bible of your own.** Settings → *Add a translation* takes an EPUB
+  of a Bible and converts it, on the device, into a `.bib` file the app then
+  reads like any translation that ships with it — search, compare, highlight,
+  bookmark, map, book introductions and all. Nothing is uploaded; the file is
+  read where it sits.
+- **The `.bib` format**: one translation, whole, in one file — the compact
+  binary encoding the bundled text already used, behind a header that says
+  what the file holds. A shelf of translations can therefore be listed by
+  reading a few dozen bytes of each. The format is documented in the README
+  and MIT-licensed like the rest of the app, so anything else may read or
+  write one.
+- `.bib` files import directly, and any imported translation can be saved back
+  out as one, from the menu beside it in Settings.
+
+### Notes
+- The converter reads the three shapes a Bible EPUB comes in — verse numbers
+  as marker elements, at the head of a paragraph, or as `chapter:verse` — and
+  keeps poetry lines, section headings and italics. It refuses rather than
+  guesses: a paragraph opening "40 days later" does not become verse 40, a
+  heading that is not a book of the canon is passed over, and a book whose
+  verses are not numbered is left out and named in the summary the import
+  sheet shows.
+- An imported translation's licence is taken from the EPUB's own `dc:rights`.
+  Where the file states none, the app says so rather than inventing one.
+- Importing the same EPUB twice replaces the copy on the shelf instead of
+  stacking up duplicates: the conversion is deterministic.
+- The web build has no filesystem to keep translations on, so it reads only
+  what it ships with; the import UI is not shown there.
+
 ## 1.7.0
 
 ### Fixed
