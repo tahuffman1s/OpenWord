@@ -63,6 +63,67 @@ String _page(String body) =>
     '<html xmlns="http://www.w3.org/1999/xhtml"><head><title>x</title></head>'
     '<body>$body</body></html>';
 
+/// An EPUB whose table of contents names the documents, for the case where
+/// nothing inside them does.
+Uint8List epubWithToc({
+  required List<(String name, String xhtml)> documents,
+  required Map<String, String> toc,
+  String title = 'Test Standard Version',
+}) {
+  final manifest = StringBuffer(
+    '<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>',
+  );
+  final spine = StringBuffer();
+  for (var i = 0; i < documents.length; i++) {
+    manifest.write(
+      '<item id="d$i" href="${documents[i].$1}" '
+      'media-type="application/xhtml+xml"/>',
+    );
+    spine.write('<itemref idref="d$i"/>');
+  }
+
+  final points = StringBuffer();
+  var order = 0;
+  for (final entry in toc.entries) {
+    order++;
+    points.write(
+      '<navPoint id="n$order" playOrder="$order">'
+      '<navLabel><text>${entry.value}</text></navLabel>'
+      '<content src="${entry.key}"/></navPoint>',
+    );
+  }
+
+  final ncx =
+      '<?xml version="1.0" encoding="utf-8"?>'
+      '<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">'
+      '<navMap>$points</navMap></ncx>';
+
+  final opf =
+      '<?xml version="1.0" encoding="utf-8"?>'
+      '<package xmlns="http://www.idpf.org/2007/opf" version="2.0">'
+      '<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">'
+      '<dc:title>$title</dc:title></metadata>'
+      '<manifest>$manifest</manifest>'
+      '<spine toc="ncx">$spine</spine></package>';
+
+  final container =
+      '<?xml version="1.0"?>'
+      '<container version="1.0" '
+      'xmlns="urn:oasis:names:tc:opendocument:xmlns:container">'
+      '<rootfiles><rootfile full-path="OEBPS/content.opf" '
+      'media-type="application/oebps-package+xml"/></rootfiles></container>';
+
+  final archive = Archive()
+    ..addFile(_file('mimetype', 'application/epub+zip'))
+    ..addFile(_file('META-INF/container.xml', container))
+    ..addFile(_file('OEBPS/content.opf', opf))
+    ..addFile(_file('OEBPS/toc.ncx', ncx));
+  for (final document in documents) {
+    archive.addFile(_file('OEBPS/${document.$1}', _page(document.$2)));
+  }
+  return Uint8List.fromList(ZipEncoder().encodeBytes(archive));
+}
+
 void main() {
   group('the shapes a Bible EPUB comes in', () {
     test('numbered spans, the usual output of publishing tools', () {
@@ -305,6 +366,295 @@ void main() {
       );
 
       expect(result.bible!.books.single.code, 'GEN');
+    });
+  });
+
+  group('the shapes real editions are published in', () {
+    // haiola generates the EPUBs on ebible.org — around 1,500 translations,
+    // and most of the freely available ones. This is its actual output:
+    // chapters labelled `psalmlabel` whatever the book, verses as a span
+    // classed `verse` whose text ends in a non-breaking space, footnotes
+    // inline, and one file per book named for the book.
+    String haiola(String body) => '<div class="main" id="GEN0_0">$body</div>';
+
+    test('an ebible.org Bible reads', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'GEN.xhtml',
+              haiola(
+                '<div class="mt">Genesis</div>'
+                '<div class="psalmlabel" id="GEN1_0">Chapter 1</div>'
+                '<div class="p">'
+                '<span class="verse" id="GEN1_1">1\u00a0</span>'
+                'In the beginning God created the heavens and the earth. '
+                '<span class="verse" id="GEN1_2">2\u00a0</span>'
+                'The earth was formless and empty.</div>'
+                '<div class="psalmlabel" id="GEN2_0">Chapter 2</div>'
+                '<div class="p">'
+                '<span class="verse" id="GEN2_1">1\u00a0</span>'
+                'Thus the heavens were finished.</div>',
+              ),
+            ),
+          ],
+        ),
+      );
+
+      final book = result.bible!.books.single;
+      expect(book.code, 'GEN');
+      expect(book.chapterCount, 2);
+      expect(book.chapter(1)!.verseCount, 2);
+      expect(
+        book.chapter(1)!.verseText(1),
+        'In the beginning God created the heavens and the earth.',
+      );
+      expect(book.chapter(2)!.verseText(1), 'Thus the heavens were finished.');
+    });
+
+    test('a footnote does not end up inside the verse', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'GEN.xhtml',
+              haiola(
+                '<div class="mt">Genesis</div>'
+                '<div class="psalmlabel">Chapter 1</div>'
+                '<div class="p">'
+                '<span class="verse" id="GEN1_1">1\u00a0</span>'
+                'In the beginning God'
+                '<a href="#FN1" epub:type="noteref" class="noteref">+</a>'
+                '<span class="note"><input type="checkbox" id="FN1" '
+                'class="popnote"/><label for="FN1">'
+                '<span class="ntlbl">+</span><span class="box">'
+                '<span class="ftxt">Hebrew: Elohim.</span>'
+                '</span></label></span>'
+                ' created the heavens.</div>'
+                '<aside epub:type="footnote" id="FN1x">'
+                '<p class="f">Hebrew: Elohim.</p></aside>',
+              ),
+            ),
+          ],
+        ),
+      );
+
+      final text = result.bible!.books.single.chapter(1)!.verseText(1);
+      expect(text, 'In the beginning God created the heavens.');
+      expect(text, isNot(contains('Elohim')));
+    });
+
+    test('a localized chapter label still opens the chapter', () {
+      // The label says "Kapitel"; the app has never heard the word. The
+      // markup calling it a chapter label is enough.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'PSA.xhtml',
+              '<div class="mt1">Psalms</div>'
+                  '<div class="psalmlabel">Kapitel 23</div>'
+                  '<div class="q1"><span class="verse">1\u00a0</span>'
+                  'The LORD is my shepherd.</div>',
+            ),
+          ],
+        ),
+      );
+
+      final book = result.bible!.books.single;
+      expect(book.code, 'PSA');
+      expect(book.chapters.single.verseText(1), 'The LORD is my shepherd.');
+    });
+
+    test('a one-chapter book with no chapter heading is not lost', () {
+      // Obadiah, Philemon, 2 and 3 John and Jude are published this way.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'jude.xhtml',
+              '<h1>Jude</h1>'
+                  '<p><sup>1</sup>Jude, a servant of Jesus Christ.</p>'
+                  '<p><sup>2</sup>Mercy to you and peace be multiplied.</p>',
+            ),
+          ],
+        ),
+      );
+
+      final book = result.bible!.books.single;
+      expect(book.code, 'JUD');
+      expect(book.chapters.single.verseCount, 2);
+      expect(book.chapters.single.verseText(2), startsWith('Mercy to you'));
+    });
+
+    test('chapters numbered with Roman numerals', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1>'
+                  '<h2>CHAPTER I</h2><p><sup>1</sup>In the beginning.</p>'
+                  '<h2>CHAPTER II</h2><p><sup>1</sup>Thus the heavens.</p>'
+                  '<h2>CHAPTER IV</h2><p><sup>1</sup>Adam knew Eve.</p>',
+            ),
+          ],
+        ),
+      );
+
+      final book = result.bible!.books.single;
+      expect(book.chapterCount, 3);
+      expect(book.chapter(2)!.verseText(1), 'Thus the heavens.');
+      // The third is IV, so chapter III is missing and the shift is said.
+      expect(result.warnings.join(' '), contains('numbered 3 here'));
+    });
+
+    test('verse markers that print nothing and carry the number in an id', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1><h2>1</h2>'
+                  '<p><a id="V1"></a>In the beginning.'
+                  '<a id="V2"></a>The earth was formless.</p>',
+            ),
+          ],
+        ),
+      );
+
+      final chapter = result.bible!.books.single.chapters.single;
+      expect(chapter.verseCount, 2);
+      expect(chapter.verseText(2), 'The earth was formless.');
+    });
+
+    test('a verse bridge opens at the first of the two', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1><h2>1</h2>'
+                  '<p><span class="verse">1</span>In the beginning.</p>'
+                  '<p><span class="verse">2-3</span>The earth was formless, '
+                  'and God said.</p>',
+            ),
+          ],
+        ),
+      );
+
+      final chapter = result.bible!.books.single.chapters.single;
+      expect(chapter.verseCount, 2);
+      expect(chapter.verseText(2), startsWith('The earth was formless'));
+    });
+
+    test('the file name names the book where the markup does not', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'GEN.xhtml',
+              '<div class="psalmlabel">Chapter 1</div>'
+                  '<div class="p"><span class="verse">1</span>'
+                  'In the beginning.</div>',
+            ),
+          ],
+        ),
+      );
+
+      expect(result.bible!.books.single.code, 'GEN');
+    });
+
+    test('the table of contents names the book where nothing else does', () {
+      final result = EpubImport.convert(
+        epubWithToc(
+          documents: [
+            (
+              'ch01.xhtml',
+              '<h2>Chapter 1</h2>'
+                  '<p><span class="verse">1</span>In the beginning.</p>',
+            ),
+          ],
+          toc: {'ch01.xhtml': 'Genesis'},
+        ),
+      );
+
+      expect(result.bible!.books.single.code, 'GEN');
+    });
+
+    test('Project Gutenberg numbers verses from the book up', () {
+      // "41:001:001" is Mark 1:1, not chapter 41. The text is the KJV, as
+      // Gutenberg publishes it.
+      final result = EpubImport.convert(
+        epub(
+          title: 'King James Version',
+          documents: [
+            (
+              'mark.xhtml',
+              '<h1>Book 41 Mark</h1>'
+                  '<p>41:001:001 The beginning of the gospel of Jesus Christ, '
+                  'the Son of God;</p>'
+                  '<p>41:001:002 As it is written in the prophets, Behold, I '
+                  'send my messenger before thy face.</p>'
+                  '<p>41:002:001 And again he entered into Capernaum.</p>',
+            ),
+          ],
+        ),
+      );
+
+      final book = result.bible!.books.single;
+      expect(book.code, 'MRK');
+      expect(book.chapterCount, 2);
+      expect(
+        book.chapter(1)!.verseText(1),
+        'The beginning of the gospel of Jesus Christ, the Son of God;',
+      );
+      expect(book.chapter(2)!.verseText(1), contains('Capernaum'));
+    });
+
+    test('a centred paragraph is not a chapter label', () {
+      // Gutenberg's HTML centres things with class="c"; swallowing those as
+      // chapter labels would drop the text inside them.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1><h2>1</h2>'
+                  '<p><sup>1</sup>In the beginning.</p>'
+                  '<p class="c">And the evening and the morning were the first '
+                  'day, and it was very good indeed.</p>',
+            ),
+          ],
+        ),
+      );
+
+      expect(
+        result.bible!.books.single.chapter(1)!.verseText(1),
+        contains('first day'),
+      );
+    });
+
+    test('a chapter that came through as one verse says so', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1><h2>1</h2>'
+                  '<p>1 In the beginning God created the heavens and the earth, '
+                  'and the earth was without form and void, and darkness was on '
+                  'the face of the deep. 2 And the Spirit of God moved upon the '
+                  'face of the waters, and God said, Let there be light. '
+                  '3 And there was light.</p>',
+            ),
+          ],
+        ),
+      );
+
+      // The numbers are loose in the text, so only the first was found.
+      expect(result.bible!.books.single.chapters.single.verseCount, 1);
+      expect(result.warnings.join(' '), contains('one long verse'));
     });
   });
 

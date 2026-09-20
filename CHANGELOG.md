@@ -25,8 +25,30 @@
   couple of hundred bytes of the size they were. `tool/build_assets.dart`
   writes `.bib` from USFX and checks that what it wrote reads back.
 
+### Fixed
+- **EPUBs from eBible.org — around 1,500 translations, and most of the freely
+  available ones — now import.** They label every chapter `psalmlabel`,
+  Psalms or not, which nothing recognised, so the whole file came back as
+  "no books of the Bible could be found". Their footnotes, which are written
+  inline as `<span class="note">`, were also being spliced into the middle of
+  the verses they annotate.
+- **One-chapter books are no longer lost.** Obadiah, Philemon, 2 and 3 John
+  and Jude are usually published with no chapter heading at all, and their
+  verses were being dropped without a word. A numbered verse under a book
+  heading now opens chapter 1.
+- **Project Gutenberg's Bibles read correctly.** They number verses from the
+  book up — `41:001:001` is Mark 1:1 — which was being read as chapter 41.
+- Chapters numbered with Roman numerals (`CHAPTER XXIII`) are recognised.
+- Verse markers that print nothing and carry the number in an `id` are
+  recognised, as are bridges like `2-3`.
+- A book named nowhere in its own markup is now named from its file name or
+  from the table of contents.
+- A chapter that came through as one long verse, or whose number had to shift
+  because the chapter before it was missing, is now reported in the import
+  summary instead of passing silently.
+
 ### Notes
-- The converter reads the three shapes a Bible EPUB comes in — verse numbers
+- The converter reads the shapes a Bible EPUB comes in — verse numbers
   as marker elements, at the head of a paragraph, or as `chapter:verse` — and
   keeps poetry lines, section headings and italics. It refuses rather than
   guesses: a paragraph opening "40 days later" does not become verse 40, a

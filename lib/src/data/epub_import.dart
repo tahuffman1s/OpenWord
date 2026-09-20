@@ -94,10 +94,15 @@ class EpubImport {
       );
     }
 
+    final labels = _tocLabels(files, opf, base);
     final builder = _BibleBuilder();
     for (final document in documents) {
       try {
-        builder.read(XmlDocument.parse(_repair(_text(document))));
+        builder.read(
+          XmlDocument.parse(_repair(_text(document))),
+          path: document.name,
+          tocLabel: labels[_normalisePath(document.name)],
+        );
       } on Object catch (error) {
         builder.warn('Skipped ${document.name}: $error');
       }
@@ -290,6 +295,63 @@ class EpubImport {
     return documents;
   }
 
+  /// What the table of contents calls each document — the EPUB 3 nav, or
+  /// the EPUB 2 `toc.ncx`. A Bible whose chapter files carry no book title
+  /// of their own is still named here.
+  static Map<String, String> _tocLabels(
+    Map<String, ArchiveFile> files,
+    XmlDocument opf,
+    String base,
+  ) {
+    final labels = <String, String>{};
+
+    void note(String? href, String? label) {
+      if (href == null || label == null) return;
+      final text = label.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (text.isEmpty) return;
+      labels.putIfAbsent(_resolve(base, href), () => text);
+    }
+
+    for (final item in opf.findAllElements('item', namespace: '*')) {
+      final href = item.getAttribute('href');
+      final properties = item.getAttribute('properties') ?? '';
+      final mediaType = item.getAttribute('media-type') ?? '';
+      if (href == null) continue;
+      final isNav = properties.split(RegExp(r'\s+')).contains('nav');
+      final isNcx = mediaType.contains('x-dtbncx');
+      if (!isNav && !isNcx) continue;
+
+      final file = files[_resolve(base, href)];
+      if (file == null) continue;
+      final XmlDocument document;
+      try {
+        document = XmlDocument.parse(_repair(_text(file)));
+      } on Object {
+        continue;
+      }
+
+      // EPUB 2: navPoint → navLabel/text plus content/@src.
+      for (final point in document.findAllElements(
+        'navPoint',
+        namespace: '*',
+      )) {
+        note(
+          point
+              .findElements('content', namespace: '*')
+              .firstOrNull
+              ?.getAttribute('src'),
+          point.findElements('navLabel', namespace: '*').firstOrNull?.innerText,
+        );
+      }
+
+      // EPUB 3: the nav document is a list of links.
+      for (final link in document.findAllElements('a', namespace: '*')) {
+        note(link.getAttribute('href'), link.innerText);
+      }
+    }
+    return labels;
+  }
+
   static String _text(ArchiveFile file) =>
       utf8.decode(file.content, allowMalformed: true);
 
@@ -366,16 +428,97 @@ class _BibleBuilder {
   static final RegExp _leadingChapterVerse = RegExp(
     r'^\s*(\d{1,3}):(\d{1,3})[.\s ]+',
   );
+
+  /// Project Gutenberg's Bibles number every verse from the book up:
+  /// `41:001:001` is Mark 1:1. Read as chapter and verse it would put the
+  /// whole Gospel into a chapter 41 that does not exist.
+  static final RegExp _leadingBookChapterVerse = RegExp(
+    r'^\s*(\d{1,3}):(\d{1,3}):(\d{1,3})[.\s]+',
+  );
+
+  /// The sixty-six books of the Protestant canon in order, which is how
+  /// Project Gutenberg numbers them.
+  static final List<String> _canonicalOrder = [
+    for (final meta in BookMeta.all)
+      if (meta.section != BookSection.deuterocanon) meta.code,
+  ];
   static final RegExp _digits = RegExp(r'^\s*(\d{1,3})[.:\s ]*$');
   static final RegExp _whitespace = RegExp(r'\s+');
+  static final RegExp _anyNumber = RegExp(r'\d{1,3}');
+  static final RegExp _romanHeading = RegExp(
+    r'^(?:chapter|psalm|chap\.?)?\s*([ivxlc]+)\s*$',
+    caseSensitive: false,
+  );
+
+  /// The first number in a string, for a chapter label in a language whose
+  /// word for "chapter" this app has never heard of.
+  static int? _numberIn(String text) {
+    final match = _anyNumber.firstMatch(text);
+    return match == null ? null : int.parse(match.group(0)!);
+  }
+
+  /// Roman numerals, as far as a chapter number ever reaches.
+  static int? _roman(String text) {
+    const values = {'i': 1, 'v': 5, 'x': 10, 'l': 50, 'c': 100};
+    final letters = text.toLowerCase();
+    var total = 0;
+    var previous = 0;
+    for (var i = letters.length - 1; i >= 0; i--) {
+      final value = values[letters[i]];
+      if (value == null) return null;
+      if (value < previous) {
+        total -= value;
+      } else {
+        total += value;
+        previous = value;
+      }
+    }
+    return total >= 1 && total <= EpubImport.maxChapter ? total : null;
+  }
 
   void warn(String message) {
     if (warnings.length < 40) warnings.add(message);
   }
 
-  void read(XmlDocument document) {
+  /// Reads one document of the spine.
+  ///
+  /// [path] and [tocLabel] are what the EPUB says this file is, and are used
+  /// only when nothing inside it names a book: a file called `GEN.xhtml`, or
+  /// one the table of contents calls "Genesis", is Genesis even when the
+  /// markup never says so.
+  void read(XmlDocument document, {String? path, String? tocLabel}) {
+    final named = _bookFromName(path) ?? _bookHeading(tocLabel ?? '');
+    if (named != null && named.code != _book) {
+      _book = named.code;
+      _chapter = 0;
+      _verse = 0;
+      if (named.chapter != null) _startChapter(named.chapter!);
+    }
+
     final body = document.findAllElements('body', namespace: '*').firstOrNull;
     _walk(body ?? document.rootElement, BlockStyle.paragraph, 0);
+  }
+
+  /// A book named by a file name: `GEN.xhtml`, `01_Genesis.xhtml`,
+  /// `PSA119.xhtml`.
+  ({String code, int? chapter})? _bookFromName(String? path) {
+    if (path == null) return null;
+    var stem = path.split('/').last;
+    final dot = stem.lastIndexOf('.');
+    if (dot > 0) stem = stem.substring(0, dot);
+
+    stem = stem
+        // "GEN01" is a book and a chapter; "1CO" is one book.
+        .replaceAllMapped(
+          RegExp(r'([A-Za-z])(\d)'),
+          (match) => '${match[1]} ${match[2]}',
+        )
+        .replaceAll(RegExp(r'[_\-.]+'), ' ')
+        // A leading file-order number is not part of the name.
+        .replaceFirst(RegExp(r'^\s*\d{1,3}\s+'), '')
+        .trim();
+    if (stem.isEmpty) return null;
+    return _bookHeading(stem);
   }
 
   /// Walks the tree, emitting a block for each block-level element.
@@ -385,10 +528,14 @@ class _BibleBuilder {
       final name = child.localName.toLowerCase();
       final classes = (child.getAttribute('class') ?? '').toLowerCase();
 
-      if (_isSkippable(name, classes)) continue;
+      if (_skip(child)) continue;
 
       if (_isHeading(name, classes)) {
-        _heading(child.innerText, name);
+        _heading(
+          child.innerText,
+          name,
+          labelsChapter: _isChapterLabel(classes),
+        );
         continue;
       }
 
@@ -426,23 +573,81 @@ class _BibleBuilder {
         }.contains(child.localName.toLowerCase()),
   );
 
-  bool _isSkippable(String name, String classes) =>
-      const {
-        'script',
-        'style',
-        'head',
-        'nav',
-        'figure',
-        'img',
-      }.contains(name) ||
-      classes.contains('footnote') ||
-      classes.contains('copyright') ||
-      classes.contains('toc');
+  static const Set<String> _skippedNames = {
+    'script',
+    'style',
+    'head',
+    'nav',
+    'figure',
+    'img',
+    // A footnote proper, kept at the end of the file.
+    'aside',
+    // The machinery of a pop-up note.
+    'input',
+  };
+
+  /// Classes whose contents are apparatus rather than Scripture.
+  ///
+  /// `note` matters as much as `footnote`: haiola writes each footnote
+  /// inline as `<span class='note'>…</span>`, so without this the note's
+  /// text lands in the middle of the verse it annotates.
+  static const Set<String> _skippedClasses = {
+    'footnote',
+    'note',
+    'noteref',
+    'notemark',
+    'notebackref',
+    'ntlbl',
+    'popnote',
+    'ftxt',
+    'crossref',
+    'xref',
+    'copyright',
+    'toc',
+  };
+
+  bool _skip(XmlElement element) {
+    final name = element.localName.toLowerCase();
+    if (_skippedNames.contains(name)) return true;
+
+    final classes = (element.getAttribute('class') ?? '').toLowerCase();
+    if (classes.split(RegExp(r'\s+')).any(_skippedClasses.contains)) {
+      return true;
+    }
+
+    // EPUB 3 says what a thing is in its own attribute, whatever it is
+    // classed as.
+    final type = (element.getAttribute('type', namespace: '*') ?? '')
+        .toLowerCase();
+    return type.contains('footnote') ||
+        type.contains('noteref') ||
+        type.contains('endnote');
+  }
+
+  static final RegExp _titleClass = RegExp(r'^(mt|ms)\d?$');
+
+  /// Classes that mark an element as the label opening a chapter. haiola —
+  /// which generates the EPUBs on ebible.org, and so most of the freely
+  /// available ones — writes every chapter label as `psalmlabel`, Psalms or
+  /// not, so this is the difference between reading those Bibles and
+  /// refusing them.
+  static const Set<String> _chapterClasses = {
+    'chapterlabel',
+    'psalmlabel',
+    'chapternum',
+    'chapter-number',
+    // USFM's own marker for a chapter label. Not bare "c", which as often
+    // as not means centred.
+    'cl',
+  };
+
+  bool _isChapterLabel(String classes) =>
+      classes.split(RegExp(r'\s+')).any(_chapterClasses.contains);
 
   bool _isHeading(String name, String classes) =>
       const {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}.contains(name) ||
-      classes.contains('chapterlabel') ||
-      classes.split(RegExp(r'\s+')).any((c) => c == 'mt' || c == 'ms');
+      _isChapterLabel(classes) ||
+      classes.split(RegExp(r'\s+')).any(_titleClass.hasMatch);
 
   bool _isBlock(String name, String classes) =>
       const {'p', 'div', 'blockquote', 'li', 'td'}.contains(name);
@@ -475,9 +680,20 @@ class _BibleBuilder {
 
   /// A heading either names a book, numbers a chapter, or belongs to the text
   /// as a section heading.
-  void _heading(String rawText, String tag) {
+  void _heading(String rawText, String tag, {bool labelsChapter = false}) {
     final text = rawText.replaceAll(_whitespace, ' ').trim();
     if (text.isEmpty) return;
+
+    // An element the markup itself calls a chapter label is one, whatever
+    // language it is labelled in: "Chapter 3", "Kapitel 3", "Psalm 23", or
+    // bare "3". Only the number has to be found.
+    if (labelsChapter) {
+      final number = _numberIn(text);
+      if (number != null && number <= EpubImport.maxChapter) {
+        _startChapter(number);
+      }
+      return;
+    }
 
     final book = _bookHeading(text);
     if (book != null) {
@@ -493,6 +709,16 @@ class _BibleBuilder {
     if (chapter != null) {
       final number = int.parse(chapter.group(1)!);
       if (number >= 1 && number <= EpubImport.maxChapter) {
+        _startChapter(number);
+        return;
+      }
+    }
+
+    // "CHAPTER XXIII", the way older editions number them.
+    final roman = _romanHeading.firstMatch(text);
+    if (roman != null) {
+      final number = _roman(roman.group(1)!);
+      if (number != null) {
         _startChapter(number);
         return;
       }
@@ -542,6 +768,10 @@ class _BibleBuilder {
 
     void openVerse(int number) {
       flush();
+      // Obadiah, Philemon, 2 and 3 John and Jude have one chapter, and many
+      // editions give them no chapter heading at all. A numbered verse under
+      // a book heading opens chapter 1 rather than being thrown away.
+      if (_chapter == 0 && _book != null) _startChapter(1);
       verse = number;
       startsVerse = true;
       _verse = number;
@@ -553,6 +783,32 @@ class _BibleBuilder {
         if (buffer.isEmpty && segments.isEmpty) {
           // "3:16 For God so loved…" and "16 For God so loved…" are both
           // ways of numbering a paragraph that is a verse.
+          // Book, chapter and verse, before chapter and verse: "41:001:001"
+          // must not be read as chapter 41.
+          final numbered = _leadingBookChapterVerse.firstMatch(text);
+          if (numbered != null) {
+            final book = int.parse(numbered.group(1)!);
+            final chapter = int.parse(numbered.group(2)!);
+            final number = int.parse(numbered.group(3)!);
+            if (book >= 1 &&
+                book <= _canonicalOrder.length &&
+                chapter >= 1 &&
+                chapter <= EpubImport.maxChapter &&
+                number >= 1 &&
+                number <= EpubImport.maxVerse) {
+              final code = _canonicalOrder[book - 1];
+              if (code != _book) {
+                _book = code;
+                _chapter = 0;
+                _verse = 0;
+              }
+              if (chapter != _chapter) _startChapter(chapter);
+              openVerse(number);
+              buffer.write(text.substring(numbered.end));
+              return;
+            }
+          }
+
           final both = _leadingChapterVerse.firstMatch(text);
           if (both != null) {
             final chapter = int.parse(both.group(1)!);
@@ -586,7 +842,7 @@ class _BibleBuilder {
       final classes = (node.getAttribute('class') ?? '').toLowerCase();
       final id = node.getAttribute('id') ?? '';
 
-      if (_isSkippable(name, classes)) return;
+      if (_skip(node)) return;
 
       final number = _verseNumber(name, classes, id, node.innerText);
       if (number != null) {
@@ -639,28 +895,50 @@ class _BibleBuilder {
     );
   }
 
-  /// Whether an element is a verse number rather than part of the text.
-  int? _verseNumber(String name, String classes, String id, String text) {
-    final digits = _digits.firstMatch(text);
-    if (digits == null) return null;
-    final number = int.parse(digits.group(1)!);
-    if (number < 1 || number > EpubImport.maxVerse) return null;
+  static const Set<String> _verseClasses = {
+    'v',
+    'vn',
+    'verse',
+    'versenum',
+    'verse-num',
+    'versenumber',
+    'vnumber',
+    'verse-number',
+  };
 
+  static final RegExp _verseId = RegExp(r'^V\d', caseSensitive: false);
+  static final RegExp _bridgedVerses = RegExp(
+    r'^\s*(\d{1,3})\s*[-\u2010-\u2015]\s*\d{1,3}[.:\s\u00a0]*$',
+  );
+  static final RegExp _lastNumber = RegExp(r'(\d{1,3})\D*$');
+
+  /// Whether an element is a verse number rather than part of the text.
+  ///
+  /// Some editions print the number, others hold it in an `id` and draw it
+  /// with a stylesheet — `<a id="V3"/>` with nothing inside. The marker is
+  /// still a marker; the number just has to be read from somewhere else.
+  int? _verseNumber(String name, String classes, String id, String text) {
     final words = classes.split(RegExp(r'\s+'));
-    final looksLikeVerse =
+    final marked =
         name == 'sup' ||
-        words.any(
-          (c) =>
-              c == 'v' ||
-              c == 'vn' ||
-              c == 'verse' ||
-              c == 'versenum' ||
-              c == 'verse-num' ||
-              c == 'versenumber' ||
-              c == 'vnumber',
-        ) ||
-        RegExp(r'^V\d', caseSensitive: false).hasMatch(id);
-    return looksLikeVerse ? number : null;
+        words.any(_verseClasses.contains) ||
+        _verseId.hasMatch(id);
+    if (!marked) return null;
+
+    // "3" or, where an edition bridges two verses, "3-4".
+    final digits = _digits.firstMatch(text) ?? _bridgedVerses.firstMatch(text);
+    if (digits != null) {
+      final number = int.parse(digits.group(1)!);
+      return number >= 1 && number <= EpubImport.maxVerse ? number : null;
+    }
+
+    // Nothing printed: take the number the id ends with, which is the verse
+    // in every scheme going — "V3", "Gen.1.3", "GEN3_16".
+    if (text.trim().isNotEmpty) return null;
+    final tail = _lastNumber.firstMatch(id);
+    if (tail == null) return null;
+    final number = int.parse(tail.group(1)!);
+    return number >= 1 && number <= EpubImport.maxVerse ? number : null;
   }
 
   void _add(Block block) {
@@ -761,6 +1039,18 @@ class _BibleBuilder {
     return ReferenceSearch.aliases[needle];
   }
 
+  /// Enough text that it cannot really be a single verse.
+  static bool _isLong(Chapter chapter) {
+    var length = 0;
+    for (final block in chapter.blocks) {
+      for (final segment in block.segments) {
+        length += segment.text.length;
+      }
+      if (length > 200) return true;
+    }
+    return false;
+  }
+
   List<Book> finish() {
     final books = <Book>[];
     for (final entry in _blocks.entries) {
@@ -775,6 +1065,9 @@ class _BibleBuilder {
             .toList();
         if (blocks.isEmpty) continue;
         final chapter = Chapter(
+          // Chapters are read by position, so they have to run 1, 2, 3 with
+          // no gaps. Where the source skipped one, the shift is reported
+          // rather than left for the reader to notice.
           number: chapters.length + 1,
           blocks: blocks,
           notes: _notes[entry.key]?[number] ?? const [],
@@ -782,6 +1075,18 @@ class _BibleBuilder {
         if (chapter.verseCount == 0) {
           warn('${meta.name} $number has no numbered verses; left out.');
           continue;
+        }
+        if (chapter.number != number) {
+          warn(
+            '${meta.name} $number follows a chapter that was not found, so '
+            'it is numbered ${chapter.number} here.',
+          );
+        }
+        if (chapter.verseCount == 1 && _isLong(chapter)) {
+          warn(
+            '${meta.name} $number came through as one long verse; its verse '
+            'numbers were not recognised.',
+          );
         }
         chapters.add(chapter);
       }
