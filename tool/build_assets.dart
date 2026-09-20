@@ -1,4 +1,4 @@
-// Turns USFX source files into the gzipped JSON assets the app ships with.
+// Turns USFX source files into the .bib files the app ships with.
 //
 //   dart run tool/build_assets.dart <dir-with-usfx-files>
 //
@@ -8,7 +8,7 @@ import 'dart:io';
 
 import 'package:openword/src/data/translations.dart';
 import 'package:openword/src/data/usfx_parser.dart';
-import 'package:openword/src/model/bible_codec.dart';
+import 'package:openword/src/model/bib_file.dart';
 
 void main(List<String> args) {
   final source = Directory(args.isEmpty ? '.' : args.first);
@@ -23,15 +23,16 @@ void main(List<String> args) {
     }
     final started = DateTime.now();
     final bible = UsfxParser.parse(input.readAsStringSync(), translation);
-    final encoded = BibleCodec.encode(bible);
-    final bytes = gzip.encode(encoded);
+    final bytes = BibFile.encode(bible);
     final output = File(
       '${outputDir.path}/${translation.id}${Translations.assetExtension}',
     )..writeAsBytesSync(bytes);
 
-    // Decoding here is a build-time check that what ships can be read back.
-    final roundTripped = BibleCodec.decode(encoded);
-    if (roundTripped.verseCount != bible.verseCount) {
+    // Decoding here is a build-time check that what ships can be read back —
+    // both the header a shelf lists from and the Scripture behind it.
+    final roundTripped = BibFile.decode(bytes);
+    if (roundTripped.verseCount != bible.verseCount ||
+        BibFile.readInfo(bytes).id != translation.id) {
       stderr.writeln('round trip mismatch for ${translation.id}');
       exitCode = 1;
     }
@@ -40,7 +41,7 @@ void main(List<String> args) {
       '${translation.id.padRight(14)} '
       'books=${bible.books.length.toString().padLeft(3)} '
       'verses=${bible.verseCount.toString().padLeft(6)} '
-      'raw=${_mb(encoded.length)} gz=${_mb(bytes.length)} '
+      'bib=${_mb(bytes.length)} '
       '(${DateTime.now().difference(started).inMilliseconds} ms) '
       '-> ${output.path}',
     );

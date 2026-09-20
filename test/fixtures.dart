@@ -6,8 +6,8 @@ import 'package:openword/src/data/atlas.dart';
 import 'package:openword/src/data/book_intros.dart';
 import 'package:openword/src/data/update_backend.dart';
 import 'package:openword/src/data/usfx_parser.dart';
+import 'package:openword/src/model/bib_file.dart';
 import 'package:openword/src/model/bible.dart';
-import 'package:openword/src/model/bible_codec.dart';
 
 const TranslationInfo testTranslation = TranslationInfo(
   id: 'eng-web',
@@ -159,10 +159,10 @@ class FixtureBundle extends CachingAssetBundle {
     : assets =
           assets ??
           {
-            'assets/bible/${testTranslation.id}.owb.gz': _pack(
+            'assets/bible/${testTranslation.id}.bib': _pack(
               bible ?? parseFixture(),
             ),
-            'assets/bible/${otherTranslation.id}.owb.gz': _pack(
+            'assets/bible/${otherTranslation.id}.bib': _pack(
               parseOtherFixture(),
             ),
             BookIntros.assetPath: packIntros(fixtureIntros),
@@ -172,8 +172,7 @@ class FixtureBundle extends CachingAssetBundle {
   final Map<String, Uint8List> assets;
   final List<String> loaded = [];
 
-  static Uint8List _pack(Bible bible) =>
-      Uint8List.fromList(gzip.encode(BibleCodec.encode(bible)));
+  static Uint8List _pack(Bible bible) => BibFile.encode(bible);
 
   /// The book introductions in the shape the asset uses: gzipped JSON.
   static Uint8List packIntros(Map<String, String> intros) => packJson(intros);

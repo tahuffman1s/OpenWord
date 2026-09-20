@@ -43,7 +43,9 @@ class Translations {
   static TranslationInfo byId(String id) =>
       all.firstWhere((t) => t.id == id, orElse: () => fallback);
 
-  static const String assetExtension = '.owb.gz';
+  /// The bundled translations are `.bib` files, the same format an imported
+  /// one takes — there is one way to read Scripture here, not two.
+  static const String assetExtension = '.bib';
 
   static String assetFor(String id) => 'assets/bible/$id$assetExtension';
 }

@@ -72,8 +72,11 @@ The WEB edition includes the deuterocanonical books, which are hidden by
 default and can be switched on in Settings.
 
 Each one is built from [USFX](https://ebible.org/usfx/) — the XML form of USFM
-— into a compact binary the app reads directly. Adding another freely licensed
-USFX translation takes two steps:
+— into a [`.bib` file](#importing-a-translation-epub-and-bib), the same format
+an imported translation takes. There is one way to read Scripture here, not
+two: the three that ship are `.bib` files under `assets/bible/`, and one the
+reader brings is a `.bib` file in the app's documents. Adding another freely
+licensed USFX translation takes two steps:
 
 ```bash
 # 1. add an entry to lib/src/data/translations.dart, then
@@ -81,8 +84,8 @@ dart run tool/build_assets.dart <directory-with-usfx-files>
 ```
 
 `tool/build_assets.dart` expects `<translation id>.usfx.xml` in that directory
-and writes `assets/bible/<id>.owb.gz`, checking that what it wrote decodes
-back to the same verse count.
+and writes `assets/bible/<id>.bib`, checking that what it wrote reads back —
+both the header and the same verse count behind it.
 
 ## Importing a translation: EPUB and `.bib`
 
@@ -95,9 +98,10 @@ against it.
 
 ### The `.bib` format
 
-A `.bib` file is one translation, whole, in one file. It is the compact binary
-encoding the app already used for its bundled assets, behind a small header
-that says what the file holds so a file can be listed without being decoded:
+A `.bib` file is one translation, whole, in one file: a compact binary
+encoding of the text behind a small header that says what the file holds, so a
+file can be listed without being decoded. It is what the app ships its own
+three translations as, as well as what an import is converted to.
 
 | Offset | Size | Meaning |
 |---|---|---|
@@ -330,15 +334,15 @@ lib/
     model/
       book_meta.dart            canonical book table, sort names, divisions
       bible.dart                Bible → Book → Chapter → Block → VerseSegment
-      bible_codec.dart          the binary format the bundled text is read from
-      bib_file.dart             the .bib container: header + that encoding
+      bible_codec.dart          the binary encoding a Bible is read from
+      bib_file.dart             the .bib file: that encoding behind a header
     data/
       translations.dart         the bundled translations
       book_notes.dart           the per-book background notes
       usfx_parser.dart          streaming USFX → the model above (build time)
       epub_import.dart          EPUB → the model above, on the device
       shelf.dart                the imported translations, as .bib files
-      library.dart              loads a translation, bundled or imported
+      library.dart              loads a .bib, bundled or imported
       reference_search.dart     book matching and "jn 3:16" parsing
       settings.dart             preferences
       marks.dart                bookmarks, highlights, notes, position, backup
@@ -359,7 +363,7 @@ a list of numbered lines. Inline character styles — words of Jesus, translator
 additions, Selah, footnote markers — travel inside the segment text as control
 characters, which never occur in Scripture and so need no escaping.
 
-The bundled format is a small binary rather than JSON: decoding JSON of this
+The `.bib` payload is a small binary rather than JSON: decoding JSON of this
 size built enough short-lived objects to peak around 230 MB of heap, where the
 binary reads in one pass into the model in about 75 ms and holds roughly 28 MB
 once loaded. A whole translation stays in memory, which is what makes search

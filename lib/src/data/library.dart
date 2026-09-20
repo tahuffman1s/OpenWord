@@ -1,9 +1,8 @@
-import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../model/bib_file.dart';
 import '../model/bible.dart';
-import '../model/bible_codec.dart';
 import 'shelf.dart';
 import 'translations.dart';
 
@@ -126,7 +125,6 @@ class LibraryController extends ChangeNotifier {
       return imported.read(translationId);
     }
     final data = await _bundle.load(Translations.assetFor(translationId));
-    final compressed = Uint8List.sublistView(data);
-    return BibleCodec.decode(const GZipDecoder().decodeBytes(compressed));
+    return BibFile.decode(Uint8List.sublistView(data));
   }
 }

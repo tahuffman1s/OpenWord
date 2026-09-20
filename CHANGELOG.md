@@ -17,6 +17,14 @@
 - `.bib` files import directly, and any imported translation can be saved back
   out as one, from the menu beside it in Settings.
 
+### Changed
+- **The three bundled translations are now `.bib` files too**, in place of the
+  old `.owb.gz` assets. There is one way to read Scripture in the app rather
+  than two, and the format that ships is the format anyone can write. The text
+  is unchanged — same verse counts, same layout — and the files are within a
+  couple of hundred bytes of the size they were. `tool/build_assets.dart`
+  writes `.bib` from USFX and checks that what it wrote reads back.
+
 ### Notes
 - The converter reads the three shapes a Bible EPUB comes in — verse numbers
   as marker elements, at the head of a paragraph, or as `chapter:verse` — and
