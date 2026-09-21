@@ -152,7 +152,13 @@ first of the two. Failing a marker: a number at the head of a paragraph
 Project Gutenberg's `book:chapter:verse` — `41:001:001` is Mark 1:1, not
 chapter 41.
 
-Poetry lines, section headings and italics are kept. Footnotes are dropped,
+Poetry lines keep the indent level their markup gives them (`q2`, `line2`,
+`indent-2`), section headings are recognised by class as well as by tag and
+wait for the Scripture they introduce — so a heading printed before the next
+chapter starts heads that chapter rather than trailing the one before — and
+italics are kept. Text sitting before a chapter's first verse is treated as a
+label rather than Scripture, which is how a running head like `GENESIS` at
+the top of a chapter is kept out of verse 1. Footnotes are dropped,
 including the inline pop-up kind, so a note's text never lands in the middle
 of the verse it annotates.
 

@@ -1,5 +1,25 @@
 # Changelog
 
+## 1.8.2
+
+### Fixed
+- **The book's name no longer opens every chapter.** Editions that repeat it
+  as a running head inside the first paragraph — "GENESISThus the heavens and
+  the earth were finished" — were reading that label as Scripture. Text
+  sitting before a chapter's first verse is a label, not a verse, and is left
+  out.
+- **Section headings head the chapter they open.** A heading printed before
+  the next chapter begins — "The Flood Subsides", which appears while the
+  page is still in Genesis 7 — was stranded at the foot of the chapter
+  before. Headings now wait for the Scripture they introduce and go in above
+  it, in whatever chapter that turns out to be.
+- **Section headings marked only by a class are set as headings**, not as
+  ordinary paragraphs: `section-heading`, `subhead` and the rest, not only
+  USFM's `s1`.
+- **Poetry keeps its indent level.** `q2`, `line2` and `indent-2` were all
+  being flattened to a single depth, so the couplets of a psalm stopped
+  reading as couplets.
+
 ## 1.8.1
 
 ### Fixed

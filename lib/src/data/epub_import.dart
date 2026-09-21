@@ -420,6 +420,15 @@ class _BibleBuilder {
   int _chapter = 0;
   int _verse = 0;
 
+  /// Headings wait here until there is Scripture under them.
+  ///
+  /// A section heading belongs to what follows, and what follows is often
+  /// the next chapter — "The Flood Subsides" is printed before Genesis 8:1,
+  /// while the reader is still in chapter 7. Holding it until the next verse
+  /// opens puts it at the head of the chapter it introduces instead of
+  /// stranding it at the foot of the one before.
+  final List<Block> _pending = [];
+
   static final RegExp _chapterHeading = RegExp(
     r'^(?:chapter|psalm|chap\.?)?\s*(\d{1,3})\s*$',
     caseSensitive: false,
@@ -541,10 +550,15 @@ class _BibleBuilder {
 
       if (_isBlock(name, classes)) {
         final blockStyle = _styleFor(name, classes, style);
+        final level = _poetryLevel(classes);
         if (_hasBlockChildren(child)) {
-          _walk(child, blockStyle, indent + (name == 'blockquote' ? 1 : 0));
+          _walk(
+            child,
+            blockStyle,
+            level ?? indent + (name == 'blockquote' ? 1 : 0),
+          );
         } else {
-          _paragraph(child, blockStyle, indent);
+          _paragraph(child, blockStyle, level ?? indent);
         }
         continue;
       }
@@ -653,6 +667,41 @@ class _BibleBuilder {
   bool _isBlock(String name, String classes) =>
       const {'p', 'div', 'blockquote', 'li', 'td'}.contains(name);
 
+  /// What a section heading is called. USFM says `s1`; the editions that
+  /// were not generated from USFM spell it out.
+  static const Set<String> _headingClasses = {
+    's',
+    's1',
+    's2',
+    's3',
+    'section',
+    'sectionhead',
+    'section-head',
+    'sectionheading',
+    'section-heading',
+    'subhead',
+    'sub-head',
+    'subheading',
+    'sub-heading',
+    'heading',
+    'head',
+  };
+
+  /// How deep a poetry line is indented, where the markup says so: `q2`,
+  /// `line2`, `indent-2`. Without it every line of a psalm sits at the same
+  /// depth and the couplets stop reading as couplets.
+  static final RegExp _levelClass = RegExp(
+    r'^(?:q|iq|li|pi|line|indent)-?([1-4])$',
+  );
+
+  int? _poetryLevel(String classes) {
+    for (final word in classes.split(RegExp(r'\s+'))) {
+      final match = _levelClass.firstMatch(word);
+      if (match != null) return int.parse(match.group(1)!);
+    }
+    return null;
+  }
+
   BlockStyle _styleFor(String name, String classes, BlockStyle inherited) {
     if (name == 'blockquote') return BlockStyle.poetry;
     final words = classes.split(RegExp(r'\s+'));
@@ -669,7 +718,7 @@ class _BibleBuilder {
     if (words.any((c) => c == 'd' || c == 'psalmtitle')) {
       return BlockStyle.descriptiveTitle;
     }
-    if (words.any((c) => c == 's' || c == 's1' || c == 'section')) {
+    if (words.any(_headingClasses.contains)) {
       return BlockStyle.heading;
     }
     return inherited == BlockStyle.poetry
@@ -698,6 +747,8 @@ class _BibleBuilder {
 
     final book = _bookHeading(text);
     if (book != null) {
+      // Whatever was waiting belonged to the book that just ended.
+      _pending.clear();
       _book = book.code;
       _chapter = 0;
       _verse = 0;
@@ -726,8 +777,8 @@ class _BibleBuilder {
     }
 
     // Anything else is a heading inside the text, worth keeping as one.
-    if (_book != null && _chapter > 0 && tag != 'h1') {
-      _add(
+    if (_book != null && tag != 'h1') {
+      _pending.add(
         Block(
           style: BlockStyle.heading,
           segments: [
@@ -902,11 +953,27 @@ class _BibleBuilder {
       // Text before any chapter heading: a preface, not Scripture.
       return;
     }
+
+    if (style != BlockStyle.heading) {
+      // Text sitting before the chapter's first verse is a label, not
+      // Scripture — the book's name repeated as a running head, which the
+      // ESV prints inside the opening paragraph. Every word of Scripture
+      // belongs to a verse.
+      while (segments.isNotEmpty &&
+          segments.first.verse == 0 &&
+          !segments.first.startsVerse) {
+        segments.removeAt(0);
+      }
+      if (segments.isEmpty) return;
+    }
     if (style == BlockStyle.heading) {
-      _add(Block(style: BlockStyle.heading, segments: segments));
+      _pending.add(Block(style: BlockStyle.heading, segments: segments));
       return;
     }
 
+    // Whatever headings were waiting belong above this, in whatever chapter
+    // this turned out to be.
+    _flushPending();
     _add(
       Block(
         style: style,
@@ -1004,6 +1071,15 @@ class _BibleBuilder {
     if (tail == null) return null;
     final number = int.parse(tail.group(1)!);
     return number >= 1 && number <= EpubImport.maxVerse ? number : null;
+  }
+
+  void _flushPending() {
+    if (_pending.isEmpty) return;
+    final held = List<Block>.from(_pending);
+    _pending.clear();
+    for (final block in held) {
+      _add(block);
+    }
   }
 
   void _add(Block block) {

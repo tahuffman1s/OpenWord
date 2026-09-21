@@ -719,6 +719,113 @@ void main() {
       expect(book.chapter(2)!.verseText(1), contains('wedding'));
     });
 
+    test('the running head before verse 1 is not read as Scripture', () {
+      // The ESV repeats the book's name inside the paragraph that opens a
+      // chapter, right before the chapter marker.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1>'
+                  '<p><span class="book-name">GENESIS</span>'
+                  '<b class="chapter-num" id="v01002001-1">2:1\u00a0</b>'
+                  'Thus the heavens and the earth were finished.</p>',
+            ),
+          ],
+        ),
+      );
+
+      final chapter = result.bible!.books.single.chapters.single;
+      expect(
+        chapter.verseText(1),
+        'Thus the heavens and the earth were finished.',
+      );
+      expect(chapter.blocks.first.segments.first.text, isNot(contains('GEN')));
+    });
+
+    test('a heading before a chapter break heads the chapter it opens', () {
+      // "The Flood Subsides" is printed before Genesis 8:1, while the page
+      // is still in chapter 7. It belongs to 8.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1>'
+                  '<p><b class="chapter-num">7:24\u00a0</b>'
+                  'And the waters prevailed on the earth 150 days.</p>'
+                  '<h3>The Flood Subsides</h3>'
+                  '<p><b class="chapter-num">8:1\u00a0</b>'
+                  'But God remembered Noah.</p>',
+            ),
+          ],
+        ),
+      );
+
+      final book = result.bible!.books.single;
+      expect(book.chapterCount, 2);
+
+      String headingsIn(int chapter) => book
+          .chapter(chapter)!
+          .blocks
+          .where((block) => block.style == BlockStyle.heading)
+          .map((block) => block.segments.first.text)
+          .join('|');
+
+      // Chapter 7 here ends with its last verse and nothing after it.
+      expect(headingsIn(1), isEmpty);
+      expect(headingsIn(2), 'The Flood Subsides');
+      expect(book.chapter(2)!.verseText(1), 'But God remembered Noah.');
+    });
+
+    test('a section heading marked only by its class is still a heading', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1><h2>2</h2>'
+                  '<p class="section-heading">The Creation of Man</p>'
+                  '<p><sup>4</sup>These are the generations.</p>',
+            ),
+          ],
+        ),
+      );
+
+      final chapter = result.bible!.books.single.chapters.single;
+      expect(
+        chapter.blocks.first.style,
+        BlockStyle.heading,
+        reason: 'the heading should come before the verse it heads',
+      );
+      expect(chapter.blocks.first.segments.first.text, 'The Creation of Man');
+    });
+
+    test('poetry keeps the indent level its class gives it', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'psa.xhtml',
+              '<h1>Psalms</h1><h2>1</h2>'
+                  '<p class="line q1"><span class="verse">1</span>'
+                  'Blessed is the man</p>'
+                  '<p class="line q2">who walks not in the counsel '
+                  'of the wicked;</p>',
+            ),
+          ],
+        ),
+      );
+
+      final blocks = result.bible!.books.single.chapters.single.blocks
+          .where((block) => block.style == BlockStyle.poetry)
+          .toList();
+      expect(blocks, hasLength(2));
+      expect(blocks[0].indent, 1);
+      expect(blocks[1].indent, 2);
+    });
+
     test('a chapter that came through as one verse says so', () {
       final result = EpubImport.convert(
         epub(
