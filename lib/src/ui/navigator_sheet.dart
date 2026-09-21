@@ -390,11 +390,14 @@ class _NavigatorSheetState extends State<_NavigatorSheet> {
 
   Widget _verseGrid(ThemeData theme) {
     final book = _book;
-    final chapter = book?.chapter(_chapter);
-    if (book == null || chapter == null) return const SizedBox.shrink();
+    if (book == null) return const SizedBox.shrink();
+    // From the outline, so picking a verse does not unpack the book the
+    // reader may yet decide not to open.
+    final verses = book.verseCountAt(_chapter);
+    if (verses == 0) return const SizedBox.shrink();
     return _NumberGrid(
       key: ValueKey('verses-${book.code}-$_chapter'),
-      count: chapter.verseCount,
+      count: verses,
       current:
           book.code == widget.current?.bookCode &&
               _chapter == widget.current?.chapter

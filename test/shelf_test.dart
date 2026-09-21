@@ -176,20 +176,24 @@ void main() {
   });
 
   group('reading a big file off the UI thread', () {
-    // Anything a whole Bible is read into has to survive the trip back from
-    // an isolate, which is where Shelf.add does the work for a real file.
-    test('a Bible crosses the isolate boundary whole', () async {
+    // Only bytes come back from the isolate. A Bible read from a .bib file
+    // keeps a closure for unpacking each book on demand, and no isolate can
+    // send a closure to another — so what crosses is the file, and the
+    // caller opens it on its own side.
+    test('the file crosses the isolate boundary, and reopens', () async {
       final imported = await compute(importFile, (
         BibFile.encode(parseFixture()),
         'test.bib',
       ));
 
       expect(imported.failure, isNull);
-      expect(imported.bible!.books, hasLength(3));
-      expect(imported.bible!.verseCount, parseFixture().verseCount);
       expect(imported.bytes, isNotNull);
+
+      final bible = BibFile.decode(imported.bytes!);
+      expect(bible.books, hasLength(3));
+      expect(bible.verseCount, parseFixture().verseCount);
       expect(
-        imported.bible!.bookByCode('GEN')!.chapter(1)!.verseText(1),
+        bible.bookByCode('GEN')!.chapter(1)!.verseText(1),
         'In the beginning, God created the heavens.',
       );
     });
@@ -197,7 +201,6 @@ void main() {
     test('an EPUB comes back converted, with its warnings', () async {
       final imported = await compute(importFile, (someEpub(), 'tsv.epub'));
 
-      expect(imported.bible!.books.single.code, 'GEN');
       expect(BibFile.decode(imported.bytes!).books.single.code, 'GEN');
     });
 
@@ -207,9 +210,22 @@ void main() {
         'notes.txt',
       ));
 
-      expect(imported.bible, isNull);
+      expect(imported.bytes, isNull);
       expect(imported.failure, contains('not an EPUB'));
     });
+
+    test(
+      'a damaged .bib is caught on the way in, not on the way out',
+      () async {
+        final bytes = BibFile.encode(parseFixture());
+        bytes[bytes.length - 30] ^= 0x01;
+
+        final imported = await compute(importFile, (bytes, 'broken.bib'));
+
+        expect(imported.bytes, isNull);
+        expect(imported.failure, isNotNull);
+      },
+    );
   });
 
   group('the library reads the shelf like anything else', () {

@@ -14,8 +14,13 @@ dependencies:
 
   # Material You: reads the platform's dynamic color palette when available.
   dynamic_color: ^1.7.0
-  # Gunzips the bundled Scripture; pure Dart, so it works on the web too.
+  # Gunzips the bundled Scripture and checksums its chunks; pure Dart, so it
+  # works on the web too.
   archive: ^4.0.0
+  # SHA-256 of a .bib file's Scripture, so two copies can be told apart
+  # without comparing megabytes. Already in the tree as a transitive
+  # dependency; named here because the app imports it directly.
+  crypto: ^3.0.0
   # Reading position, marks and settings.
   shared_preferences: ^2.3.2
   # USFX parsing. Only tool/build_assets.dart and the tests reach for this;

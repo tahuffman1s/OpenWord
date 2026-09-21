@@ -18,6 +18,10 @@ jobs:
       - run: dart format --output=none --set-exit-if-changed lib test tool
       - run: flutter analyze
       - run: flutter test
+      # The shipped Scripture is a binary; check it is one a reader can
+      # open, that its outline matches its text, and that its metadata
+      # describes what is actually in it.
+      - run: dart run tool/bib_lint.dart assets/bible/*.bib
 
   build-web:
     runs-on: ubuntu-latest

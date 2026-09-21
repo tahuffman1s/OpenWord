@@ -28,13 +28,34 @@ void main(List<String> args) {
       '${outputDir.path}/${translation.id}${Translations.assetExtension}',
     )..writeAsBytesSync(bytes);
 
-    // Decoding here is a build-time check that what ships can be read back —
-    // both the header a shelf lists from and the Scripture behind it.
-    final roundTripped = BibFile.decode(bytes);
+    // Decoding here is a build-time check that what ships can be read back:
+    // every chunk's checksum, the header a shelf lists from, and the
+    // Scripture behind it, book by book down to the words.
+    final roundTripped = BibFile.decode(bytes, verify: true);
     if (roundTripped.verseCount != bible.verseCount ||
         BibFile.readInfo(bytes).id != translation.id) {
       stderr.writeln('round trip mismatch for ${translation.id}');
       exitCode = 1;
+    }
+    for (final book in bible.books) {
+      final other = roundTripped.bookByCode(book.code);
+      if (other == null || other.chapterCount != book.chapterCount) {
+        stderr.writeln('${translation.id}: ${book.code} did not survive');
+        exitCode = 1;
+        continue;
+      }
+      for (var c = 1; c <= book.chapterCount; c++) {
+        final before = book.chapter(c)!;
+        final after = other.chapter(c)!;
+        for (var v = 1; v <= before.verseCount; v++) {
+          if (before.verseText(v) != after.verseText(v)) {
+            stderr.writeln(
+              '${translation.id}: ${book.code} $c:$v came back different',
+            );
+            exitCode = 1;
+          }
+        }
+      }
     }
 
     stdout.writeln(

@@ -145,11 +145,8 @@ class ReferenceSearch {
     }
 
     final targetChapter = (chapter ?? 1).clamp(1, book.chapterCount);
-    final chapterData = book.chapter(targetChapter)!;
-    final targetVerse = verse?.clamp(
-      1,
-      chapterData.verseCount == 0 ? 1 : chapterData.verseCount,
-    );
+    final verseCount = book.verseCountAt(targetChapter);
+    final targetVerse = verse?.clamp(1, verseCount == 0 ? 1 : verseCount);
     return Reference(book.code, targetChapter, targetVerse);
   }
 }
@@ -214,7 +211,7 @@ class ReferenceMatcher {
       final verse = match.group(3) == null
           ? null
           : int.tryParse(match.group(3)!);
-      final verses = book.chapter(chapter)!.verseCount;
+      final verses = book.verseCountAt(chapter);
       found.add(
         ReferenceMatch(
           start: match.start,

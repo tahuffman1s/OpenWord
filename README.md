@@ -110,26 +110,81 @@ against it.
 
 ### The `.bib` format
 
-A `.bib` file is one translation, whole, in one file: a compact binary
-encoding of the text behind a small header that says what the file holds, so a
-file can be listed without being decoded. It is what the app ships its own
-three translations as, as well as what an import is converted to.
+A `.bib` file is one translation, whole, in one file. It is what the app
+ships its own three translations as, and what an import is converted to.
+The full specification is [`docs/bib-format.md`](docs/bib-format.md); what
+follows is the shape of it.
 
-| Offset | Size | Meaning |
-|---|---|---|
-| 0 | 3 | `BIB` |
-| 3 | 1 | Format version, currently 1 |
-| 4 | 1 | Flags; bit 0 set means the payload is gzipped |
-| 5 | 2 | Length of the metadata, big-endian |
-| 7 | … | Metadata: UTF-8 JSON — `id`, `name`, `abbreviation`, `license`, `source` |
-| … | … | Payload: the whole Bible, `BibleCodec`-encoded |
+A six-byte header and then a stream of chunks, each saying how long it is,
+what it is, and what it should check out to:
 
-The metadata is in the clear so that listing a shelf of translations means
-reading a few dozen bytes of each file. It repeats what the payload says;
-where the two disagree the payload wins, since that is what is read. The
-format is implemented in `lib/src/model/bib_file.dart` and the encoding it
-wraps in `lib/src/model/bible_codec.dart` — both MIT, like the rest of the
-app, so anything else may read or write `.bib` files.
+| Size | Meaning |
+|---|---|
+| 4 | Tag, four ASCII letters |
+| 4 | Payload length |
+| 4 | CRC-32 of the payload |
+| … | Payload |
+
+**The case of a tag's first letter says what to do with a chunk you do not
+recognise**, the rule PNG uses. Upper case is critical: a reader that meets
+an unknown one must refuse the file. Lower case is ancillary: skip it and
+carry on. That single rule is what lets the format grow — `xref`, `strg`,
+`srch` and `sign` are reserved for cross-references, a word-level Strong's
+alignment, a search index and a signature, and a file carrying any of them
+still opens in a reader written before they existed.
+
+Two chunks are defined, both critical. `META` is UTF-8 JSON and comes
+first, so a shelf of translations is listed by reading a few hundred bytes
+of each rather than opening any of them. It carries the identity and
+licence, and three things worth saying out loud:
+
+- **`language`, `script` and `direction`** — a Hebrew or Arabic Bible
+  renders right to left because its file says so.
+- **`versification`** — everything anchored to a verse, the
+  cross-references and the interlinear included, is anchored to one
+  numbering, and Bibles do not share one. A file that does not say can be
+  mis-anchored with nothing appearing to go wrong, which is the worst way
+  for it to go wrong.
+- **`contentHash`** — SHA-256 of the Scripture, so two copies can be told
+  apart without comparing megabytes.
+
+`TEXT` holds the Scripture as an outline of every book followed by one gzip
+member per book. **The outline is the point.** It carries which books,
+how many chapters, and how long each chapter is — so the book list, the
+chapter grid and the verse grid are all drawn without unpacking a word, and
+a book is found and unpacked on its own when it is actually read. Opening
+the World English Bible touches none of its 84 books; reading John unpacks
+John.
+
+Per-book compression costs 4% against one stream over the whole Bible
+(1.69 MB → 1.76 MB) and buys unpacking 25 kB to open Genesis instead of
+5 MB. Finer does not pay: per chapter costs 37%, and a shared preset
+dictionary does not win it back.
+
+Version 1 — one gzip stream, a fixed header, no outline — is still read, so
+a shelf full of them keeps working. `dart run tool/upgrade_bib.dart
+<file.bib>` rewrites one as version 2, comparing the result with the
+original verse by verse before replacing it.
+
+```bash
+dart run tool/bib_lint.dart <file.bib>     # check one
+dart run tool/build_bib_corpus.dart        # rebuild test/corpus/
+```
+
+`bib_lint` reports the version, the chunks, whether every checksum matches,
+whether the outline agrees with the text it stands for, and whether the
+metadata describes what is actually in the file.
+[`test/corpus/`](test/corpus/) holds small files named for what a reader is
+supposed to do with each — the ones that must read alike, the unknown
+ancillary chunk that must be skipped, the unknown critical chunk that must
+not be, and the damaged, truncated, too-new and not-a-`.bib` files that
+must be refused — so another implementation has a fixed point to test
+against.
+
+It is implemented in `lib/src/model/bib_file.dart` and
+`lib/src/model/bible_codec.dart`, both MIT like the rest of the app. It is
+a reading format, not an archival one: it keeps what a reader displays, not
+the full semantics of the USFM behind it.
 
 ### What the EPUB converter does
 

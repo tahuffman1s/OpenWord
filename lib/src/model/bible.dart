@@ -159,23 +159,121 @@ class Chapter {
   }
 }
 
+/// What a book is, before any of it has been read.
+///
+/// A `.bib` file keeps this beside the text so that the whole of navigation
+/// — how many chapters a book has, how many verses each of them has — can be
+/// answered without unpacking a single word of Scripture.
+class ChapterOutline {
+  const ChapterOutline({required this.number, required this.verseCount});
+
+  final int number;
+  final int verseCount;
+}
+
 /// A book of the Bible with its chapters.
+///
+/// The chapters may not have been read yet. A book out of a `.bib` file
+/// carries its outline and a way to fetch the rest, and unpacks itself the
+/// first time anything asks for [chapters] — which reading one book does and
+/// navigating between them does not.
 class Book {
-  Book({required this.meta, required this.chapters});
+  /// A book whose chapters are already in hand: an import, a parse, a test.
+  Book({required this.meta, required List<Chapter> chapters})
+    : _chapters = chapters,
+      _load = null,
+      outline = List.unmodifiable([
+        for (final chapter in chapters)
+          ChapterOutline(
+            number: chapter.number,
+            verseCount: chapter.verseCount,
+          ),
+      ]);
+
+  /// A book still in the file. [load] is called at most once, and only if
+  /// something needs the text itself.
+  Book.deferred({
+    required this.meta,
+    required List<ChapterOutline> outline,
+    required List<Chapter> Function() load,
+  }) : _chapters = null,
+       // A private field cannot be a named initializing formal across
+       // libraries, and bib_file.dart calls this.
+       // ignore: prefer_initializing_formals
+       _load = load,
+       outline = List.unmodifiable(outline);
 
   final BookMeta meta;
-  final List<Chapter> chapters;
+
+  /// Every chapter's number and length, always available.
+  final List<ChapterOutline> outline;
+
+  List<Chapter>? _chapters;
+  final List<Chapter> Function()? _load;
+
+  /// The chapters, unpacking them if that has not happened yet.
+  List<Chapter> get chapters => _chapters ??= _load!();
+
+  /// Whether the text is in memory. Nothing in the app needs to know; the
+  /// tests do, because "does opening a Bible unpack all of it" is the whole
+  /// point of the arrangement.
+  bool get isLoaded => _chapters != null;
 
   String get code => meta.code;
   String get name => meta.name;
   String get abbrev => meta.abbrev;
   BookSection get section => meta.section;
-  int get chapterCount => chapters.length;
 
+  int get chapterCount => outline.length;
+
+  /// Every chapter number, in order, without unpacking anything.
+  Iterable<int> get chapterNumbers => outline.map((c) => c.number);
+
+  /// How many verses the nth chapter has, counting from one — the same
+  /// position [chapter] takes, not the printed number. Answered from the
+  /// outline, so asking does not unpack the book.
+  int verseCountAt(int position) => (position < 1 || position > outline.length)
+      ? 0
+      : outline[position - 1].verseCount;
+
+  /// Every verse in the book, from the outline.
+  int get verseCount =>
+      outline.fold(0, (sum, chapter) => sum + chapter.verseCount);
+
+  /// The nth chapter, counting from one — which is a position, not a number.
+  /// A book that begins at chapter 3 answers that chapter to `chapter(1)`.
   Chapter? chapter(int number) {
-    if (number < 1 || number > chapters.length) return null;
+    if (number < 1 || number > outline.length) return null;
     return chapters[number - 1];
   }
+}
+
+/// Which way the script of a translation runs.
+enum ReadingDirection {
+  ltr,
+  rtl;
+
+  static ReadingDirection fromKey(String key) =>
+      key.toLowerCase() == 'rtl' ? ReadingDirection.rtl : ReadingDirection.ltr;
+
+  String get key => name;
+}
+
+/// How a translation numbers its verses.
+///
+/// Carried because everything anchored to a verse — the cross-references,
+/// the original-language layer — is anchored to one scheme, and a file that
+/// does not say which it uses can be mis-anchored silently. Anything not
+/// listed here round-trips as written rather than being flattened.
+class Versification {
+  const Versification._();
+
+  /// The numbering of the English Protestant Bible, which the app's own
+  /// translations, its cross-references and its Strong's layer all share.
+  static const String english = 'eng';
+
+  /// Said by a file that does not know. Nothing may assume it matches.
+  static const String unknown = 'unknown';
 }
 
 /// Identity and licensing of a translation.
@@ -186,6 +284,11 @@ class TranslationInfo {
     required this.abbreviation,
     required this.license,
     required this.sourceUrl,
+    this.language = 'en',
+    this.script = '',
+    this.direction = ReadingDirection.ltr,
+    this.versification = Versification.unknown,
+    this.attribution = '',
   });
 
   final String id;
@@ -193,6 +296,47 @@ class TranslationInfo {
   final String abbreviation;
   final String license;
   final String sourceUrl;
+
+  /// BCP 47, so `en`, `es-419`, `arb`.
+  final String language;
+
+  /// ISO 15924, so `Latn`, `Hebr`, `Arab`. Empty where it is not said.
+  final String script;
+
+  /// Which way the text runs. A translation that does not say runs
+  /// left-to-right, which is what every translation shipped here does.
+  final ReadingDirection direction;
+
+  /// The verse numbering this translation follows; see [Versification].
+  final String versification;
+
+  /// Wording the licence obliges the app to show. Empty where there is
+  /// none — a public-domain text asks for nothing.
+  final String attribution;
+
+  TranslationInfo copyWith({
+    String? id,
+    String? name,
+    String? abbreviation,
+    String? license,
+    String? sourceUrl,
+    String? language,
+    String? script,
+    ReadingDirection? direction,
+    String? versification,
+    String? attribution,
+  }) => TranslationInfo(
+    id: id ?? this.id,
+    name: name ?? this.name,
+    abbreviation: abbreviation ?? this.abbreviation,
+    license: license ?? this.license,
+    sourceUrl: sourceUrl ?? this.sourceUrl,
+    language: language ?? this.language,
+    script: script ?? this.script,
+    direction: direction ?? this.direction,
+    versification: versification ?? this.versification,
+    attribution: attribution ?? this.attribution,
+  );
 }
 
 /// A fully parsed Bible held in memory.
@@ -221,12 +365,9 @@ class Bible {
 
   int? indexOfCode(String code) => _indexByCode[code.toUpperCase()];
 
-  int get verseCount => books.fold(
-    0,
-    (total, book) =>
-        total +
-        book.chapters.fold(0, (sum, chapter) => sum + chapter.verseCount),
-  );
+  /// Every verse in the translation, counted from the books' outlines, so
+  /// asking does not unpack any of them.
+  int get verseCount => books.fold(0, (total, book) => total + book.verseCount);
 }
 
 /// A place in the Bible: book code plus chapter, and optionally a verse.

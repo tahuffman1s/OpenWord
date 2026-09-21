@@ -1,5 +1,34 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **`.bib` version 2: a Bible opens one book at a time.** The Scripture is
+  now compressed per book behind an outline of the whole translation, so
+  the book list, the chapter grid and the verse grid are drawn without
+  unpacking a word, and a book is unpacked only when it is read. Opening
+  the World English Bible touches none of its 84 books; reading John
+  unpacks John. Per-book compression costs 4% on disk (1.69 MB → 1.76 MB)
+  against the 5 MB that used to be built on every open.
+- **The file is a stream of chunks now, each checksummed**, with PNG's rule
+  that an unknown upper-case chunk stops a reader and an unknown lower-case
+  one is skipped. That is what lets the format grow: `xref`, `strg`, `srch`
+  and `sign` are reserved for cross-references, a word-level Strong's
+  alignment, a search index and a signature, and a file carrying any of
+  them still opens in a reader written before they existed.
+- **A `.bib` says what it is.** Language, script, reading direction,
+  versification, the attribution its licence obliges, and a SHA-256 of the
+  Scripture. A translation that runs right to left now renders right to
+  left, because the file says so.
+- Version 1 files are still read, so an existing shelf keeps working.
+  `dart run tool/upgrade_bib.dart <file.bib>` rewrites one as version 2 and
+  compares the result verse by verse before replacing it.
+- The format is specified in `docs/bib-format.md`, checked by
+  `tool/bib_lint.dart`, and pinned by a conformance corpus in
+  `test/corpus/` that any other implementation can test itself against.
+- Importing a `.bib` now verifies every checksum on the way in, which is
+  the one moment the whole file is in hand.
+
 ## 1.10.0
 
 ### Added

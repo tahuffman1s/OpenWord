@@ -209,8 +209,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _index = [
       for (final book in _bible.books)
         if (showDeuterocanon || book.section != BookSection.deuterocanon)
-          for (final chapter in book.chapters)
-            Reference(book.code, chapter.number),
+          // From the outline: flattening the Bible must not unpack it.
+          for (final number in book.chapterNumbers)
+            Reference(book.code, number),
     ];
     if (_page >= _index.length) _page = _index.isEmpty ? 0 : _index.length - 1;
   }
@@ -486,6 +487,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     ),
                     book: book,
                     chapter: chapter,
+                    direction: _bible.translation.direction,
                     style: ScriptureStyle.of(context, _settings),
                     highlights: {
                       for (final entry
@@ -537,6 +539,7 @@ class _ChapterPage extends StatefulWidget {
   const _ChapterPage({
     required this.book,
     required this.chapter,
+    required this.direction,
     required this.style,
     required this.highlights,
     required this.flagged,
@@ -559,6 +562,12 @@ class _ChapterPage extends StatefulWidget {
 
   final Book book;
   final Chapter chapter;
+
+  /// Which way this translation runs. Everything shipped here runs
+  /// left-to-right; an imported Hebrew or Arabic Bible does not, and the
+  /// file says so.
+  final ReadingDirection direction;
+
   final ScriptureStyle style;
   final Map<int, Color> highlights;
   final Set<int> flagged;
@@ -766,9 +775,17 @@ class _ChapterPageState extends State<_ChapterPage> {
         child: Center(
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: _comparing ? 1000 : 720),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: children,
+            // The page runs the way the translation does. The chrome around
+            // it keeps following the device, which is the reader's own
+            // language rather than the text's.
+            child: Directionality(
+              textDirection: widget.direction == ReadingDirection.rtl
+                  ? TextDirection.rtl
+                  : TextDirection.ltr,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
             ),
           ),
         ),

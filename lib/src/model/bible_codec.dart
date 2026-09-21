@@ -1,8 +1,8 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'bible.dart';
 import 'book_meta.dart';
+import 'byte_io.dart';
 
 /// A compact binary encoding for a whole [Bible].
 ///
@@ -32,7 +32,7 @@ class BibleCodec {
   static const int version = 2;
 
   static Uint8List encode(Bible bible) {
-    final out = _Writer()
+    final out = ByteWriter()
       ..bytes(_magic)
       ..byte(version)
       ..string(bible.translation.id)
@@ -43,39 +43,100 @@ class BibleCodec {
       ..varint(bible.books.length);
 
     for (final book in bible.books) {
-      out
-        ..string(book.code)
-        ..varint(book.chapters.length);
-      for (final chapter in book.chapters) {
-        out
-          ..varint(chapter.number)
-          ..varint(chapter.blocks.length);
-        for (final block in chapter.blocks) {
-          out
-            ..byte(block.style.index)
-            ..byte(block.indent.clamp(0, 255))
-            ..byte(block.indentFirstLine ? 1 : 0)
-            ..varint(block.segments.length);
-          for (final segment in block.segments) {
-            out
-              ..varint(segment.verse)
-              ..byte(segment.startsVerse ? 1 : 0)
-              ..string(segment.text);
-          }
-        }
-        out.varint(chapter.notes.length);
-        for (final note in chapter.notes) {
-          out.string(note);
-        }
-      }
+      out.string(book.code);
+      writeChapters(out, book.chapters);
     }
     return out.take();
   }
 
+  /// One book's chapters, and nothing else.
+  ///
+  /// This is what a `.bib` v2 file compresses one at a time, so that reading
+  /// Genesis costs Genesis rather than the whole Bible. The bytes are
+  /// exactly what [encode] writes after a book's code, which is what lets
+  /// both formats share a decoder.
+  static void writeChapters(ByteWriter out, List<Chapter> chapters) {
+    out.varint(chapters.length);
+    for (final chapter in chapters) {
+      out
+        ..varint(chapter.number)
+        ..varint(chapter.blocks.length);
+      for (final block in chapter.blocks) {
+        out
+          ..byte(block.style.index)
+          ..byte(block.indent.clamp(0, 255))
+          ..byte(block.indentFirstLine ? 1 : 0)
+          ..varint(block.segments.length);
+        for (final segment in block.segments) {
+          out
+            ..varint(segment.verse)
+            ..byte(segment.startsVerse ? 1 : 0)
+            ..string(segment.text);
+        }
+      }
+      out.varint(chapter.notes.length);
+      for (final note in chapter.notes) {
+        out.string(note);
+      }
+    }
+  }
+
+  /// The inverse of [writeChapters].
+  static List<Chapter> readChapters(ByteReader input) {
+    final chapterCount = input.varint();
+    final chapters = <Chapter>[];
+    for (var c = 0; c < chapterCount; c++) {
+      final number = input.varint();
+      final blockCount = input.varint();
+      final blocks = <Block>[];
+      for (var i = 0; i < blockCount; i++) {
+        final styleIndex = input.byte();
+        final indent = input.byte();
+        final flags = input.byte();
+        final segmentCount = input.varint();
+        final segments = <VerseSegment>[
+          for (var s = 0; s < segmentCount; s++)
+            VerseSegment(
+              verse: input.varint(),
+              startsVerse: input.byte() == 1,
+              text: input.string(),
+            ),
+        ];
+        blocks.add(
+          Block(
+            style: styleIndex < BlockStyle.values.length
+                ? BlockStyle.values[styleIndex]
+                : BlockStyle.paragraph,
+            indent: indent,
+            indentFirstLine: flags & 1 != 0,
+            segments: segments,
+          ),
+        );
+      }
+      final noteCount = input.varint();
+      final notes = <String>[
+        for (var n = 0; n < noteCount; n++) input.string(),
+      ];
+      chapters.add(Chapter(number: number, blocks: blocks, notes: notes));
+    }
+    return chapters;
+  }
+
+  /// One book's chapters, packed on their own.
+  static Uint8List encodeChapters(List<Chapter> chapters) {
+    final out = ByteWriter();
+    writeChapters(out, chapters);
+    return out.takeCopy();
+  }
+
+  /// Unpacks what [encodeChapters] wrote.
+  static List<Chapter> decodeChapters(Uint8List data) =>
+      readChapters(ByteReader(data));
+
   /// Decodes [data]. Throws [FormatException] if it is not this format or was
   /// written by a newer version.
   static Bible decode(Uint8List data) {
-    final input = _Reader(data);
+    final input = ByteReader(data);
     for (final expected in _magic) {
       if (input.byte() != expected) {
         throw const FormatException('Not an OpenWord Bible file');
@@ -98,129 +159,12 @@ class BibleCodec {
     final books = <Book>[];
     for (var b = 0; b < bookCount; b++) {
       final code = input.string();
-      final chapterCount = input.varint();
-      final chapters = <Chapter>[];
-      for (var c = 0; c < chapterCount; c++) {
-        final number = input.varint();
-        final blockCount = input.varint();
-        final blocks = <Block>[];
-        for (var i = 0; i < blockCount; i++) {
-          final styleIndex = input.byte();
-          final indent = input.byte();
-          final flags = input.byte();
-          final segmentCount = input.varint();
-          final segments = <VerseSegment>[];
-          for (var s = 0; s < segmentCount; s++) {
-            segments.add(
-              VerseSegment(
-                verse: input.varint(),
-                startsVerse: input.byte() == 1,
-                text: input.string(),
-              ),
-            );
-          }
-          blocks.add(
-            Block(
-              style: styleIndex < BlockStyle.values.length
-                  ? BlockStyle.values[styleIndex]
-                  : BlockStyle.paragraph,
-              indent: indent,
-              indentFirstLine: flags & 1 != 0,
-              segments: segments,
-            ),
-          );
-        }
-        final noteCount = input.varint();
-        final notes = <String>[
-          for (var n = 0; n < noteCount; n++) input.string(),
-        ];
-        chapters.add(Chapter(number: number, blocks: blocks, notes: notes));
-      }
+      final chapters = readChapters(input);
       // Unknown book codes are skipped rather than failing the whole file.
-      if (BookMeta.lookup(code) != null) {
-        books.add(Book(meta: BookMeta.lookup(code)!, chapters: chapters));
-      }
+      final meta = BookMeta.lookup(code);
+      if (meta != null) books.add(Book(meta: meta, chapters: chapters));
     }
     if (books.isEmpty) throw const FormatException('Bible file has no books');
     return Bible(translation: translation, books: books);
-  }
-}
-
-class _Writer {
-  Uint8List _buffer = Uint8List(1 << 20);
-  int _length = 0;
-
-  void _ensure(int extra) {
-    if (_length + extra <= _buffer.length) return;
-    var size = _buffer.length * 2;
-    while (size < _length + extra) {
-      size *= 2;
-    }
-    _buffer = Uint8List(size)..setRange(0, _length, _buffer);
-  }
-
-  void byte(int value) {
-    _ensure(1);
-    _buffer[_length++] = value & 0xff;
-  }
-
-  void bytes(List<int> values) {
-    _ensure(values.length);
-    _buffer.setRange(_length, _length + values.length, values);
-    _length += values.length;
-  }
-
-  void varint(int value) {
-    var remaining = value;
-    while (remaining >= 0x80) {
-      byte((remaining & 0x7f) | 0x80);
-      remaining >>= 7;
-    }
-    byte(remaining);
-  }
-
-  void string(String value) {
-    final encoded = utf8.encode(value);
-    varint(encoded.length);
-    bytes(encoded);
-  }
-
-  Uint8List take() => Uint8List.sublistView(_buffer, 0, _length);
-}
-
-class _Reader {
-  _Reader(this._data);
-
-  final Uint8List _data;
-  int _offset = 0;
-
-  int byte() {
-    if (_offset >= _data.length) {
-      throw const FormatException('Bible file ended early');
-    }
-    return _data[_offset++];
-  }
-
-  int varint() {
-    var result = 0;
-    var shift = 0;
-    while (true) {
-      final part = byte();
-      result |= (part & 0x7f) << shift;
-      if (part & 0x80 == 0) return result;
-      shift += 7;
-    }
-  }
-
-  String string() {
-    final length = varint();
-    if (_offset + length > _data.length) {
-      throw const FormatException('Bible file ended early');
-    }
-    final value = utf8.decode(
-      Uint8List.sublistView(_data, _offset, _offset + length),
-    );
-    _offset += length;
-    return value;
   }
 }

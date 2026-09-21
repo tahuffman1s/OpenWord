@@ -115,11 +115,22 @@ class Shelf extends ChangeNotifier {
         ? await compute(importFile, request)
         : importFile(request);
 
-    final bible = imported.bible;
-    if (bible == null) {
+    final encoded = imported.bytes;
+    if (encoded == null) {
       return ShelfResult.failed(
         imported.failure ?? 'That file cannot be read.',
       );
+    }
+
+    // Opening it happens here rather than on the isolate: a Bible read from
+    // a .bib file keeps a way of unpacking each book on demand, and a
+    // closure cannot be sent between isolates. It is cheap — the outline is
+    // read and not a word of Scripture.
+    final Bible bible;
+    try {
+      bible = BibFile.decode(encoded);
+    } on Object catch (error) {
+      return ShelfResult.failed('That translation could not be read: $error');
     }
 
     try {
@@ -181,20 +192,17 @@ class Shelf extends ChangeNotifier {
   }
 }
 
-/// A translation read off a file, with the `.bib` bytes to write for it.
+/// The `.bib` file [importFile] made, and what it had to say doing it.
 ///
-/// [importFile] does the reading and the encoding together so that both can
-/// happen on one isolate; this is what comes back from it.
+/// Only bytes come back. A Bible read from a `.bib` file carries a way of
+/// unpacking each book when it is wanted, and that is a closure, which no
+/// isolate can send to another; the caller opens the bytes on its own side,
+/// which costs the outline and nothing more.
 @immutable
 class ImportedBible {
-  const ImportedBible({
-    this.bible,
-    this.bytes,
-    this.warnings = const [],
-    this.failure,
-  });
+  const ImportedBible({this.bytes, this.warnings = const [], this.failure});
 
-  final Bible? bible;
+  /// The encoded `.bib`, ready to be written and reopened. Null on failure.
   final Uint8List? bytes;
   final List<String> warnings;
   final String? failure;
@@ -209,9 +217,11 @@ ImportedBible importFile((Uint8List, String) request) {
   final (bytes, fileName) = request;
   try {
     if (BibFile.looksLikeBib(bytes)) {
-      // Already in the app's own format: check it reads, then keep the file
-      // byte for byte rather than encoding it afresh.
-      return ImportedBible(bible: BibFile.decode(bytes), bytes: bytes);
+      // Already in the app's own format: check it reads — every chunk's
+      // checksum, since this is the one moment the whole file is in hand —
+      // and then keep it byte for byte rather than encoding it afresh.
+      BibFile.decode(bytes, verify: true);
+      return ImportedBible(bytes: bytes);
     }
 
     final result = EpubImport.convert(bytes, fileName: fileName);
@@ -223,7 +233,6 @@ ImportedBible importFile((Uint8List, String) request) {
       );
     }
     return ImportedBible(
-      bible: bible,
       bytes: BibFile.encode(bible),
       warnings: result.warnings,
     );

@@ -642,4 +642,50 @@ void main() {
     expect(harness.reading.lastPosition?.chapter, 2);
     expect(harness.reading.history.first.label, 'Genesis 2');
   });
+
+  group('a translation that runs the other way', () {
+    testWidgets('the page follows the direction the file declares', (
+      tester,
+    ) async {
+      final ltr = parseFixture();
+
+      // The same Scripture, said to run right to left — which is what an
+      // imported Hebrew or Arabic Bible looks like.
+      await pumpReader(
+        tester,
+        bible: Bible(
+          translation: ltr.translation.copyWith(
+            direction: ReadingDirection.rtl,
+            language: 'he',
+            script: 'Hebr',
+          ),
+          books: ltr.books,
+        ),
+      );
+
+      final block = tester.widget<Directionality>(
+        find
+            .ancestor(
+              of: find.byType(ScriptureBlock).first,
+              matching: find.byType(Directionality),
+            )
+            .first,
+      );
+      expect(block.textDirection, TextDirection.rtl);
+    });
+
+    testWidgets('and left to right where it does not', (tester) async {
+      await pumpReader(tester);
+
+      final block = tester.widget<Directionality>(
+        find
+            .ancestor(
+              of: find.byType(ScriptureBlock).first,
+              matching: find.byType(Directionality),
+            )
+            .first,
+      );
+      expect(block.textDirection, TextDirection.ltr);
+    });
+  });
 }

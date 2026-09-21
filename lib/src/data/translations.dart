@@ -17,6 +17,9 @@ class Translations {
     abbreviation: 'WEB',
     license: 'Public Domain',
     sourceUrl: 'https://ebible.org/web/',
+    language: 'en',
+    script: 'Latn',
+    versification: Versification.english,
   );
 
   static const TranslationInfo webbe = TranslationInfo(
@@ -25,6 +28,9 @@ class Translations {
     abbreviation: 'WEBBE',
     license: 'Public Domain',
     sourceUrl: 'https://ebible.org/webbe/',
+    language: 'en-GB',
+    script: 'Latn',
+    versification: Versification.english,
   );
 
   static const TranslationInfo bsb = TranslationInfo(
@@ -33,6 +39,9 @@ class Translations {
     abbreviation: 'BSB',
     license: 'Public Domain',
     sourceUrl: 'https://berean.bible/',
+    language: 'en',
+    script: 'Latn',
+    versification: Versification.english,
   );
 
   /// Bundled in this order; the first is the default.

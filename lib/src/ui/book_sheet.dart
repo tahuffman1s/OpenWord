@@ -30,10 +30,7 @@ class _BookSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final note = bookNotes[book.code];
-    final verses = book.chapters.fold<int>(
-      0,
-      (sum, chapter) => sum + chapter.verseCount,
-    );
+    final verses = book.verseCount;
 
     return SafeArea(
       child: SingleChildScrollView(
