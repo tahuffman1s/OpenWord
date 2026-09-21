@@ -1,0 +1,61 @@
+# OpenWord from this working tree, for changes that are not in a release yet.
+#
+# Flutter ships no arm64 Linux SDK — the releases index lists x64 alone — so
+# the build stage is pinned to linux/amd64 and will crawl under emulation on
+# a Pi. Build it on an x86 machine and push the result instead:
+#
+#   docker buildx build --platform linux/arm64 \
+#     -f deploy/Dockerfile.source -t you/openword:dev --push .
+#
+# The output is static files, so the arm64 image that comes out is the same
+# app; only nginx differs. Run this from the repository root, not deploy/.
+
+ARG NGINX_VERSION=1.27-alpine
+ARG FLUTTER_VERSION=3.47.4
+ARG FLUTTER_SHA256=5b45f0ceda99b9bebdc873e7e69f6450aeb4c30f454b505e2e62fc9255a907d3
+
+FROM --platform=linux/amd64 debian:bookworm-slim AS build
+ARG FLUTTER_VERSION
+ARG FLUTTER_SHA256
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates curl git unzip xz-utils zip \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    url="https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_${FLUTTER_VERSION}-stable.tar.xz"; \
+    curl -fsSL "$url" -o /tmp/flutter.tar.xz; \
+    echo "${FLUTTER_SHA256}  /tmp/flutter.tar.xz" | sha256sum -c -; \
+    tar -xJf /tmp/flutter.tar.xz -C /opt; \
+    rm /tmp/flutter.tar.xz
+ENV PATH="/opt/flutter/bin:${PATH}"
+RUN git config --global --add safe.directory /opt/flutter && flutter --version
+
+WORKDIR /app
+# Dependencies first, so editing lib/ does not re-resolve them.
+COPY pubspec.yaml pubspec.lock ./
+RUN flutter pub get
+
+COPY . .
+# --no-web-resources-cdn keeps CanvasKit in the bundle. Without it the app
+# fetches ~7 MB from gstatic.com on every cold load, and renders no text at
+# all on a network that cannot reach Google.
+RUN flutter build web --release --no-web-resources-cdn
+
+RUN find build/web -type f \( \
+        -name '*.js'   -o -name '*.wasm'  -o -name '*.json' -o \
+        -name '*.html' -o -name '*.css'   -o -name '*.ttf'  -o \
+        -name '*.otf'  -o -name '*.symbols' \) \
+        -exec gzip -9 -k -f {} \;
+
+FROM nginx:${NGINX_VERSION}
+RUN sed -i 's#^\( *\)font/woff  *woff;#\1font/ttf     ttf;\n\1font/otf     otf;\n&#' \
+        /etc/nginx/mime.types \
+    && grep -q 'font/ttf' /etc/nginx/mime.types
+
+COPY deploy/nginx.conf /etc/nginx/conf.d/default.conf
+COPY --from=build /app/build/web /usr/share/nginx/html
+
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD wget -qO- http://127.0.0.1/healthz >/dev/null 2>&1 || exit 1

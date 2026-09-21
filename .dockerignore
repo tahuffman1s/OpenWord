@@ -1,0 +1,15 @@
+# deploy/ is deliberately kept: Dockerfile.source builds from the repository
+# root and copies deploy/nginx.conf out of the context.
+.git
+.github
+.dart_tool
+.idea
+build
+android
+ios
+linux
+macos
+windows
+test
+tool
+*.iml

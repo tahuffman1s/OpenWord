@@ -1,0 +1,64 @@
+# OpenWord behind a Cloudflare Tunnel.
+#
+#   cp .env.example .env    # put your tunnel token in it
+#   docker compose up -d
+#
+# The web container publishes no port. Nothing but cloudflared can reach it,
+# and cloudflared makes only outbound connections, so the Pi needs no port
+# forwarded and no inbound firewall hole at all.
+
+name: openword
+
+services:
+  web:
+    build:
+      # To build from the working tree instead of a release, point this at
+      # the repository root and swap the dockerfile — Dockerfile.source
+      # copies deploy/nginx.conf, so it needs the wider context:
+      #   context: ..
+      #   dockerfile: deploy/Dockerfile.source
+      context: .
+      dockerfile: Dockerfile
+      args:
+        VERSION: ${OPENWORD_VERSION:-v1.10.0}
+    image: openword-web:${OPENWORD_VERSION:-v1.10.0}
+    restart: unless-stopped
+    expose:
+      - "80"
+    # Uncomment to reach it directly from the Pi while setting things up.
+    # ports:
+    #   - "127.0.0.1:8080:80"
+    networks:
+      - openword
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  cloudflared:
+    # Pin this to a dated tag once you know the one you want; :latest with
+    # autoupdate off at least keeps the running binary predictable.
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+      # Cloudflare's own metrics endpoint, handy for `docker logs`.
+      TUNNEL_METRICS: 0.0.0.0:2000
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - openword
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+networks:
+  openword:
+    driver: bridge
