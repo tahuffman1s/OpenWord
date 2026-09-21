@@ -1,7 +1,7 @@
 name: openword
 description: "OpenWord — a free and open source Bible app with Material You theming."
 publish_to: 'none'
-version: 1.8.2+11
+version: 1.8.3+12
 
 environment:
   sdk: ^3.13.3

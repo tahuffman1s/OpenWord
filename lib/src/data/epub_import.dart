@@ -818,6 +818,18 @@ class _BibleBuilder {
       startsVerse = false;
     }
 
+    /// Opens a chapter partway through a block.
+    ///
+    /// Anything buffered ahead of it precedes the new chapter's first verse,
+    /// so it is a label — the book's name as a running head — and is marked
+    /// as belonging to no verse so that it is dropped below. Text that has
+    /// already been placed in a verse is left as it is.
+    void startChapterHere(int number) {
+      if (segments.isEmpty && !startsVerse) verse = 0;
+      flush();
+      _startChapter(number);
+    }
+
     void openVerse(int number) {
       flush();
       // Obadiah, Philemon, 2 and 3 John and Jude have one chapter, and many
@@ -861,7 +873,7 @@ class _BibleBuilder {
                 _chapter = 0;
                 _verse = 0;
               }
-              if (chapter != _chapter) _startChapter(chapter);
+              if (chapter != _chapter) startChapterHere(chapter);
               openVerse(number);
               buffer.write(text.substring(numbered.end));
               return;
@@ -874,7 +886,7 @@ class _BibleBuilder {
             final number = int.parse(both.group(2)!);
             if (chapter <= EpubImport.maxChapter &&
                 number <= EpubImport.maxVerse) {
-              if (chapter != _chapter) _startChapter(chapter);
+              if (chapter != _chapter) startChapterHere(chapter);
               openVerse(number);
               text = text.substring(both.end);
             }
@@ -910,7 +922,7 @@ class _BibleBuilder {
       if (_isChapterLabel(classes)) {
         final opened = _chapterAt(node.innerText, id);
         if (opened != null) {
-          if (opened.chapter != _chapter) _startChapter(opened.chapter);
+          if (opened.chapter != _chapter) startChapterHere(opened.chapter);
           if (opened.verse != null) openVerse(opened.verse!);
         }
         // Either way the marker is a number, not Scripture.

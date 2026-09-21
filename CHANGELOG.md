@@ -1,5 +1,14 @@
 # Changelog
 
+## 1.8.3
+
+### Fixed
+- **The running head was only being dropped from a book's first chapter.**
+  Text before a chapter's first verse is left out by marking it as belonging
+  to no verse, and that mark was being taken from the verse the paragraph
+  started at — which is 0 at the head of a book, but the previous chapter's
+  last verse everywhere after it. Chapter 2 onwards kept the label.
+
 ## 1.8.2
 
 ### Fixed

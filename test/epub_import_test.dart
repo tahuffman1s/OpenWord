@@ -720,8 +720,9 @@ void main() {
     });
 
     test('the running head before verse 1 is not read as Scripture', () {
-      // The ESV repeats the book's name inside the paragraph that opens a
-      // chapter, right before the chapter marker.
+      // The ESV repeats the book's name inside the paragraph that opens
+      // every chapter, right before the chapter marker — not just the first,
+      // where the verse count happens to make it easy to spot.
       final result = EpubImport.convert(
         epub(
           documents: [
@@ -729,19 +730,44 @@ void main() {
               'gen.xhtml',
               '<h1>Genesis</h1>'
                   '<p><span class="book-name">GENESIS</span>'
+                  '<b class="chapter-num" id="v01001001-1">1:1\u00a0</b>'
+                  'In the beginning God created the heavens.'
+                  '<b class="verse-num">2\u00a0</b>The earth was without '
+                  'form.</p>'
+                  '<p><span class="book-name">GENESIS</span>'
                   '<b class="chapter-num" id="v01002001-1">2:1\u00a0</b>'
-                  'Thus the heavens and the earth were finished.</p>',
+                  'Thus the heavens and the earth were finished.</p>'
+                  '<p><span class="book-name">GENESIS</span>'
+                  '<b class="chapter-num" id="v01003001-1">3:1\u00a0</b>'
+                  'Now the serpent was more crafty.</p>',
             ),
           ],
         ),
       );
 
-      final chapter = result.bible!.books.single.chapters.single;
+      final book = result.bible!.books.single;
+      expect(book.chapterCount, 3);
       expect(
-        chapter.verseText(1),
+        book.chapter(1)!.verseText(1),
+        'In the beginning God created the heavens.',
+      );
+      expect(
+        book.chapter(2)!.verseText(1),
         'Thus the heavens and the earth were finished.',
       );
-      expect(chapter.blocks.first.segments.first.text, isNot(contains('GEN')));
+      expect(book.chapter(3)!.verseText(1), 'Now the serpent was more crafty.');
+
+      for (var number = 1; number <= 3; number++) {
+        for (final block in book.chapter(number)!.blocks) {
+          for (final segment in block.segments) {
+            expect(
+              segment.text,
+              isNot(contains('GENESIS')),
+              reason: 'the running head survived into chapter $number',
+            );
+          }
+        }
+      }
     });
 
     test('a heading before a chapter break heads the chapter it opens', () {
