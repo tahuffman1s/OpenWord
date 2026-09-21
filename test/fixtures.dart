@@ -5,9 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:openword/src/data/atlas.dart';
 import 'package:openword/src/data/book_intros.dart';
 import 'package:openword/src/data/cross_references.dart';
+import 'package:openword/src/data/originals.dart';
 import 'package:openword/src/data/update_backend.dart';
 import 'package:openword/src/data/usfx_parser.dart';
 import 'package:openword/src/model/bib_file.dart';
+import 'package:openword/src/model/strongs_codec.dart';
 import 'package:openword/src/model/xref_codec.dart';
 import 'package:openword/src/model/bible.dart';
 
@@ -185,6 +187,99 @@ final List<XrefEntry> fixtureXrefs = [
   ),
 ];
 
+/// Hebrew behind Genesis 1:1 and Greek behind Matthew 1:1, with the two
+/// dictionary entries they need — enough to drive the whole chain from a
+/// verse to a concordance.
+Uint8List buildFixtureOriginals() {
+  final writer = StrongsWriter();
+  final genesis = CrossReferences.indexOfBook('GEN');
+  final matthew = CrossReferences.indexOfBook('MAT');
+
+  writer.addVerse(StrongsCodec.verseKey(genesis, 1, 1), const [
+    OriginalWord(
+      text: 'בְּרֵאשִׁית',
+      strongs: StrongsNumber('H', 7225),
+      morphology: 'Noun common feminine singular absolute',
+    ),
+    OriginalWord(
+      text: 'בָּרָא',
+      strongs: StrongsNumber('H', 1254),
+      morphology: 'Verb qal perfect third person masculine singular',
+    ),
+    OriginalWord(
+      text: 'אֱלֹהִים',
+      strongs: StrongsNumber('H', 430),
+      morphology: 'Noun common masculine plural absolute',
+    ),
+  ]);
+  // The same word again, so the concordance has more than one verse in it.
+  writer.addVerse(StrongsCodec.verseKey(genesis, 1, 3), const [
+    OriginalWord(
+      text: 'אֱלֹהִים',
+      strongs: StrongsNumber('H', 430),
+      morphology: 'Noun common masculine plural absolute',
+    ),
+  ]);
+  writer.addVerse(StrongsCodec.verseKey(matthew, 1, 1), const [
+    OriginalWord(
+      text: 'βίβλος',
+      strongs: StrongsNumber('G', 976),
+      morphology: 'Noun nominative singular feminine',
+    ),
+  ]);
+
+  writer
+    ..addEntry(
+      const StrongsEntry(
+        number: StrongsNumber('H', 7225),
+        lemma: 'רֵאשִׁית',
+        transliteration: 'rêʼshîyth',
+        pronunciation: 'ray-sheeth\'',
+        derivation: 'from the same as H7218;',
+        definition: 'the first, in place, time, order or rank',
+        kjvUsage: 'beginning, chief(-est), first(-fruits, part, time).',
+      ),
+    )
+    ..addEntry(
+      const StrongsEntry(
+        number: StrongsNumber('H', 1254),
+        lemma: 'בָּרָא',
+        transliteration: 'bârâʼ',
+        pronunciation: 'baw-raw\'',
+        derivation: 'a primitive root;',
+        definition: '(absolutely) to create',
+        kjvUsage: 'choose, create (creator), cut down, dispatch.',
+      ),
+    )
+    ..addEntry(
+      const StrongsEntry(
+        number: StrongsNumber('H', 430),
+        lemma: 'אֱלֹהִים',
+        transliteration: 'ʼĕlôhîym',
+        pronunciation: 'el-o-heem\'',
+        derivation: 'plural of H433;',
+        definition:
+            'gods in the ordinary sense; but specifically used of '
+            'the supreme God',
+        kjvUsage:
+            'angels, [idiom] exceeding, God (gods) (-dess, -ly), '
+            'judges, [idiom] mighty.',
+      ),
+    )
+    ..addEntry(
+      const StrongsEntry(
+        number: StrongsNumber('G', 976),
+        lemma: 'βίβλος',
+        transliteration: 'bíblos',
+        pronunciation: '',
+        derivation: 'properly, the inner bark of the papyrus plant;',
+        definition: 'a sheet or scroll of writing',
+        kjvUsage: 'book.',
+      ),
+    );
+  return writer.build();
+}
+
 class FixtureBundle extends CachingAssetBundle {
   FixtureBundle({Map<String, Uint8List>? assets, Bible? bible})
     : assets =
@@ -199,6 +294,7 @@ class FixtureBundle extends CachingAssetBundle {
             BookIntros.assetPath: packIntros(fixtureIntros),
             Atlas.assetPath: packJson(fixtureAtlas),
             CrossReferences.assetPath: packXrefs(fixtureXrefs),
+            Originals.assetPath: packOriginals(),
           };
 
   final Map<String, Uint8List> assets;
@@ -209,6 +305,10 @@ class FixtureBundle extends CachingAssetBundle {
   /// The cross-references in the shape the asset takes: gzipped binary.
   static Uint8List packXrefs(List<XrefEntry> entries) =>
       Uint8List.fromList(gzip.encode(XrefCodec.encode(entries)));
+
+  /// The original-language layer, in the shape the asset takes.
+  static Uint8List packOriginals() =>
+      Uint8List.fromList(gzip.encode(buildFixtureOriginals()));
 
   /// The book introductions in the shape the asset uses: gzipped JSON.
   static Uint8List packIntros(Map<String, String> intros) => packJson(intros);

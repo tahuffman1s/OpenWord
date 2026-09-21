@@ -8,15 +8,19 @@ import '../data/library.dart';
 import '../data/atlas.dart';
 import '../data/book_intros.dart';
 import '../data/cross_references.dart';
+import '../data/originals.dart';
 import '../data/marks.dart';
 import '../data/reference_search.dart';
 import '../data/settings.dart';
 import '../data/updates.dart';
 import '../model/bible.dart';
 import '../model/book_meta.dart';
+import '../model/strongs_codec.dart';
 import '../model/xref_codec.dart';
 import 'book_sheet.dart';
+import 'concordance_screen.dart';
 import 'cross_reference_sheet.dart';
+import 'original_sheet.dart';
 import 'map_sheet.dart';
 import 'update_sheet.dart';
 import 'display_sheet.dart';
@@ -67,6 +71,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   Atlas? _atlas;
   AtlasData? _atlasData;
   CrossReferences? _xrefs;
+  Originals? _originals;
 
   /// The launch check runs once per session, not on every rebuild.
   bool _askedAboutUpdates = false;
@@ -117,6 +122,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
     });
   }
 
+  /// Reads the Hebrew and Greek in the background. Four megabytes, so it
+  /// is never waited on: the verse sheet offers it once it is there.
+  void _loadOriginals(AssetBundle bundle) {
+    if (_originals != null) return;
+    final originals = Originals(bundle: bundle);
+    _originals = originals;
+    originals.load().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -125,6 +141,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _intros ??= BookIntros(bundle: scope.library.bundle);
     _loadAtlas(scope.library.bundle);
     _loadCrossReferences(scope.library.bundle);
+    _loadOriginals(scope.library.bundle);
     if (!_askedAboutUpdates) {
       _askedAboutUpdates = true;
       _announceUpdate(scope.updates);
@@ -293,14 +310,53 @@ class _ReaderScreenState extends State<ReaderScreen> {
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
+      // The sheet grew a row of study tools; on a short screen it has to be
+      // able to scroll rather than overflow.
+      isScrollControlled: true,
       builder: (_) => _VerseSheet(
         reference: reference,
         text: _currentChapter.verseText(verse),
         reading: _reading,
         crossReferences: _xrefs?.forVerse(reference) ?? const [],
         onCrossReferences: () => _openCrossReferences(reference),
+        originalWords: _originals?.wordsFor(reference) ?? const [],
+        onOriginal: () => _openOriginal(reference),
       ),
     );
+  }
+
+  /// The Hebrew or Greek of a verse, and from there its dictionary entry
+  /// and everywhere else the word is used.
+  Future<void> _openOriginal(Reference reference) async {
+    final originals = _originals;
+    if (originals == null) return;
+    final words = originals.wordsFor(reference);
+    if (words.isEmpty) return;
+    final verse = reference.verse;
+    final wanted = await showOriginal(
+      context,
+      reference: reference,
+      english: verse == null ? '' : _currentChapter.verseText(verse),
+      words: words,
+      originals: originals,
+    );
+    if (wanted == null || !mounted) return;
+    await _openConcordance(wanted);
+  }
+
+  /// Every verse a Strong's number occurs in; choosing one goes there.
+  Future<void> _openConcordance(StrongsNumber number) async {
+    final originals = _originals;
+    if (originals == null) return;
+    final chosen = await showConcordance(
+      context,
+      number: number,
+      originals: originals,
+      bible: _bible,
+    );
+    if (chosen == null || !mounted) return;
+    if (_bible.bookByCode(chosen.bookCode) == null) return;
+    _goTo(chosen);
   }
 
   /// Opens the cross-references of a verse, and goes wherever one of them
@@ -1057,6 +1113,8 @@ class _VerseSheet extends StatelessWidget {
     required this.reading,
     required this.crossReferences,
     required this.onCrossReferences,
+    required this.originalWords,
+    required this.onOriginal,
   });
 
   final Reference reference;
@@ -1064,6 +1122,8 @@ class _VerseSheet extends StatelessWidget {
   final ReadingStore reading;
   final List<XrefAnchor> crossReferences;
   final VoidCallback onCrossReferences;
+  final List<OriginalWord> originalWords;
+  final VoidCallback onOriginal;
 
   int _passageCount() {
     var total = 0;
@@ -1081,7 +1141,7 @@ class _VerseSheet extends StatelessWidget {
       builder: (context, _) {
         final mark = reading.markFor(reference);
         return SafeArea(
-          child: Padding(
+          child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1148,6 +1208,21 @@ class _VerseSheet extends StatelessWidget {
                         (mark?.bookmarked ?? false) ? 'Bookmarked' : 'Bookmark',
                       ),
                     ),
+                    if (originalWords.isNotEmpty)
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          onOriginal();
+                        },
+                        icon: const Icon(Icons.translate_rounded),
+                        label: Text(
+                          originalWords.any(
+                                (word) => word.strongs?.isHebrew ?? false,
+                              )
+                              ? 'Hebrew'
+                              : 'Greek',
+                        ),
+                      ),
                     if (crossReferences.isNotEmpty)
                       FilledButton.tonalIcon(
                         onPressed: () {

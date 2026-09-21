@@ -7,7 +7,9 @@ import '../app_version.dart';
 import '../data/atlas.dart';
 import '../data/library.dart';
 import '../data/book_intros.dart';
+import '../data/cross_references.dart';
 import '../data/marks.dart';
+import '../data/originals.dart';
 import '../data/settings.dart';
 import '../data/shelf.dart';
 import '../data/translations.dart';
@@ -321,8 +323,9 @@ class SettingsScreen extends StatelessWidget {
                 // The version is shown under Updates, where it is useful.
                 subtitle: const Text(
                   'A free and open source Bible reader. The translations, the '
-                  'book introductions and the maps are all bundled, so '
-                  'reading needs no connection.',
+                  'introductions, the maps, the cross-references and the '
+                  'Hebrew and Greek are all bundled, so reading needs no '
+                  'connection.',
                 ),
                 isThreeLine: true,
               ),
@@ -348,8 +351,21 @@ class SettingsScreen extends StatelessWidget {
               ),
               const ListTile(
                 dense: true,
-                title: Text('Literata'),
+                title: Text('Cross-references'),
+                subtitle: Text(CrossReferences.attribution),
+                isThreeLine: true,
+              ),
+              const ListTile(
+                dense: true,
+                title: Text('Hebrew, Greek and Strong\'s'),
+                subtitle: Text(Originals.attribution),
+                isThreeLine: true,
+              ),
+              const ListTile(
+                dense: true,
+                title: Text('Literata, Noto Serif, Noto Serif Hebrew'),
                 subtitle: Text('SIL Open Font License 1.1'),
+                isThreeLine: true,
               ),
             ],
           );

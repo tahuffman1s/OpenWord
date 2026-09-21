@@ -556,6 +556,82 @@ void main() {
     expect(find.text('Bookmark'), findsOneWidget);
   });
 
+  testWidgets('a verse opens its Hebrew, its dictionary and its concordance', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+
+    await tester.tap(verseNumber('1').first);
+    await tester.pumpAndSettle();
+    expect(find.text('Hebrew'), findsOneWidget);
+
+    await tester.tap(find.text('Hebrew'));
+    await tester.pumpAndSettle();
+
+    // The words of the verse, each with its number and how it is said.
+    expect(find.text('בְּרֵאשִׁית'), findsOneWidget);
+    expect(find.text('אֱלֹהִים'), findsOneWidget);
+    expect(find.text('H430'), findsOneWidget);
+    expect(find.text('rêʼshîyth'), findsOneWidget);
+    expect(find.textContaining('Open Scriptures'), findsOneWidget);
+
+    // Tapping a word opens what Strong's says about it.
+    await tester.tap(find.text('אֱלֹהִים'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('supreme God'), findsOneWidget);
+    expect(find.text('Used in 2 verses'), findsOneWidget);
+
+    // And from there, everywhere else it is used.
+    await tester.tap(find.text('Used in 2 verses'));
+    await tester.pumpAndSettle();
+    expect(find.text('Genesis 1:1'), findsOneWidget);
+    expect(find.text('Genesis 1:3'), findsOneWidget);
+
+    await tester.tap(find.text('Genesis 1:3'));
+    await tester.pumpAndSettle();
+    expect(appBarText('Genesis 1'), findsOneWidget);
+  });
+
+  testWidgets('tapping an English word lights the word behind it', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+    await tester.tap(verseNumber('1').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Hebrew'));
+    await tester.pumpAndSettle();
+
+    expect(
+      find.textContaining('Tap an English word'),
+      findsOneWidget,
+      reason: 'the sheet should say what can be done with it',
+    );
+
+    // The English line renders one tappable Text per word, so an exact
+    // finder picks the word and not the chapter behind the sheet.
+    await tester.tap(find.text('God '));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('most likely came from'), findsOneWidget);
+
+    // A word with nothing clearly behind it says so rather than guessing.
+    await tester.tap(find.text('the ').first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('No word of the original'), findsOneWidget);
+  });
+
+  testWidgets('a verse with no original behind it does not offer one', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+
+    await tester.tap(verseNumber('2').first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Hebrew'), findsNothing);
+    expect(find.text('Greek'), findsNothing);
+    expect(find.text('Bookmark'), findsOneWidget);
+  });
+
   testWidgets('saves the position when the chapter changes', (tester) async {
     final harness = await pumpReader(tester);
 

@@ -1,7 +1,7 @@
 name: openword
 description: "OpenWord — a free and open source Bible app with Material You theming."
 publish_to: 'none'
-version: 1.9.0+13
+version: 1.10.0+14
 
 environment:
   sdk: ^3.13.3
@@ -42,6 +42,7 @@ flutter:
     - assets/notes/
     - assets/maps/
     - assets/refs/
+    - assets/strongs/
 
   # Literata (SIL Open Font License 1.1) is bundled so the reading typeface is
   # identical on every platform, including the web build where the generic
@@ -60,3 +61,16 @@ flutter:
         - asset: assets/fonts/Literata-BoldItalic.ttf
           weight: 700
           style: italic
+
+    # Literata carries no Hebrew, and a platform cannot be relied on to have
+    # a face with the vowel points and cantillation marks the Hebrew Bible
+    # uses — the web has none at all. Nor does Literata have the modifier
+    # letters Strong's transliterates with: ʻayin, ʼaleph, the superscript
+    # vowels. This face is Noto Serif Hebrew and Noto Serif merged and cut
+    # down to exactly those two gaps — the Hebrew block and thirteen Latin
+    # marks, 16 kB. SIL Open Font License 1.1; see
+    # assets/fonts/NotoSerif-OFL.txt.
+    - family: ScriptureSerif
+      fonts:
+        - asset: assets/fonts/ScriptureSerif-Subset.ttf
+          weight: 400

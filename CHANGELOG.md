@@ -1,5 +1,50 @@
 # Changelog
 
+## 1.10.0
+
+### Added
+- **The Hebrew and Greek behind any verse, with Strong's numbers.** Tap a
+  verse and it offers the original: every word pointed or accented as its
+  source has it, with its transliteration, its Strong's number and its
+  parsing spelled out — "Noun common feminine singular absolute" rather than
+  "HNcfsa".
+- **Strong's dictionary**: definition, derivation and the King James
+  renderings, for all 14,197 Hebrew and Greek entries.
+- **A concordance** from any word: every verse it occurs in, filtered by
+  book, shown in whatever translation is open, and tapping one goes there.
+- **Tap an English word and the original behind it lights up.** Strong's
+  lists the words the King James used for each number, and a tapped word is
+  looked for in those lists, with light stemming. Where nothing matches it
+  says so rather than lighting a plausible wrong word.
+- It works under **any translation**, the imported ones included, because it
+  is keyed to the verse rather than to one edition's wording.
+
+### Notes
+- Hebrew numbering differs from English in some forty places. The build
+  applies the Open Scriptures versification map, so Malachi 4:1 finds the
+  words Hebrew calls Malachi 3:19, and a Psalm's superscription does not
+  shift its verses.
+- The deuterocanonical books have no original-language layer — they are in
+  neither the Hebrew Bible nor the Greek New Testament as this app carries
+  them — and simply do not offer the option.
+- 446,925 words and the dictionaries come to 3.9 MB, read in a background
+  isolate and decoded a verse at a time.
+- A 16 kB typeface is bundled with them, cut from Noto Serif Hebrew and Noto
+  Serif to exactly the two gaps the reading face leaves: the Hebrew block —
+  vowel points and all 31 cantillation marks — and the thirteen modifier
+  letters Strong's transliterates with. Nothing is fetched, and no platform
+  is relied on for a face it may not have; the web has none at all.
+
+### Changed
+- Settings now credits the cross-references and the original-language
+  sources alongside the translations, the introductions and the maps. Two of
+  the three are share-alike or attribution licences; the app should say so
+  where it says everything else, not only on the sheets themselves.
+
+### Fixed
+- The verse sheet could overflow its own height once it carried this many
+  study tools; it scrolls now.
+
 ## 1.9.0
 
 ### Added

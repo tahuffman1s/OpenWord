@@ -45,6 +45,13 @@ no network entitlement.
   like the ones that ship with it: search, compare, highlight, bookmark, map
   and all. `.bib` files import directly, and any imported translation can be
   saved back out as one.
+- **The Hebrew and Greek behind any verse.** Tap a verse and it offers the
+  original: every word with its Strong's number, how it is said, and its
+  parsing spelled out. Tap a word for Strong's own entry, and from there
+  every other verse it occurs in. Tap an English word and the word it most
+  likely came from lights up. It works under *any* translation — the three
+  that ship and any you import — because it is keyed to the verse, not to
+  one edition's wording.
 - **Cross-references on every verse.** Tap a verse and it offers the places
   Scripture takes up what it says — three hundred thousand of them, from the
   Treasury of Scripture Knowledge, grouped under the phrase that prompted
@@ -224,6 +231,79 @@ cd .. && dart run tool/build_notes.dart intros
 It writes `assets/notes/book-intros-eng.json.gz`, dropping each file's licence
 preamble and title line — the licence is shown by the app from its own copy,
 in the book sheet and in Settings, as CC BY-SA requires.
+
+## The original languages
+
+Tapping a verse offers *Hebrew* or *Greek*. The sheet shows the verse's own
+words — pointed Hebrew, accented Greek — each with its transliteration and
+Strong's number, and lays the English above them: tap an English word and
+the original it most likely came from lights up; tap an original word for
+Strong's definition, derivation and King James renderings, and from there a
+concordance of every verse it occurs in, shown in whatever translation is
+open.
+
+**Why it works under any translation.** Strong's numbers tag the original
+words, so a per-word English mapping only exists for editions someone has
+tagged — which is why other apps bolt their interlinear to one translation.
+This layer is keyed by *verse* instead. The Hebrew of Genesis 1:1 is the
+same whichever English sits on top of it, so the WEB, the BSB, the WEBBE and
+anything imported all get the same original, with no tagging of their own.
+
+**Tying an English word to an original one** is the part that cannot be
+exact. Strong's lists the words the King James translators used for each
+number, and a tapped word is looked for in those lists, with light stemming
+so "created" finds "create". Where nothing matches it says so rather than
+lighting a plausible wrong word. For a translation far from the KJV's
+vocabulary it will match less often; it will not match wrongly more often.
+
+**Versification.** Hebrew numbering differs from English — Psalm
+superscriptions are counted, Joel and Malachi divide their chapters
+differently, and some forty other places. The Open Scriptures Hebrew Bible
+ships `VerseMap.xml`, an authoritative WLC-to-English map, and the build
+applies it, so Malachi 4:1 finds the words that Hebrew calls Malachi 3:19.
+
+**What it does not cover**: the deuterocanonical books, which are in neither
+the Hebrew Bible nor the Greek New Testament as this app carries them. Those
+verses simply do not offer the option.
+
+446,925 words and 14,197 dictionary entries come to 3.9 MB. The file is
+gunzipped once into a byte array that stays put, and a verse's words are
+decoded only when that verse is looked at — holding them all as objects
+would cost more memory than the Scripture itself.
+
+To rebuild it:
+
+```bash
+git clone https://github.com/openscriptures/morphhb
+git clone https://github.com/byztxt/byzantine-majority-text
+git clone https://github.com/openscriptures/strongs
+dart run tool/build_strongs.dart morphhb byzantine-majority-text strongs
+```
+
+It writes `assets/strongs/originals.ows.gz` and reads back what it wrote.
+The Greek arrives as two files that align word for word — one accented, one
+carrying the numbers and parsing — and the build checks that alignment for
+every verse rather than assuming it.
+
+**The typeface this needs.** Literata, the reading face, has Latin and Greek
+and stops there. The Hebrew needs a face with the vowel points and all
+thirty-one cantillation marks, and the transliterations need thirteen
+modifier letters no reading face carries — the turned comma for ayin, the
+apostrophe for aleph, the superscript vowels. Without them the app draws
+boxes, and the web, which has no system fonts to fall back on, draws nothing
+but boxes. So the two gaps are cut out of Noto Serif Hebrew and Noto Serif,
+which share metrics, and merged into one 16 kB face:
+
+```bash
+pip install fonttools brotli
+git clone https://github.com/notofonts/hebrew   # sources/, or a built TTF
+python3 tool/build_scripture_font.py NotoSerifHebrew.ttf NotoSerif.ttf
+```
+
+It writes `assets/fonts/ScriptureSerif-Subset.ttf` and refuses to declare
+success if the coverage came out short. `test/scripture_font_test.dart`
+reads the shipped file's `cmap` and checks the same thing, so a bad rebuild
+cannot reach a release unnoticed.
 
 ## Cross-references
 
@@ -421,10 +501,12 @@ lib/
       bible_codec.dart          the binary encoding a Bible is read from
       bib_file.dart             the .bib file: that encoding behind a header
       xref_codec.dart           the binary the cross-references ship in
+      strongs_codec.dart        the original-language binary, read by offset
     data/
       translations.dart         the bundled translations
       book_notes.dart           the per-book background notes
       cross_references.dart     the Treasury of Scripture Knowledge, indexed
+      originals.dart            the Hebrew and Greek, keyed by English verse
       usfx_parser.dart          streaming USFX → the model above (build time)
       epub_import.dart          EPUB → the model above, on the device
       shelf.dart                the imported translations, as .bib files
@@ -462,6 +544,16 @@ and navigation instant.
 - Scripture text: public domain (see the table above). An imported translation
   carries whatever licence its own file states; OpenWord shows it and does not
   guess at one.
+- Hebrew text, its Strong's numbers, parsing and versification map:
+  [Open Scriptures Hebrew Bible](https://github.com/openscriptures/morphhb),
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- Greek text, with Strong's numbers and parsing: the
+  [Byzantine Majority Text](https://github.com/byztxt/byzantine-majority-text)
+  of Robinson and Pierpont, public domain.
+- Strong's dictionaries of Hebrew and Greek:
+  [Open Scriptures](https://github.com/openscriptures/strongs), CC BY-SA —
+  the 1890 and 1894 works are themselves public domain. Shared alike: any
+  redistribution of this edition of them must carry the same licence.
 - Cross-references: [CrossReferences.org](https://crossreferences.org), after
   the Treasury of Scripture Knowledge,
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — attribution is
@@ -476,6 +568,13 @@ and navigation instant.
   both [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). Shared
   alike: any redistribution of these introductions, adapted or not, must carry
   the same licence and this attribution.
+- Scripture typeface: [Noto Serif Hebrew](https://github.com/notofonts/hebrew)
+  and [Noto Serif](https://fonts.google.com/noto/specimen/Noto+Serif), SIL
+  Open Font License 1.1 — see `assets/fonts/NotoSerif-OFL.txt`. Merged and
+  subset to the two gaps Literata leaves: the Hebrew block and the thirteen
+  modifier letters Strong's transliterates with, 16 kB in all. It is bundled
+  because no platform can be relied on for a face carrying the vowel points
+  and cantillation marks the Hebrew text uses; the web has none at all.
 - Bundled typeface: [Literata](https://fonts.google.com/specimen/Literata),
   SIL Open Font License 1.1 — see `assets/fonts/Literata-OFL.txt`. It is
   subset to Latin, Greek and the punctuation the text uses.
