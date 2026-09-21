@@ -7,13 +7,16 @@ import '../app_scope.dart';
 import '../data/library.dart';
 import '../data/atlas.dart';
 import '../data/book_intros.dart';
+import '../data/cross_references.dart';
 import '../data/marks.dart';
 import '../data/reference_search.dart';
 import '../data/settings.dart';
 import '../data/updates.dart';
 import '../model/bible.dart';
 import '../model/book_meta.dart';
+import '../model/xref_codec.dart';
 import 'book_sheet.dart';
+import 'cross_reference_sheet.dart';
 import 'map_sheet.dart';
 import 'update_sheet.dart';
 import 'display_sheet.dart';
@@ -63,6 +66,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// whether there is anything to show before it can offer a map.
   Atlas? _atlas;
   AtlasData? _atlasData;
+  CrossReferences? _xrefs;
 
   /// The launch check runs once per session, not on every rebuild.
   bool _askedAboutUpdates = false;
@@ -102,6 +106,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
     });
   }
 
+  /// Reads the cross-references in the background, for the same reason as
+  /// the atlas: nothing should wait on them to open a chapter.
+  void _loadCrossReferences(AssetBundle bundle) {
+    if (_xrefs != null) return;
+    final xrefs = CrossReferences(bundle: bundle);
+    _xrefs = xrefs;
+    xrefs.load().then((_) {
+      if (mounted) setState(() {});
+    });
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -109,6 +124,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     _library = scope.library;
     _intros ??= BookIntros(bundle: scope.library.bundle);
     _loadAtlas(scope.library.bundle);
+    _loadCrossReferences(scope.library.bundle);
     if (!_askedAboutUpdates) {
       _askedAboutUpdates = true;
       _announceUpdate(scope.updates);
@@ -281,8 +297,26 @@ class _ReaderScreenState extends State<ReaderScreen> {
         reference: reference,
         text: _currentChapter.verseText(verse),
         reading: _reading,
+        crossReferences: _xrefs?.forVerse(reference) ?? const [],
+        onCrossReferences: () => _openCrossReferences(reference),
       ),
     );
+  }
+
+  /// Opens the cross-references of a verse, and goes wherever one of them
+  /// leads.
+  Future<void> _openCrossReferences(Reference reference) async {
+    final anchors = _xrefs?.forVerse(reference) ?? const <XrefAnchor>[];
+    if (anchors.isEmpty) return;
+    final chosen = await showCrossReferences(
+      context,
+      reference: reference,
+      anchors: anchors,
+      bible: _bible,
+    );
+    if (chosen == null || !mounted) return;
+    if (_bible.bookByCode(chosen.bookCode) == null) return;
+    _goTo(chosen);
   }
 
   void _onNoteTap(int index) {
@@ -1021,11 +1055,23 @@ class _VerseSheet extends StatelessWidget {
     required this.reference,
     required this.text,
     required this.reading,
+    required this.crossReferences,
+    required this.onCrossReferences,
   });
 
   final Reference reference;
   final String text;
   final ReadingStore reading;
+  final List<XrefAnchor> crossReferences;
+  final VoidCallback onCrossReferences;
+
+  int _passageCount() {
+    var total = 0;
+    for (final anchor in crossReferences) {
+      total += anchor.ranges.length;
+    }
+    return total;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1102,6 +1148,15 @@ class _VerseSheet extends StatelessWidget {
                         (mark?.bookmarked ?? false) ? 'Bookmarked' : 'Bookmark',
                       ),
                     ),
+                    if (crossReferences.isNotEmpty)
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          onCrossReferences();
+                        },
+                        icon: const Icon(Icons.hub_outlined),
+                        label: Text('${_passageCount()} cross-references'),
+                      ),
                     FilledButton.tonalIcon(
                       onPressed: () => _editNote(context),
                       icon: Icon(

@@ -4,9 +4,11 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:openword/src/data/atlas.dart';
 import 'package:openword/src/data/book_intros.dart';
+import 'package:openword/src/data/cross_references.dart';
 import 'package:openword/src/data/update_backend.dart';
 import 'package:openword/src/data/usfx_parser.dart';
 import 'package:openword/src/model/bib_file.dart';
+import 'package:openword/src/model/xref_codec.dart';
 import 'package:openword/src/model/bible.dart';
 
 const TranslationInfo testTranslation = TranslationInfo(
@@ -154,6 +156,35 @@ Bible parseOtherFixture() =>
 
 /// An [AssetBundle] serving the fixtures the way the real bundle serves the
 /// shipped translations: gzipped [BibleCodec] data.
+/// Cross-references over the books the fixture Bible holds: Genesis 1:1
+/// points at Psalms and Matthew, both of which are in it.
+final List<XrefEntry> fixtureXrefs = [
+  XrefEntry(
+    book: CrossReferences.indexOfBook('GEN'),
+    chapter: 1,
+    verse: 1,
+    anchors: [
+      XrefAnchor(
+        phrase: 'In the beginning',
+        ranges: [
+          XrefRange(
+            book: CrossReferences.indexOfBook('PSA'),
+            chapter: 1,
+            verse: 1,
+            endVerse: 1,
+          ),
+          XrefRange(
+            book: CrossReferences.indexOfBook('MAT'),
+            chapter: 1,
+            verse: 1,
+            endVerse: 1,
+          ),
+        ],
+      ),
+    ],
+  ),
+];
+
 class FixtureBundle extends CachingAssetBundle {
   FixtureBundle({Map<String, Uint8List>? assets, Bible? bible})
     : assets =
@@ -167,12 +198,17 @@ class FixtureBundle extends CachingAssetBundle {
             ),
             BookIntros.assetPath: packIntros(fixtureIntros),
             Atlas.assetPath: packJson(fixtureAtlas),
+            CrossReferences.assetPath: packXrefs(fixtureXrefs),
           };
 
   final Map<String, Uint8List> assets;
   final List<String> loaded = [];
 
   static Uint8List _pack(Bible bible) => BibFile.encode(bible);
+
+  /// The cross-references in the shape the asset takes: gzipped binary.
+  static Uint8List packXrefs(List<XrefEntry> entries) =>
+      Uint8List.fromList(gzip.encode(XrefCodec.encode(entries)));
 
   /// The book introductions in the shape the asset uses: gzipped JSON.
   static Uint8List packIntros(Map<String, String> intros) => packJson(intros);

@@ -514,6 +514,48 @@ void main() {
     expect(find.text('OpenWord 2.0.0 is out'), findsNothing);
   });
 
+  testWidgets('a verse offers its cross-references, and they lead on', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+
+    // Genesis 1:1 — tapping the verse opens what can be done with it.
+    await tester.tap(verseNumber('1').first);
+    await tester.pumpAndSettle();
+    expect(find.text('2 cross-references'), findsOneWidget);
+
+    await tester.tap(find.text('2 cross-references'));
+    await tester.pumpAndSettle();
+
+    // Grouped under the phrase they hang on, each with the words it points
+    // at, taken from the translation in hand.
+    expect(find.text('\u201cIn the beginning\u201d'), findsOneWidget);
+    expect(find.text('Psalms 1:1'), findsOneWidget);
+    expect(find.text('Matthew 1:1'), findsOneWidget);
+    expect(
+      find.textContaining('CrossReferences.org'),
+      findsOneWidget,
+      reason: 'CC BY asks for attribution where the work is shown',
+    );
+
+    await tester.tap(find.text('Matthew 1:1'));
+    await tester.pumpAndSettle();
+
+    expect(appBarText('Matthew 1'), findsOneWidget);
+  });
+
+  testWidgets('a verse with no cross-references does not offer any', (
+    tester,
+  ) async {
+    await pumpReader(tester);
+
+    await tester.tap(verseNumber('2').first);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('cross-references'), findsNothing);
+    expect(find.text('Bookmark'), findsOneWidget);
+  });
+
   testWidgets('saves the position when the chapter changes', (tester) async {
     final harness = await pumpReader(tester);
 

@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.9.0
+
+### Added
+- **Cross-references on every verse**, the study tool this app most obviously
+  lacked. Tap a verse and it offers the places Scripture takes up what it
+  says: 305,935 references across 29,057 verses, from the Treasury of
+  Scripture Knowledge by way of CrossReferences.org (CC BY 4.0).
+- They are grouped under the phrase of the verse that prompted each one,
+  rather than being one flat list, and each carries the words it points at —
+  taken from the translation being read — so twenty references can be read
+  through without opening any of them. Tapping one goes there.
+- Bundled like everything else: a 1.3 MB asset, read in a background isolate
+  the first time a verse is opened. Nothing is downloaded.
+
 ## 1.8.3
 
 ### Fixed

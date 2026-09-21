@@ -45,6 +45,11 @@ no network entitlement.
   like the ones that ship with it: search, compare, highlight, bookmark, map
   and all. `.bib` files import directly, and any imported translation can be
   saved back out as one.
+- **Cross-references on every verse.** Tap a verse and it offers the places
+  Scripture takes up what it says — three hundred thousand of them, from the
+  Treasury of Scripture Knowledge, grouped under the phrase that prompted
+  each one and carrying the words they point at, so the list reads without
+  leaving it. Tap one to go there. Bundled, like everything else.
 - **Your library** in one place: bookmarks, highlights, notes and the chapters
   you have been reading, each a tap away from the text.
 - **Search** the whole Bible, one testament or the book you are in, with an
@@ -220,6 +225,32 @@ It writes `assets/notes/book-intros-eng.json.gz`, dropping each file's licence
 preamble and title line — the licence is shown by the app from its own copy,
 in the book sheet and in Settings, as CC BY-SA requires.
 
+## Cross-references
+
+Tapping a verse offers *N cross-references*, and the sheet sets them out the
+way the Treasury of Scripture Knowledge does: grouped under the phrase of the
+verse that prompted them, rather than as one flat list. Each carries the text
+it points at, taken from the translation being read, so a list of twenty can
+be read through without opening any of them; tapping one goes there.
+
+The data is the [CrossReferences.org](https://crossreferences.org) export of
+the TSK, re-anchored so that each translation has its own phrases and its own
+versification — this app reads the Berean Standard Bible columns, since the
+BSB is one of the three it ships. 305,935 references across 29,057 verses,
+built into a 1.3 MB asset: a table of the phrases (which repeat endlessly —
+"the LORD", "God") and LEB128 varints for the rest. It is read in a
+background isolate the first time a verse is opened.
+
+To rebuild it:
+
+```bash
+git clone https://github.com/CrossReferences-org/bible-cross-references
+dart run tool/build_xrefs.dart bible-cross-references/json
+```
+
+It writes `assets/refs/xrefs.owx.gz` and reads back what it wrote before
+declaring success.
+
 ## Maps
 
 A chapter that names somewhere on the ground says so above its number — *5
@@ -389,9 +420,11 @@ lib/
       bible.dart                Bible → Book → Chapter → Block → VerseSegment
       bible_codec.dart          the binary encoding a Bible is read from
       bib_file.dart             the .bib file: that encoding behind a header
+      xref_codec.dart           the binary the cross-references ship in
     data/
       translations.dart         the bundled translations
       book_notes.dart           the per-book background notes
+      cross_references.dart     the Treasury of Scripture Knowledge, indexed
       usfx_parser.dart          streaming USFX → the model above (build time)
       epub_import.dart          EPUB → the model above, on the device
       shelf.dart                the imported translations, as .bib files
@@ -429,6 +462,10 @@ and navigation instant.
 - Scripture text: public domain (see the table above). An imported translation
   carries whatever licence its own file states; OpenWord shows it and does not
   guess at one.
+- Cross-references: [CrossReferences.org](https://crossreferences.org), after
+  the Treasury of Scripture Knowledge,
+  [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — attribution is
+  shown on the cross-reference sheet itself.
 - Place locations: [OpenBible.info Bible Geocoding](https://www.openbible.info/geo/),
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) — attribution is
   shown on the map itself and in Settings. Base map, built-up areas and modern
