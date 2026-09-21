@@ -635,6 +635,7 @@ class _BibleBuilder {
     'chapterlabel',
     'psalmlabel',
     'chapternum',
+    'chapter-num',
     'chapter-number',
     // USFM's own marker for a chapter label. Not bare "c", which as often
     // as not means centred.
@@ -771,7 +772,14 @@ class _BibleBuilder {
       // Obadiah, Philemon, 2 and 3 John and Jude have one chapter, and many
       // editions give them no chapter heading at all. A numbered verse under
       // a book heading opens chapter 1 rather than being thrown away.
-      if (_chapter == 0 && _book != null) _startChapter(1);
+      if (_chapter == 0 && _book != null) {
+        _startChapter(1);
+      } else if (number < _verse && _book != null) {
+        // The numbering has gone backwards, so a chapter began and nothing
+        // said so. This is the one signal that does not depend on knowing
+        // how a particular edition marks its chapters.
+        _startChapter(_chapter + 1);
+      }
       verse = number;
       startsVerse = true;
       _verse = number;
@@ -844,6 +852,20 @@ class _BibleBuilder {
 
       if (_skip(node)) return;
 
+      // A chapter number printed inside the paragraph rather than above it.
+      // The ESV and others open each chapter with
+      // `<b class="chapter-num" id="v43001001-1">1:1&nbsp;</b>`, which is the
+      // chapter and its first verse in one marker.
+      if (_isChapterLabel(classes)) {
+        final opened = _chapterAt(node.innerText, id);
+        if (opened != null) {
+          if (opened.chapter != _chapter) _startChapter(opened.chapter);
+          if (opened.verse != null) openVerse(opened.verse!);
+        }
+        // Either way the marker is a number, not Scripture.
+        return;
+      }
+
       final number = _verseNumber(name, classes, id, node.innerText);
       if (number != null) {
         openVerse(number);
@@ -911,6 +933,49 @@ class _BibleBuilder {
     r'^\s*(\d{1,3})\s*[-\u2010-\u2015]\s*\d{1,3}[.:\s\u00a0]*$',
   );
   static final RegExp _lastNumber = RegExp(r'(\d{1,3})\D*$');
+
+  static final RegExp _chapterAndVerse = RegExp(
+    r'(\d{1,3})\s*[:.]\s*(\d{1,3})',
+  );
+
+  /// `v43001001-1` — book, chapter and verse in one id, the scheme Crossway
+  /// and several others number their anchors with.
+  static final RegExp _packedId = RegExp(r'^v(\d{2})(\d{3})(\d{3})');
+
+  /// What chapter — and, where the marker carries it, what verse — an
+  /// element that the markup calls a chapter number opens.
+  ({int chapter, int? verse})? _chapterAt(String text, String id) {
+    final both = _chapterAndVerse.firstMatch(text);
+    if (both != null) {
+      final chapter = int.parse(both.group(1)!);
+      final verse = int.parse(both.group(2)!);
+      if (chapter >= 1 &&
+          chapter <= EpubImport.maxChapter &&
+          verse >= 1 &&
+          verse <= EpubImport.maxVerse) {
+        return (chapter: chapter, verse: verse);
+      }
+    }
+
+    final number = _numberIn(text);
+    if (number != null && number >= 1 && number <= EpubImport.maxChapter) {
+      return (chapter: number, verse: null);
+    }
+
+    // Nothing printed: the id may still say where we are.
+    final packed = _packedId.firstMatch(id);
+    if (packed != null) {
+      final chapter = int.parse(packed.group(2)!);
+      final verse = int.parse(packed.group(3)!);
+      if (chapter >= 1 &&
+          chapter <= EpubImport.maxChapter &&
+          verse >= 1 &&
+          verse <= EpubImport.maxVerse) {
+        return (chapter: chapter, verse: verse);
+      }
+    }
+    return null;
+  }
 
   /// Whether an element is a verse number rather than part of the text.
   ///

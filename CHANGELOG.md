@@ -1,5 +1,22 @@
 # Changelog
 
+## 1.8.1
+
+### Fixed
+- **A whole book arriving as one chapter.** Editions that print the chapter
+  number *inside* the paragraph rather than above it — the ESV among them,
+  which opens each chapter with
+  `<b class="chapter-num" id="v43001001-1">1:1</b>` — had no chapter
+  recognised at all, so every verse in the book piled into chapter 1. Chapter
+  markers are now read inline as well as at the head of a block, and a marker
+  holding "1:1" opens the chapter and its first verse together.
+- **A safety net that does not depend on the markup**: when verse numbers run
+  backwards — verse 25, then verse 1 — a chapter began, whatever the edition
+  did or did not say. An edition this app has never seen now breaks into
+  chapters correctly even if nothing marks them.
+- A chapter marker that prints nothing has its number read from its `id`,
+  including the `v43001001` scheme that packs book, chapter and verse.
+
 ## 1.8.0
 
 ### Added

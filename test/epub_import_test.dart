@@ -635,6 +635,90 @@ void main() {
       );
     });
 
+    test('the ESV, whose chapter number sits inside the paragraph', () {
+      // Crossway's markup: the chapter opens with a `chapter-num` holding
+      // "1:1" — chapter and first verse in one marker, inline rather than
+      // above the paragraph — and later verses are `verse-num`.
+      final result = EpubImport.convert(
+        epub(
+          title: 'English Standard Version',
+          documents: [
+            (
+              'john.xhtml',
+              '<h1>John</h1>'
+                  '<p><b class="chapter-num" id="v43001001-1">1:1\u00a0</b>'
+                  'In the beginning was the Word.'
+                  '<b class="verse-num" id="v43001002-1">2\u00a0</b>'
+                  'He was in the beginning with God.</p>'
+                  '<p><b class="chapter-num" id="v43002001-1">2:1\u00a0</b>'
+                  'On the third day there was a wedding at Cana.'
+                  '<b class="verse-num" id="v43002002-1">2\u00a0</b>'
+                  'Jesus also was invited.</p>',
+            ),
+          ],
+        ),
+      );
+
+      final book = result.bible!.books.single;
+      expect(book.code, 'JHN');
+      expect(book.chapterCount, 2);
+      expect(book.chapter(1)!.verseCount, 2);
+      expect(book.chapter(1)!.verseText(1), 'In the beginning was the Word.');
+      expect(book.chapter(2)!.verseText(1), contains('wedding at Cana'));
+      expect(book.chapter(2)!.verseText(2), 'Jesus also was invited.');
+      // The marker itself is a number, not Scripture.
+      expect(book.chapter(1)!.verseText(1), isNot(contains('1:1')));
+    });
+
+    test('verse numbers running backwards open the next chapter', () {
+      // The safety net for an edition whose chapter markers this app does
+      // not recognise at all: when the numbering restarts, a chapter began.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'rut.xhtml',
+              '<h1>Ruth</h1>'
+                  '<p><sup>1</sup>Now it came to pass.</p>'
+                  '<p><sup>2</sup>And the name of the man was Elimelech.</p>'
+                  '<p><sup>1</sup>And Naomi had a kinsman.</p>'
+                  '<p><sup>2</sup>And Ruth said to Naomi.</p>',
+            ),
+          ],
+        ),
+      );
+
+      final book = result.bible!.books.single;
+      expect(book.chapterCount, 2);
+      expect(book.chapter(1)!.verseText(1), 'Now it came to pass.');
+      expect(book.chapter(2)!.verseText(1), 'And Naomi had a kinsman.');
+      expect(book.chapter(2)!.verseText(2), 'And Ruth said to Naomi.');
+    });
+
+    test('a chapter marker that prints nothing is read from its id', () {
+      // `v43002001` is John 2:1: book 43, chapter 002, verse 001.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'john.xhtml',
+              '<h1>John</h1>'
+                  '<p><span class="chapter-num" id="v43001001-1"></span>'
+                  'In the beginning was the Word.</p>'
+                  '<p><span class="chapter-num" id="v43002001-1"></span>'
+                  'On the third day there was a wedding.</p>',
+            ),
+          ],
+        ),
+      );
+
+      final book = result.bible!.books.single;
+      expect(book.code, 'JHN');
+      expect(book.chapterCount, 2);
+      expect(book.chapter(1)!.verseText(1), 'In the beginning was the Word.');
+      expect(book.chapter(2)!.verseText(1), contains('wedding'));
+    });
+
     test('a chapter that came through as one verse says so', () {
       final result = EpubImport.convert(
         epub(

@@ -134,7 +134,12 @@ table of contents — the EPUB 3 nav or `toc.ncx` — calls it.
 **Finding the chapters.** A heading that numbers one, in digits or Roman
 numerals (`CHAPTER XXIII`); or an element the markup itself calls a chapter
 label, in which case the number is taken wherever it falls, so `Kapitel 3`
-and `Psaume 23` work as well as `Chapter 3`. A book whose verses start with
+and `Psaume 23` work as well as `Chapter 3`. That label may sit inside the
+paragraph rather than above it — the ESV opens each chapter with
+`<b class="chapter-num" id="v43001001-1">1:1</b>`, which gives the chapter
+and its first verse at once. Failing all of that, verse numbers that run
+backwards mean a chapter began: it is the one signal that holds whatever an
+edition does. A book whose verses start with
 no chapter heading at all opens chapter 1 — which is how Obadiah, Philemon,
 2 and 3 John and Jude are usually published.
 
