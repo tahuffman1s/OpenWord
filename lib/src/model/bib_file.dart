@@ -87,9 +87,18 @@ class BibFile {
 
   // ---------------------------------------------------------------- writing
 
-  /// Packs a whole Bible. [compress] is for tests and for a file that will
-  /// be compressed again by something else.
-  static Uint8List encode(Bible bible, {bool compress = true}) {
+  /// Packs a whole Bible.
+  ///
+  /// [compress] is for tests and for a file something else will compress
+  /// again. [created] is stamped into the metadata when given; leaving it
+  /// out keeps encoding deterministic, which is what a build wants — the
+  /// same Bible encodes to the same bytes, so a rebuilt asset that has not
+  /// changed does not look as though it has.
+  static Uint8List encode(
+    Bible bible, {
+    bool compress = true,
+    DateTime? created,
+  }) {
     final text = _encodeText(bible, compress: compress);
     final metadata = utf8.encode(
       jsonEncode(
@@ -98,6 +107,7 @@ class BibFile {
           books: bible.books.length,
           verses: bible.verseCount,
           contentHash: 'sha256:${sha256.convert(text)}',
+          created: created,
         ),
       ),
     );
@@ -433,6 +443,7 @@ class BibFile {
     required int books,
     required int verses,
     required String contentHash,
+    required DateTime? created,
   }) => {
     'id': info.id,
     'name': info.name,
@@ -447,7 +458,14 @@ class BibFile {
     'books': books,
     'verses': verses,
     'contentHash': contentHash,
+    'generator': generator,
+    if (created != null) 'created': created.toUtc().toIso8601String(),
   };
+
+  /// Stamped into every file this writes, so one found later can say what
+  /// made it. Nothing reads it back; it is for whoever is holding the file
+  /// and wondering.
+  static const String generator = 'OpenWord';
 
   static TranslationInfo _infoFrom(Map<String, Object?> metadata) =>
       TranslationInfo(

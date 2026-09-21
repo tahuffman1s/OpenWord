@@ -101,7 +101,10 @@ both the header and the same verse count behind it.
 
 ## Importing a translation: EPUB and `.bib`
 
-Settings → *Add a translation* takes a file from the device. Nothing is
+Settings → *Add a translation* takes a file from the device, and every
+translation's menu offers *Save a copy…* — the three that ship as well as
+anything imported, since a format only one app can write is that app's
+cache rather than a format. Nothing is
 uploaded: the file is read where it sits, converted on the device, and kept in
 the app's own documents directory. An imported translation is then a
 translation like any other — it appears in the translation list and the

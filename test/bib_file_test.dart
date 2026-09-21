@@ -69,6 +69,23 @@ void main() {
       expect(info.attribution, 'Somebody, CC BY 4.0.');
     });
 
+    test('the same Bible encodes to the same bytes', () {
+      // A build that rewrites an asset which has not changed should leave
+      // it byte for byte as it was, or every rebuild churns the repository.
+      expect(BibFile.encode(original), BibFile.encode(original));
+    });
+
+    test('a timestamp is there when asked for, and only then', () {
+      final plain = _metadata(BibFile.encode(original));
+      expect(plain.containsKey('created'), isFalse);
+      expect(plain['generator'], BibFile.generator);
+
+      final stamped = _metadata(
+        BibFile.encode(original, created: DateTime.utc(2026, 9, 21, 12)),
+      );
+      expect(stamped['created'], '2026-09-21T12:00:00.000Z');
+    });
+
     test('a checksum of the Scripture, so two copies can be told apart', () {
       final metadata = _metadata(BibFile.encode(original));
       expect(metadata['contentHash'], startsWith('sha256:'));

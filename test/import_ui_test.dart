@@ -101,6 +101,13 @@ void main() {
     return (settings, library);
   }
 
+  /// The translation picker, as opposed to the credits further down, which
+  /// name every translation a second time.
+  Finder pickerText(String label) => find.descendant(
+    of: find.byType(RadioListTile<String>),
+    matching: find.text(label),
+  );
+
   testWidgets('an imported translation is listed beside the bundled ones', (
     tester,
   ) async {
@@ -108,17 +115,38 @@ void main() {
     final (settings, library) = await pumpSettings(tester, withShelf: shelf);
 
     expect(find.text('Add a translation'), findsOneWidget);
-    expect(find.text('Imported Version'), findsOneWidget);
-    // Imported ones carry the menu that saves or removes them; bundled ones
-    // do not.
+    // Once to choose it, once again where the credits are: a translation
+    // the reader brought is attributed like everything else.
+    expect(find.text('Imported Version'), findsNWidgets(2));
+    expect(pickerText('Imported Version'), findsOneWidget);
+    // Imported ones carry the box that offers to remove them; everything
+    // can be saved out, so everything has a menu.
     expect(find.byIcon(Icons.inventory_2_outlined), findsOneWidget);
 
-    await tester.tap(find.text('Imported Version'));
+    await tester.tap(pickerText('Imported Version'));
     await settleDisk(tester);
 
     final id = shelf.translations.single.info.id;
     expect(settings.translationId, id);
     expect(library.bible!.translation.name, 'Imported Version');
+  });
+
+  testWidgets('a bundled translation can be saved out, but not removed', (
+    tester,
+  ) async {
+    await pumpSettings(tester);
+
+    // Every translation carries a menu, because every one can be handed to
+    // another reader as a .bib.
+    final menus = find.byType(PopupMenuButton<String>);
+    expect(menus, findsNWidgets(3));
+
+    await tester.tap(menus.first);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Save a copy…'), findsOneWidget);
+    // Nothing on the shelf to take off it.
+    expect(find.text('Remove'), findsNothing);
   });
 
   testWidgets('with nowhere to keep files there is nothing to import', (
@@ -135,7 +163,7 @@ void main() {
     final id = shelf.translations.single.info.id;
     final (settings, library) = await pumpSettings(tester, withShelf: shelf);
 
-    await tester.tap(find.text('Imported Version'));
+    await tester.tap(pickerText('Imported Version'));
     await settleDisk(tester);
     expect(settings.translationId, id);
 

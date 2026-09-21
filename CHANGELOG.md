@@ -28,6 +28,17 @@
   `test/corpus/` that any other implementation can test itself against.
 - Importing a `.bib` now verifies every checksum on the way in, which is
   the one moment the whole file is in hand.
+- **Any translation can be saved out as a `.bib`**, not only one that was
+  imported. A format only one app can write is that app's cache; there was
+  no reason the three that ship should be the ones nobody could get out.
+- **A translation's required attribution is shown.** It was being stored in
+  the file and displayed nowhere, which for a CC BY text is the whole
+  obligation missed. Settings now credits every translation the app can
+  read, imported ones included, in its own words where its licence gives
+  them.
+- Encoding is deterministic: the same Bible writes the same bytes, so
+  rebuilding an asset that has not changed does not churn it. A timestamp
+  is written only when one is asked for.
 
 ## 1.10.0
 

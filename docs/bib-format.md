@@ -95,6 +95,8 @@ UTF-8 JSON, one object. A reader must ignore keys it does not know.
 | `books` | | How many books the `TEXT` chunk holds |
 | `verses` | | How many verses |
 | `contentHash` | | `sha256:` and the hex digest of the whole `TEXT` payload |
+| `generator` | | What wrote the file |
+| `created` | | When, as RFC 3339. Optional on purpose: a writer that leaves it out encodes the same Bible to the same bytes, which is what a build wants |
 
 ### `versification`
 

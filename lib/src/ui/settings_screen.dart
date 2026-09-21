@@ -11,7 +11,6 @@ import '../data/cross_references.dart';
 import '../data/marks.dart';
 import '../data/originals.dart';
 import '../data/settings.dart';
-import '../data/shelf.dart';
 import '../data/translations.dart';
 import '../data/updates.dart';
 import '../model/bib_file.dart';
@@ -197,15 +196,12 @@ class SettingsScreen extends StatelessWidget {
                     subtitle: Text(
                       '${translation.abbreviation} • ${translation.license}',
                     ),
-                    secondary: library.isImported(translation.id)
-                        ? _ImportedMenu(
-                            id: translation.id,
-                            name: translation.name,
-                            shelf: library.shelf!,
-                            settings: settings,
-                            library: library,
-                          )
-                        : null,
+                    secondary: _TranslationMenu(
+                      id: translation.id,
+                      name: translation.name,
+                      settings: settings,
+                      library: library,
+                    ),
                   ),
                 ),
               if (library.shelf != null)
@@ -329,13 +325,23 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 isThreeLine: true,
               ),
-              for (final translation in Translations.all)
+              // Everything readable, not only what shipped: a translation
+              // the reader imported may carry wording its licence obliges
+              // the app to show, and a file that says so is no use if
+              // nothing reads it out.
+              for (final translation in library.available)
                 ListTile(
                   dense: true,
                   title: Text(translation.name),
                   subtitle: Text(
-                    '${translation.license} • ${translation.sourceUrl}',
+                    translation.attribution.isNotEmpty
+                        ? translation.attribution
+                        : [
+                            translation.license,
+                            translation.sourceUrl,
+                          ].where((part) => part.isNotEmpty).join(' • '),
                   ),
+                  isThreeLine: translation.attribution.isNotEmpty,
                 ),
               const ListTile(
                 dense: true,
@@ -558,42 +564,58 @@ class _UpdateRow extends StatelessWidget {
   }
 }
 
-/// What can be done with a translation the reader imported: keep a copy of
-/// the `.bib`, or take it off the shelf again.
-class _ImportedMenu extends StatelessWidget {
-  const _ImportedMenu({
+/// What can be done with a translation: keep a copy of the `.bib`, and —
+/// where the reader brought it themselves — take it off the shelf again.
+///
+/// Saving works for the three that ship as well as for an import. A format
+/// only one app can write is that app's cache; one any of them can hand to
+/// the next is a format, and there is no reason the bundled three should be
+/// the ones nobody can get out.
+class _TranslationMenu extends StatelessWidget {
+  const _TranslationMenu({
     required this.id,
     required this.name,
-    required this.shelf,
     required this.settings,
     required this.library,
   });
 
   final String id;
   final String name;
-  final Shelf shelf;
   final Settings settings;
   final LibraryController library;
 
+  bool get _imported => library.isImported(id);
+
+  /// The `.bib` itself, wherever it lives.
+  Future<Uint8List?> _bytes() async {
+    if (_imported) return library.shelf?.fileBytes(id);
+    final data = await library.bundle.load(Translations.assetFor(id));
+    return Uint8List.sublistView(data);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final shelved = shelf.byId(id);
+    final shelved = library.shelf?.byId(id);
     return PopupMenuButton<String>(
-      tooltip: 'Imported translation',
-      icon: const Icon(Icons.inventory_2_outlined),
+      tooltip: _imported ? 'Imported translation' : 'Translation',
+      icon: Icon(
+        _imported ? Icons.inventory_2_outlined : Icons.more_vert_rounded,
+      ),
       itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'about',
-          enabled: false,
-          child: Text(shelved == null ? 'Imported' : shelved.readableSize),
-        ),
+        if (_imported)
+          PopupMenuItem(
+            value: 'about',
+            enabled: false,
+            child: Text(shelved == null ? 'Imported' : shelved.readableSize),
+          ),
         const PopupMenuItem(value: 'save', child: Text('Save a copy…')),
-        const PopupMenuItem(value: 'remove', child: Text('Remove')),
+        if (_imported)
+          const PopupMenuItem(value: 'remove', child: Text('Remove')),
       ],
       onSelected: (choice) async {
         final messenger = ScaffoldMessenger.of(context);
         if (choice == 'save') {
-          final bytes = await shelf.fileBytes(id);
+          final bytes = await _bytes();
           if (bytes == null) return;
           final saved = await FilePicker.saveFile(
             dialogTitle: 'Save $name',
@@ -607,6 +629,8 @@ class _ImportedMenu extends StatelessWidget {
           return;
         }
         if (choice == 'remove') {
+          final shelf = library.shelf;
+          if (shelf == null) return;
           await shelf.remove(id);
           // Whatever was being read has just gone; fall back to a bundled
           // translation rather than an empty screen.
