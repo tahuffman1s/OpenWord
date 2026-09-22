@@ -8,6 +8,7 @@ import 'bible.dart';
 import 'bible_codec.dart';
 import 'book_meta.dart';
 import 'byte_io.dart';
+import 'search_index.dart';
 
 /// The `.bib` file: one translation, whole, in one file.
 ///
@@ -62,13 +63,16 @@ class BibFile {
   /// The Scripture, one compressed member per book. Critical.
   static const String tagText = 'TEXT';
 
+  /// Which books each word is in. Ancillary: it only makes search quicker.
+  static const String tagSearch = 'srch';
+
   /// Tags reserved for what a `.bib` file may come to carry. All ancillary,
   /// so a file using them stays readable by everything written before them:
   /// `xref` cross-references anchored to this translation's own
   /// versification, `strg` a word-level Strong's alignment, `srch` a
   /// prebuilt search index, `sign` a detached signature over the other
   /// chunks.
-  static const Set<String> reservedTags = {'xref', 'strg', 'srch', 'sign'};
+  static const Set<String> reservedTags = {'xref', 'strg', 'sign'};
 
   static const int _headerLength = 6;
   static const int _chunkHeaderLength = 12;
@@ -94,10 +98,16 @@ class BibFile {
   /// out keeps encoding deterministic, which is what a build wants — the
   /// same Bible encodes to the same bytes, so a rebuilt asset that has not
   /// changed does not look as though it has.
+  ///
+  /// [searchable] writes the word index; [carry] writes further chunks as
+  /// given, which is how a file keeps its cross-references or anything else
+  /// it came with through a rewrite.
   static Uint8List encode(
     Bible bible, {
     bool compress = true,
     DateTime? created,
+    bool searchable = true,
+    Map<String, List<int>> carry = const {},
   }) {
     final text = _encodeText(bible, compress: compress);
     final metadata = utf8.encode(
@@ -119,6 +129,21 @@ class BibFile {
       ..byte(0);
     _writeChunk(out, tagMeta, metadata);
     _writeChunk(out, tagText, text);
+    if (searchable) {
+      // Keyed to the text's checksum, so an index can never outlive the
+      // Scripture it describes.
+      final index = SearchIndex.build(bible, textCrc: getCrc32(text));
+      _writeChunk(
+        out,
+        tagSearch,
+        compress
+            ? Uint8List.fromList(const GZipEncoder().encodeBytes(index))
+            : index,
+      );
+    }
+    for (final extra in carry.entries) {
+      _writeChunk(out, extra.key, extra.value);
+    }
     return out.takeCopy();
   }
 
@@ -213,7 +238,22 @@ class BibFile {
       throw const BibFormatException('the file carries no Scripture');
     }
     final info = _infoFrom(_decodeMetadata(meta));
-    return _decodeText(info, text);
+    // The word index, where the file has one that matches this text. It is
+    // read eagerly because it is small beside the Scripture and because a
+    // search should not wait on it.
+    // The word index is left packed and read on the first search. It is a
+    // couple of hundred kilobytes and a few milliseconds to unpack, which
+    // is nothing beside the search it saves and too much to spend opening
+    // a Bible nobody may search at all.
+    final search = chunks[tagSearch];
+    return _decodeText(
+      info,
+      text,
+      search: search == null
+          ? null
+          : () =>
+                SearchIndex.parse(_gunzipped(search), textCrc: getCrc32(text)),
+    );
   }
 
   /// Any chunk of a v2 file, by tag, for whatever comes to be stored beside
@@ -286,9 +326,25 @@ class BibFile {
   }
 
   static bool _isKnownTag(String tag) =>
-      tag == tagMeta || tag == tagText || reservedTags.contains(tag);
+      tag == tagMeta ||
+      tag == tagText ||
+      tag == tagSearch ||
+      reservedTags.contains(tag);
 
-  static Bible _decodeText(TranslationInfo info, Uint8List text) {
+  /// Unpacks a chunk that may or may not be gzipped, which is how a file
+  /// written with `compress: false` stays readable.
+  static Uint8List _gunzipped(Uint8List payload) {
+    if (payload.length < 2 || payload[0] != 0x1f || payload[1] != 0x8b) {
+      return payload;
+    }
+    return Uint8List.fromList(const GZipDecoder().decodeBytes(payload));
+  }
+
+  static Bible _decodeText(
+    TranslationInfo info,
+    Uint8List text, {
+    SearchIndex? Function()? search,
+  }) {
     final input = ByteReader(text);
     final encoding = input.byte();
     if (encoding != 1) {
@@ -350,7 +406,19 @@ class BibFile {
     if (books.isEmpty) {
       throw const BibFormatException('the file carries no books');
     }
-    return Bible(translation: info, books: books);
+    return Bible(
+      translation: info,
+      books: books,
+      // An index built for a different set of books is no index at all.
+      searchIndex: search == null
+          ? null
+          : () {
+              final index = search();
+              return index != null && index.bookCount == bookCount
+                  ? index
+                  : null;
+            },
+    );
   }
 
   // ------------------------------------------------------------- version 1

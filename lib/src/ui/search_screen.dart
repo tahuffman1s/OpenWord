@@ -33,11 +33,13 @@ class SearchHit {
   final int matchEnd;
 }
 
-/// Plain text search over the translation in memory.
+/// Plain text search over the translation being read.
 ///
-/// No index is built: the Bible is already loaded and a scan of roughly 4 MB
-/// of text finishes in a fraction of a second, which keeps the bundled format
-/// simple and means search works offline like everything else.
+/// The pattern decides every hit, as it always has. Where the file carries a
+/// word index, it is used first to rule out the books that cannot contain
+/// the query — most words are in a handful of books — so those are never
+/// unpacked or read. The results are the same either way; without an index
+/// every book is read, which is what used to happen always.
 List<SearchHit> searchBible(
   Bible bible,
   String query, {
@@ -57,8 +59,14 @@ List<SearchHit> searchBible(
         )
       : RegExp(RegExp.escape(needle), caseSensitive: false);
 
+  // Null where the index cannot say; empty where it says nowhere at all.
+  final possible = bible.searchIndex?.booksFor(needle);
+  if (possible != null && possible.isEmpty) return const [];
+
   final hits = <SearchHit>[];
-  for (final book in bible.books) {
+  for (var b = 0; b < bible.books.length; b++) {
+    final book = bible.books[b];
+    if (possible != null && !possible.contains(b)) continue;
     if (!_inScope(book, scope, currentBookCode)) continue;
     for (final chapter in book.chapters) {
       for (var verse = 1; verse <= chapter.verseCount; verse++) {

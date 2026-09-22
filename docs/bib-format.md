@@ -67,12 +67,12 @@ These tags are reserved for what a `.bib` may come to carry. All are
 ancillary, so a file using them stays readable by everything written before
 them:
 
-| Tag | Intended for |
+| Tag | For |
 |---|---|
-| `xref` | Cross-references anchored to this translation's own versification |
-| `strg` | A word-level Strong's alignment, making an interlinear exact rather than inferred |
-| `srch` | A prebuilt search index |
-| `sign` | A detached signature over the other chunks |
+| `srch` | Which books each word is in; see below |
+| `xref` | *(reserved)* Cross-references anchored to this translation's own versification |
+| `strg` | *(reserved)* A word-level Strong's alignment, making an interlinear exact rather than inferred |
+| `sign` | *(reserved)* A detached signature over the other chunks |
 
 Where two chunks share a tag, the later one wins.
 
@@ -204,6 +204,45 @@ Four control characters carry inline formatting inside a segment's text:
 
 Control characters are used because Scripture text never contains them, so
 nothing has to be escaped and a search over the raw text needs no parsing.
+
+## `srch`
+
+Which books of the translation each of its words occurs in, so that a
+search reads only the books that could match. Ancillary: a file without it
+searches by reading everything, which is what all of them used to do.
+
+```
+1       index version, 1
+4       CRC-32 of the TEXT chunk this was built from
+varint  book count
+varint  word count
+        per word, in byte order:
+          string  the word, lowercased
+          varint  how many books it is in
+          varint  the first book's index, then deltas
+```
+
+A word is a run of letters and marks — Unicode `\p{L}` and `\p{M}` —
+lowercased. The payload is usually gzipped; a reader should accept it
+either way, and can tell by the two-byte gzip magic.
+
+**It is a filter, never an answer.** The index holds words; a query may be
+any substring of one. A reader tokenises the query the same way the index
+was built, finds every indexed word *containing* each token, and unions
+their books; a book must appear for every token, since each word of the
+query has to be somewhere in it. What finally decides a hit is the same
+pattern match as before, over the books that survived. So results are
+identical with the index or without it, and a reader may ignore it freely.
+
+**A stale index would quietly lose results**, which is the worst way for
+this to go wrong, so it carries the CRC-32 of the `TEXT` chunk it was built
+from and must be ignored unless the two agree.
+
+Measured on the World English Bible, with the translation already open:
+searching for a word that is not there goes from 153 ms to 0.5 ms, and for
+a rare one from 144 ms to 3 ms. A word in every book costs about 0.7 ms
+more than not having the index at all. The chunk is 116 kB gzipped on a
+1.76 MB file, and is not unpacked until something searches.
 
 ## Version 1
 

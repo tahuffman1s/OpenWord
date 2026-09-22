@@ -1,4 +1,5 @@
 import 'book_meta.dart';
+import 'search_index.dart';
 
 /// Sentinel characters used to carry inline character formatting inside verse
 /// text. Control characters are used because they never occur in Scripture
@@ -354,14 +355,20 @@ class TranslationInfo {
 
 /// A fully parsed Bible held in memory.
 class Bible {
-  Bible({required this.translation, required List<Book> books})
-    : books = List.unmodifiable(
-        books.toList()..sort(
-          (a, b) => (BookMeta.ordinalByCode[a.code] ?? 999).compareTo(
-            BookMeta.ordinalByCode[b.code] ?? 999,
-          ),
-        ),
-      ) {
+  Bible({
+    required this.translation,
+    required List<Book> books,
+    SearchIndex? Function()? searchIndex,
+    // A private field cannot be a named initializing formal.
+    // ignore: prefer_initializing_formals
+  }) : _searchIndex = searchIndex,
+       books = List.unmodifiable(
+         books.toList()..sort(
+           (a, b) => (BookMeta.ordinalByCode[a.code] ?? 999).compareTo(
+             BookMeta.ordinalByCode[b.code] ?? 999,
+           ),
+         ),
+       ) {
     for (var i = 0; i < this.books.length; i++) {
       _indexByCode[this.books[i].code] = i;
     }
@@ -369,6 +376,23 @@ class Bible {
 
   final TranslationInfo translation;
   final List<Book> books;
+
+  final SearchIndex? Function()? _searchIndex;
+  SearchIndex? _resolved;
+  bool _looked = false;
+
+  /// Which books each word is in, where the file carried it, unpacked the
+  /// first time anything asks. An optimisation for search and nothing
+  /// more: null simply means every book has to be read, which is what
+  /// always used to happen.
+  SearchIndex? get searchIndex {
+    if (!_looked) {
+      _looked = true;
+      _resolved = _searchIndex?.call();
+    }
+    return _resolved;
+  }
+
   final Map<String, int> _indexByCode = {};
 
   Book? bookByCode(String code) {

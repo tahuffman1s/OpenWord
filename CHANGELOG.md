@@ -3,6 +3,18 @@
 ## Unreleased
 
 ### Added
+- **Search reads only the books that could match.** A `.bib` now carries an
+  index of which books each of its words is in — the median word of the
+  World English Bible is in two of its eighty-four — so a search unpacks
+  and reads those rather than all of them. With the translation open,
+  searching for a word that is not there goes from 153 ms to 0.5 ms, and
+  for a rare one from 144 ms to 3 ms; a word that really is everywhere
+  costs about 0.7 ms more than before. The results are identical either
+  way: the index only rules out books that cannot match, and the same
+  pattern decides every hit. It is 116 kB on a 1.76 MB file, is not
+  unpacked until something searches, and carries the checksum of the text
+  it was built from so a stale one is ignored rather than quietly losing
+  verses. Every `.bib` the app writes gets one, imports included.
 - **An imported Bible's verse numbering is checked, not assumed.** The
   cross-references and the Hebrew and Greek are keyed to the verse, so they
   have always applied to an imported translation as much as to the bundled
