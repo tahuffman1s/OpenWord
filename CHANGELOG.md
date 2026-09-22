@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.11.0
 
 ### Added
 - **A lot more of a printed Bible's typography.** The format could say six
