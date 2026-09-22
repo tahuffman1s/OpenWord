@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.14.0
+
+### Added
+- **An import already on the shelf can be tidied, without the EPUB.** This
+  is the one that matters. An import is a stored `.bib` and updating the
+  app never touches it, so every fix the importer gained was unreachable
+  for a translation already imported — and nothing said so. The rule below
+  needs no EPUB, only the file, so an imported translation's menu now
+  offers *Tidy up the text…*: it says exactly which lines it would take
+  out and takes them out only if you agree.
+
+### Fixed
+- **An edition's furniture is judged by what it is, not how it is marked
+  up.** Every rule before this one read the markup — a `nav` document, a
+  `toc` class, a row of links — and each could be defeated by an edition
+  that dressed the same navigation differently, which is how the same
+  footer survived three attempts at it. This one reads the text and asks
+  something no single paragraph can answer: does this line belong to no
+  verse, and does it appear word for word in three or more separate books?
+  Nothing in Scripture answers yes. Text inside a verse is never
+  considered, so an "Amen." that ends book after book is safe; what
+  repeats outside a verse repeats within one book, and a psalm's
+  superscription is in Psalms and nowhere else. The import says what it
+  dropped rather than dropping it quietly.
+
 ## 1.13.2
 
 ### Fixed

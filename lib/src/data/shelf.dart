@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../model/bib_file.dart';
 import '../model/bible.dart';
 import 'epub_import.dart';
+import 'import_tidy.dart';
 import 'shelf_store.dart';
 
 /// A translation the reader brought themselves, as it sits on the shelf.
@@ -159,6 +160,34 @@ class Shelf extends ChangeNotifier {
     final shelved = byId(id);
     if (shelved == null) return;
     await store.copy(shelved.path, path);
+  }
+
+  /// What sweeping a shelved translation would take out of it. Nothing is
+  /// written: the reader is shown what would go first.
+  Future<TidyResult> tidy(String id) async {
+    final shelved = byId(id);
+    if (shelved == null) return const TidyResult.failed('not on the shelf');
+    final Uint8List bytes;
+    try {
+      bytes = await store.read(shelved.path);
+    } on Object catch (error) {
+      return TidyResult.failed('$error');
+    }
+    return bytes.length >= isolateAbove
+        ? compute(tidyBib, bytes)
+        : tidyBib(bytes);
+  }
+
+  /// Puts a rewritten file in place of the one on the shelf.
+  Future<bool> replace(String id, Uint8List bytes) async {
+    try {
+      await store.write(_fileName(id), bytes);
+    } on Object catch (error) {
+      debugPrint('OpenWord: could not replace $id: $error');
+      return false;
+    }
+    await refresh();
+    return true;
   }
 
   Future<void> remove(String id) async {

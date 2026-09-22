@@ -156,6 +156,33 @@ void main() {
     expect(find.text('Remove'), findsNothing);
   });
 
+  testWidgets('an import can be tidied where it has furniture in it', (
+    tester,
+  ) async {
+    await onDisk(tester, () => shelf.add(_epub, fileName: 'imported.epub'));
+    final (_, _) = await pumpSettings(tester, withShelf: shelf);
+
+    // The menu on the imported translation, not on a bundled one: only an
+    // import can have an edition's navigation baked into it.
+    await tester.tap(find.byIcon(Icons.inventory_2_outlined));
+    await tester.pumpAndSettle();
+    expect(find.text('Tidy up the text…'), findsOneWidget);
+
+    await tester.tap(find.text('Tidy up the text…'));
+    await settleDisk(tester);
+
+    // This fixture has no repeated furniture, and saying so plainly beats
+    // a dialog with nothing in it.
+    expect(find.textContaining('repeats around every book'), findsOneWidget);
+  });
+
+  testWidgets('a bundled translation is not offered it', (tester) async {
+    await pumpSettings(tester);
+    await tester.tap(find.byType(PopupMenuButton<String>).first);
+    await tester.pumpAndSettle();
+    expect(find.text('Tidy up the text…'), findsNothing);
+  });
+
   testWidgets('with nowhere to keep files there is nothing to import', (
     tester,
   ) async {

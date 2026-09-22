@@ -5,6 +5,7 @@ import 'package:archive/archive.dart';
 import 'package:xml/xml.dart';
 
 import '../model/bible.dart';
+import '../model/boilerplate.dart';
 import '../model/book_meta.dart';
 import '../model/text_normal.dart';
 import '../model/versification_check.dart';
@@ -119,7 +120,23 @@ class EpubImport {
       }
     }
 
-    final books = builder.finish();
+    var books = builder.finish();
+
+    // Take out the furniture the edition prints around every book. Every
+    // rule above this one reads the markup and can be defeated by an
+    // edition that marks its navigation up some other way; this one reads
+    // only the text, and asks a question no single paragraph can answer.
+    final swept = stripBoilerplate(books);
+    if (!swept.isEmpty) {
+      books = swept.books;
+      builder.warn(
+        'Dropped ${swept.removed.length} '
+        '${swept.removed.length == 1 ? "line" : "lines"} the edition '
+        'repeats around every book, belonging to no verse: '
+        '${_quoted(swept.removed)}.',
+      );
+    }
+
     if (books.isEmpty) {
       return ImportResult(
         failure:
@@ -403,6 +420,18 @@ class EpubImport {
       }
     }
     return labels;
+  }
+
+  /// The first few of a list, quoted, so a warning names what it dropped
+  /// without running to a page of it.
+  static String _quoted(List<String> lines) {
+    const shown = 4;
+    String short(String line) =>
+        line.length <= 40 ? line : '${line.substring(0, 39)}…';
+    final quoted = lines.take(shown).map((line) => '"${short(line)}"');
+    return lines.length <= shown
+        ? quoted.join(', ')
+        : '${quoted.join(', ')} and ${lines.length - shown} more';
   }
 
   /// A document's text, composed to NFC.

@@ -646,6 +646,8 @@ class _TranslationMenu extends StatelessWidget {
           child: Text('Save a copy with the study layers…'),
         ),
         if (_imported)
+          const PopupMenuItem(value: 'tidy', child: Text('Tidy up the text…')),
+        if (_imported)
           const PopupMenuItem(value: 'remove', child: Text('Remove')),
       ],
       onSelected: (choice) async {
@@ -684,6 +686,10 @@ class _TranslationMenu extends StatelessWidget {
           await _saveWithLayers(messenger);
           return;
         }
+        if (choice == 'tidy') {
+          await _tidy(context, messenger);
+          return;
+        }
         if (choice == 'remove') {
           final shelf = library.shelf;
           if (shelf == null) return;
@@ -700,6 +706,126 @@ class _TranslationMenu extends StatelessWidget {
           messenger.showSnackBar(SnackBar(content: Text('Removed $name')));
         }
       },
+    );
+  }
+
+  /// Takes an edition's furniture out of a translation already on the
+  /// shelf — the navigation it prints around every book, which used to be
+  /// read as the last verse of whichever book it followed.
+  ///
+  /// This exists because an import is a stored file and updating the app
+  /// never touches it: a translation imported before a fix keeps the fault
+  /// for ever, and re-importing needs the EPUB, which the app did not
+  /// keep. What this looks for needs no EPUB.
+  ///
+  /// Nothing is written until the reader has seen what would go. It is
+  /// their Bible, and a rule with a threshold in it should show its work.
+  Future<void> _tidy(
+    BuildContext context,
+    ScaffoldMessengerState messenger,
+  ) async {
+    final shelf = library.shelf;
+    if (shelf == null) return;
+
+    // Each message replaces the one before it. Queued, the outcome would
+    // wait behind "Looking through…" for as long as that takes to time
+    // out, which reads as nothing having happened.
+    void say(String message) {
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    }
+
+    say('Looking through $name…');
+
+    final found = await shelf.tidy(id);
+    if (!context.mounted) return;
+    if (found.failure != null) {
+      say('Could not read $name: ${found.failure}');
+      return;
+    }
+    if (!found.foundSomething) {
+      say('Nothing in $name repeats around every book.');
+      return;
+    }
+
+    final lines = found.removed;
+    final agreed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Tidy up $name?'),
+        content: SizedBox(
+          width: 420,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                lines.length == 1
+                    ? 'This line belongs to no verse and appears in three '
+                          'or more books, so it is the edition\'s own '
+                          'furniture rather than Scripture:'
+                    : 'These ${lines.length} lines belong to no verse and '
+                          'each appears in three or more books, so they '
+                          'are the edition\'s own furniture rather than '
+                          'Scripture:',
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: [
+                    for (final line in lines.take(12))
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 6),
+                        child: Text(
+                          '· $line',
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ),
+                    if (lines.length > 12)
+                      Text(
+                        'and ${lines.length - 12} more',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Leave it'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Take them out'),
+          ),
+        ],
+      ),
+    );
+    if (agreed != true) return;
+
+    final written = await shelf.replace(id, found.bytes!);
+    if (!written) {
+      say('Could not rewrite $name.');
+      return;
+    }
+    // Whatever is open is now the old copy; read the new one.
+    if (settings.translationId == id) await library.load(id);
+    if (settings.compareTranslationId == id) {
+      // loadComparison answers at once when the id is already loaded, so
+      // the stale copy has to go first.
+      library.clearComparison();
+      await library.loadComparison(id);
+    }
+    say(
+      'Took ${lines.length} ${lines.length == 1 ? "line" : "lines"} '
+      'out of $name.',
     );
   }
 
