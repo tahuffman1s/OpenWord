@@ -6,6 +6,7 @@ import 'package:xml/xml.dart';
 
 import '../model/bible.dart';
 import '../model/book_meta.dart';
+import '../model/text_normal.dart';
 import '../model/versification_check.dart';
 import 'reference_search.dart';
 
@@ -378,8 +379,15 @@ class EpubImport {
     return labels;
   }
 
+  /// A document's text, composed to NFC.
+  ///
+  /// An EPUB may carry its accents decomposed, or two Hebrew points in
+  /// either order. Either looks right on the page and matches nothing a
+  /// reader types, so everything is composed once, here, before it is
+  /// parsed — which covers the Scripture, the headings the books are named
+  /// from and the footnotes alike.
   static String _text(ArchiveFile file) =>
-      utf8.decode(file.content, allowMalformed: true);
+      ScriptureText.normalise(utf8.decode(file.content, allowMalformed: true));
 
   /// XHTML is XML, but plenty of EPUBs carry HTML's named entities, which an
   /// XML parser has no table for. The five XML entities are left alone.

@@ -190,6 +190,16 @@ It is implemented in `lib/src/model/bib_file.dart` and
 a reading format, not an archival one: it keeps what a reader displays, not
 the full semantics of the USFM behind it.
 
+### Composing the text
+
+All text in a `.bib` is Unicode NFC. Unicode can spell the same word more
+than one way — `é` as one codepoint or as `e` plus a combining acute,
+Hebrew with two points on a letter in either order — and the spellings look
+identical on the page while being different bytes. A reader typing what
+they see would get nothing back, with nothing anywhere to explain it. So
+imported text is composed on the way in, and a search query is composed
+the same way before it is used.
+
 ### Checking the verse numbering
 
 The cross-references and the Hebrew and Greek are keyed to the verse, not

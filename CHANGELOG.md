@@ -15,6 +15,14 @@
   unpacked until something searches, and carries the checksum of the text
   it was built from so a stale one is ignored rather than quietly losing
   verses. Every `.bib` the app writes gets one, imports included.
+- **Imported text is composed to NFC.** Unicode can spell the same word
+  more than one way — `é` as one codepoint or as `e` plus a combining
+  acute, Hebrew with two points on a letter in either order. The spellings
+  look identical on the page and are different bytes, so a reader typing
+  what they see would get nothing back, with no error anywhere to explain
+  it. Text is now composed as it is imported, and a search query is
+  composed the same way. The three bundled translations were already
+  composed throughout, which a test now keeps true.
 - **An imported Bible's verse numbering is checked, not assumed.** The
   cross-references and the Hebrew and Greek are keyed to the verse, so they
   have always applied to an imported translation as much as to the bundled

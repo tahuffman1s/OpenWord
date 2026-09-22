@@ -17,6 +17,11 @@ dependencies:
   # Gunzips the bundled Scripture and checksums its chunks; pure Dart, so it
   # works on the web too.
   archive: ^4.0.0
+  # Unicode normalisation. An EPUB may carry its accents and its Hebrew
+  # points decomposed, which looks identical on screen and matches nothing
+  # a reader types; imported text is composed to NFC on the way in. Pure
+  # Dart, so it works on the web too.
+  unorm_dart: ^0.3.0
   # SHA-256 of a .bib file's Scripture, so two copies can be told apart
   # without comparing megabytes. Already in the tree as a transitive
   # dependency; named here because the app imports it directly.

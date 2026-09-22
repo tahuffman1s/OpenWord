@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../model/bible.dart';
 import '../model/book_meta.dart';
+import '../model/text_normal.dart';
 
 /// Where a search looks.
 enum SearchScope {
@@ -48,7 +49,9 @@ List<SearchHit> searchBible(
   bool wholeWord = false,
   int limit = 400,
 }) {
-  final needle = query.trim();
+  // Composed the same way the text was, so that what a reader types finds
+  // what is on the page even where the two were spelled differently.
+  final needle = ScriptureText.normalise(query.trim());
   if (needle.length < 2) return const [];
 
   final pattern = wholeWord

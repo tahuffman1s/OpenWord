@@ -205,6 +205,20 @@ Four control characters carry inline formatting inside a segment's text:
 Control characters are used because Scripture text never contains them, so
 nothing has to be escaped and a search over the raw text needs no parsing.
 
+### Text is NFC
+
+All text in the file — Scripture, footnotes, headings, the metadata — is in
+Unicode Normalization Form C. A writer must compose it; a reader may assume
+it, and should compose anything it compares against the file.
+
+This is not a formality. Unicode can spell the same word more than one way:
+`é` is one codepoint or an `e` followed by a combining acute, and Hebrew
+with two points on a letter can carry them in either order. The spellings
+look identical on the page, are canonically equivalent, and are different
+bytes — so a reader typing what they see gets nothing back, and no error is
+raised anywhere. Fixing it at the boundary is the only place it stays
+fixed.
+
 ## `srch`
 
 Which books of the translation each of its words occurs in, so that a
