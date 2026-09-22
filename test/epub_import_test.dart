@@ -137,6 +137,7 @@ Uint8List epubWithToc({
 }
 
 void main() {
+  _aRowOfLinksIsNotScripture();
   _theShapeOfARealEdition();
   group('the shapes a Bible EPUB comes in', () {
     test('numbered spans, the usual output of publishing tools', () {
@@ -967,6 +968,118 @@ void main() {
 
       expect(result.ok, isFalse);
       expect(result.failure, contains('No books of the Bible'));
+    });
+  });
+}
+
+/// A book's landing page lists the chapters under it, and an edition that
+/// puts one in the reading order had it read as the book's first verse.
+void _aRowOfLinksIsNotScripture() {
+  group('a page that lists a book\'s chapters', () {
+    const landing =
+        '<h1 class="book-title">1 John</h1>'
+        '<p class="chapter-list">'
+        '<a href="1jn1.xhtml">1 John 1</a> &#183; '
+        '<a href="1jn2.xhtml">1 John 2</a> &#183; '
+        '<a href="1jn3.xhtml">1 John 3</a></p>';
+    const chapterOne =
+        '<h1>1 John</h1>'
+        '<p><b class="chapter-num" id="v62001001-1">1:1&#160;</b>'
+        'That which was from the beginning, which we have heard.'
+        '<b class="verse-num" id="v62001002-1">2&#160;</b>'
+        'And the life was manifested.</p>';
+    const chapterTwo =
+        '<p><b class="chapter-num" id="v62002001-1">2&#160;</b>'
+        'My little children, these things I write unto you.</p>';
+
+    late Bible bible;
+
+    setUpAll(() {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            ('1jn.xhtml', landing),
+            ('1jn1.xhtml', chapterOne),
+            ('1jn2.xhtml', chapterTwo),
+          ],
+        ),
+      );
+      expect(result.failure, isNull, reason: result.failure ?? '');
+      bible = result.bible!;
+    });
+
+    test('is not the first verse of the book', () {
+      // The "1" of "1 John 1" was taken for verse 1 — a paragraph opening
+      // with a number is one of the ways an edition numbers a verse — and
+      // the rest of the line became its text.
+      final one = bible.bookByCode('1JN')!.chapter(1)!;
+      expect(
+        one.verseText(1),
+        'That which was from the beginning, which we have heard.',
+      );
+      expect(
+        one.blocks
+            .expand((block) => block.segments)
+            .map((segment) => Markup.strip(segment.text))
+            .join('\n'),
+        isNot(contains('1 John 2')),
+      );
+    });
+
+    test('and the chapters it pointed at are all there', () {
+      final book = bible.bookByCode('1JN')!;
+      expect(book.chapters, hasLength(2));
+      expect(
+        book.chapter(2)!.verseText(1),
+        'My little children, these things I write unto you.',
+      );
+    });
+  });
+
+  group('but a verse carrying links is still a verse', () {
+    test('footnote markers do not make a paragraph into a menu', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1><h2>1</h2>'
+                  '<p><sup>1</sup>In the beginning God created the heavens'
+                  '<a class="noteref" href="#f1">a</a> and the earth'
+                  '<a class="noteref" href="#f2">b</a>.'
+                  '<sup>2</sup>And the earth was without form'
+                  '<a class="noteref" href="#f3">c</a>.</p>',
+            ),
+          ],
+        ),
+      );
+      final chapter = result.bible!.bookByCode('GEN')!.chapter(1)!;
+      expect(
+        chapter.verseText(1),
+        'In the beginning God created the heavens and the earth.',
+      );
+      expect(chapter.verseText(2), 'And the earth was without form.');
+    });
+
+    test('nor do verse numbers an edition links to itself', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1><h2>1</h2>'
+                  '<p>'
+                  '<a class="verse-num" href="#v1" id="v1">1</a>'
+                  'In the beginning God created.'
+                  '<a class="verse-num" href="#v2" id="v2">2</a>'
+                  'And the earth was without form.</p>',
+            ),
+          ],
+        ),
+      );
+      final chapter = result.bible!.bookByCode('GEN')!.chapter(1)!;
+      expect(chapter.verseText(1), 'In the beginning God created.');
+      expect(chapter.verseText(2), 'And the earth was without form.');
     });
   });
 }

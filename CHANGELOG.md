@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.13.1
+
+### Fixed
+- **A page listing a book's chapters is no longer read as its first verse.**
+  Editions put an index page in front of each book — "1 John 1 · 1 John 2 ·
+  1 John 3 · 1 John 4 · 1 John 5" — and a paragraph opening with a number is
+  one of the ways an edition numbers a verse, so the "1" of "1 John 1" was
+  taken for verse 1 and the rest of the line became its text. Scripture is
+  not made of links and navigation is, which is the whole test: a block
+  whose text is mostly inside links, and which holds more than one, is not
+  Scripture. Measured on how much of the text is linked rather than on how
+  many links there are, so a verse carrying a footnote marker or two — or
+  one whose numbers an edition links to itself — is not mistaken for a menu.
+
 ## 1.13.0
 
 ### Added

@@ -626,6 +626,8 @@ class _BibleBuilder {
       }
 
       if (_isBlock(name, classes)) {
+        // A row of links is navigation, not Scripture.
+        if (_isNavigation(child)) continue;
         final blockStyle = _styleFor(name, classes, style);
         final level = _poetryLevel(classes);
         // A row holds cells, which are not blocks: the row is read whole
@@ -714,6 +716,53 @@ class _BibleBuilder {
     'copyright',
     'toc',
   };
+
+  /// Whether a block is a row of links rather than a word of Scripture.
+  ///
+  /// A book's landing page lists the chapters under it — "1 John 1 · 1 John
+  /// 2 · …" — and an edition that puts one in the reading order had that
+  /// read as the first verse of the book: a paragraph opening with a number
+  /// is one of the ways an edition numbers a verse, so the "1" of "1 John
+  /// 1" was taken for verse 1 and the rest of the line for its text.
+  ///
+  /// Scripture is not made of links and navigation is, which is the whole
+  /// test. Measured on how much of the text sits inside a link rather than
+  /// on how many links there are, so a verse carrying one or two of them —
+  /// a footnote marker, a reference — is not mistaken for a menu. Two links
+  /// at least, because a single one is as likely to be a citation as a
+  /// list, and a heading is never judged this way: plenty of editions make
+  /// a chapter's own heading a link to itself.
+  bool _isNavigation(XmlElement element) {
+    var links = 0;
+    var linked = 0;
+    var total = 0;
+
+    void measure(XmlNode node, {required bool inLink}) {
+      if (node is XmlText || node is XmlCDATA) {
+        final length = (node.value ?? '').trim().length;
+        total += length;
+        if (inLink) linked += length;
+        return;
+      }
+      if (node is! XmlElement) return;
+      // Apparatus is not counted either way: a verse with three footnote
+      // markers in it is still a verse.
+      if (_skip(node)) return;
+      final isLink =
+          node.localName.toLowerCase() == 'a' &&
+          (node.getAttribute('href') ?? '').isNotEmpty;
+      if (isLink && !inLink) links++;
+      for (final child in node.children) {
+        measure(child, inLink: inLink || isLink);
+      }
+    }
+
+    for (final child in element.children) {
+      measure(child, inLink: false);
+    }
+    if (links < 2 || total == 0) return false;
+    return linked / total >= 0.6;
+  }
 
   bool _skip(XmlElement element) {
     final name = element.localName.toLowerCase();
