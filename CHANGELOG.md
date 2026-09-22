@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.13.2
+
+### Fixed
+- **A book's own navigation footer is no longer its last verse.** Editions
+  end each book's document with one — "ESV", "The Old Testament", "The New
+  Testament", "Show Last Hilite", then the list of books — and because it
+  sits inside the book's own file, nothing declared it and the verse left
+  open carried it: it arrived as the end of Job 42, of 2 Peter 3, of
+  whatever book it followed. 1.13.1 dropped the row of book names; the rest
+  got through, because a footer puts each link in a paragraph of its own
+  and one link was not enough to give it away. A block that is nothing but
+  a link is now navigation however few links it has, and once a document is
+  into its footer everything that follows is footer too — which is what
+  catches the plain label between the links, "ESV · The Old Testament",
+  that carries no link at all.
+- A block that numbers a verse is never read as navigation, however it is
+  marked up. Some editions hang a link on every verse, and a verse wrapped
+  in one end to end is still a verse.
+
 ## 1.13.1
 
 ### Fixed

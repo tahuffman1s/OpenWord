@@ -1036,6 +1036,85 @@ void _aRowOfLinksIsNotScripture() {
     });
   });
 
+  group('a navigation footer at the foot of a book', () {
+    // Every book's own document ends with one, so it is not the
+    // navigation document the manifest names and nothing declares it.
+    const footer =
+        '<p><a href="index.xhtml">ESV</a></p>'
+        '<p><a href="ot.xhtml">The Old Testament</a></p>'
+        '<p><a href="nt.xhtml">The New Testament</a></p>'
+        '<p><a href="#">Show Last Hilite</a></p>'
+        '<p>ESV &#183; The Old Testament</p>'
+        '<p><a href="gen.xhtml">Genesis</a> &#183; '
+        '<a href="exo.xhtml">Exodus</a> &#183; '
+        '<a href="lev.xhtml">Leviticus</a></p>';
+
+    test('is not the last verse of that book', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              '2pe.xhtml',
+              '<h1>2 Peter</h1>'
+                  '<p><b class="chapter-num" id="v61003001-1">3:1&#160;</b>'
+                  'This is now the second letter.'
+                  '<b class="verse-num" id="v61003018-1">18&#160;</b>'
+                  'But grow in the grace and knowledge. Amen.</p>'
+                  '$footer',
+            ),
+          ],
+        ),
+      );
+      final chapter = result.bible!.bookByCode('2PE')!.chapter(1)!;
+      expect(
+        chapter.verseText(18),
+        'But grow in the grace and knowledge. Amen.',
+      );
+      // Every line of it: the links one to a paragraph, the row of book
+      // names, and the plain label between them that carries no link at
+      // all to give it away.
+      final everything = chapter.blocks
+          .expand((block) => block.segments)
+          .map((segment) => Markup.strip(segment.text))
+          .join('\n');
+      for (final line in const [
+        'ESV',
+        'The Old Testament',
+        'The New Testament',
+        'Show Last Hilite',
+        'Genesis',
+      ]) {
+        expect(everything, isNot(contains(line)), reason: 'footer: $line');
+      }
+    });
+
+    test('and Scripture after one is Scripture again', () {
+      // A footer between two books must not swallow the book that follows.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'both.xhtml',
+              '<h1>2 Peter</h1>'
+                  '<p><b class="chapter-num" id="v61003001-1">3:1&#160;</b>'
+                  'This is now the second letter.</p>'
+                  '$footer'
+                  '<h1>1 John</h1>'
+                  '<p><b class="chapter-num" id="v62001001-1">1:1&#160;</b>'
+                  'That which was from the beginning.</p>'
+                  '<p>And these things we write, that your joy may be full.</p>',
+            ),
+          ],
+        ),
+      );
+      final john = result.bible!.bookByCode('1JN')!.chapter(1)!;
+      expect(john.verseText(1), contains('That which was from the beginning.'));
+      // Including a paragraph of its own that numbers nothing, which is a
+      // continuation of the verse before it and not more footer.
+      expect(john.verseText(1), contains('your joy may be full'));
+    });
+  });
+
   group('but a verse carrying links is still a verse', () {
     test('footnote markers do not make a paragraph into a menu', () {
       final result = EpubImport.convert(
@@ -1059,6 +1138,28 @@ void _aRowOfLinksIsNotScripture() {
         'In the beginning God created the heavens and the earth.',
       );
       expect(chapter.verseText(2), 'And the earth was without form.');
+    });
+
+    test('nor does an edition that hangs a link on the whole verse', () {
+      // Some hang one on every verse — to a commentary, to a note — and a
+      // verse wrapped in a link end to end is still a verse.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1><h2>1</h2>'
+                  '<p><sup>1</sup>'
+                  '<a href="notes.xhtml#g1">In the beginning God created the '
+                  'heavens and the earth.</a></p>',
+            ),
+          ],
+        ),
+      );
+      expect(
+        result.bible!.bookByCode('GEN')!.chapter(1)!.verseText(1),
+        'In the beginning God created the heavens and the earth.',
+      );
     });
 
     test('nor do verse numbers an edition links to itself', () {

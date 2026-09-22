@@ -579,6 +579,7 @@ class _BibleBuilder {
     // chapter has begun in an edition that heads none: a file whose numbers
     // run 1, 2, 3 after a file that ended at 31 has started a new chapter.
     _numberedHere = false;
+    _inNavigation = false;
 
     final body = document.findAllElements('body', namespace: '*').firstOrNull;
     _walk(body ?? document.rootElement, BlockStyle.paragraph, 0);
@@ -627,7 +628,10 @@ class _BibleBuilder {
 
       if (_isBlock(name, classes)) {
         // A row of links is navigation, not Scripture.
-        if (_isNavigation(child)) continue;
+        if (_isNavigation(child)) {
+          _inNavigation = true;
+          continue;
+        }
         final blockStyle = _styleFor(name, classes, style);
         final level = _poetryLevel(classes);
         // A row holds cells, which are not blocks: the row is read whole
@@ -736,6 +740,11 @@ class _BibleBuilder {
     var links = 0;
     var linked = 0;
     var total = 0;
+    // A block that numbers a verse is Scripture whatever else is in it.
+    // Some editions hang a link on every verse — to a commentary, to a
+    // note — and without this a verse wrapped in one end to end would be
+    // read as a menu item and dropped.
+    var numbered = false;
 
     void measure(XmlNode node, {required bool inLink}) {
       if (node is XmlText || node is XmlCDATA) {
@@ -748,6 +757,18 @@ class _BibleBuilder {
       // Apparatus is not counted either way: a verse with three footnote
       // markers in it is still a verse.
       if (_skip(node)) return;
+      final classes = classesOf(node);
+      if (_isChapterLabel(classes) ||
+          _verseNumber(
+                node.localName.toLowerCase(),
+                classes,
+                node.getAttribute('id') ?? '',
+                node.innerText,
+              ) !=
+              null) {
+        numbered = true;
+        return;
+      }
       final isLink =
           node.localName.toLowerCase() == 'a' &&
           (node.getAttribute('href') ?? '').isNotEmpty;
@@ -760,8 +781,16 @@ class _BibleBuilder {
     for (final child in element.children) {
       measure(child, inLink: false);
     }
-    if (links < 2 || total == 0) return false;
-    return linked / total >= 0.6;
+    if (numbered || links < 1 || total == 0) return false;
+    final fraction = linked / total;
+    // A block that is nothing but a link is navigation however many links
+    // it has: an edition's footer puts each of "ESV", "The Old Testament"
+    // and "Show Last Hilite" in a paragraph of its own, and one link each
+    // is all they are. A verse is never a link end to end.
+    if (fraction >= 0.95) return true;
+    // Below that it takes more than one, because a single link inside a
+    // run of text is as likely to be a citation as a list.
+    return links >= 2 && fraction >= 0.6;
   }
 
   bool _skip(XmlElement element) {
@@ -815,6 +844,16 @@ class _BibleBuilder {
 
   /// Whether a verse marker has been seen in the document being read.
   bool _numberedHere = false;
+
+  /// Whether this document has reached its navigation.
+  ///
+  /// A footer is not one block. Between the links an edition writes plain
+  /// labels — "ESV · The Old Testament" heads the list of the books under
+  /// it — which carry no link to give them away and would otherwise be
+  /// appended to the last verse of the book, as the links themselves used
+  /// to be. Once a document is into its navigation, everything that
+  /// follows is navigation until something numbers a verse again.
+  bool _inNavigation = false;
 
   /// What was last placed, which is how a line carrying nothing but an
   /// indent is read: after a line of verse it is another line of verse.
@@ -1167,6 +1206,8 @@ class _BibleBuilder {
       startsVerse = true;
       _verse = number;
       _numberedHere = true;
+      // Scripture again: whatever navigation there was is behind us.
+      _inNavigation = false;
       _versesSeenHere.add(number);
     }
 
@@ -1356,6 +1397,12 @@ class _BibleBuilder {
           segments: segments,
         ),
       );
+      return;
+    }
+
+    // Once a document is into its footer, a block that numbers nothing is
+    // part of that footer rather than the end of the book.
+    if (_inNavigation && !segments.any((segment) => segment.startsVerse)) {
       return;
     }
 
