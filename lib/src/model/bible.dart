@@ -272,8 +272,21 @@ class Versification {
   /// translations, its cross-references and its Strong's layer all share.
   static const String english = 'eng';
 
-  /// Said by a file that does not know. Nothing may assume it matches.
+  /// Said by a file that does not know. Nothing may assume it matches —
+  /// but nothing may assume it does not, either, so the app gives it the
+  /// benefit of the doubt.
   static const String unknown = 'unknown';
+
+  /// Said by a file whose numbering has been measured against [english]
+  /// and does not match it. Which scheme it does follow is not claimed;
+  /// only that anything anchored to [english] would land on the wrong
+  /// verse.
+  static const String other = 'other';
+
+  /// Whether verse-anchored data built for [english] — the bundled
+  /// cross-references, the original-language layer — can be trusted
+  /// against a translation saying this.
+  static bool mayAnchorEnglish(String versification) => versification != other;
 }
 
 /// Identity and licensing of a translation.

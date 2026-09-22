@@ -318,13 +318,29 @@ class _ReaderScreenState extends State<ReaderScreen> {
         reference: reference,
         text: _currentChapter.verseText(verse),
         reading: _reading,
-        crossReferences: _xrefs?.forVerse(reference) ?? const [],
+        crossReferences: _anchored
+            ? _xrefs?.forVerse(reference) ?? const []
+            : const [],
         onCrossReferences: () => _openCrossReferences(reference),
-        originalWords: _originals?.wordsFor(reference) ?? const [],
+        originalWords: _anchored
+            ? _originals?.wordsFor(reference) ?? const []
+            : const [],
         onOriginal: () => _openOriginal(reference),
       ),
     );
   }
+
+  /// Whether this translation numbers its verses the way the bundled
+  /// cross-references and original-language layer do.
+  ///
+  /// Both are anchored to one numbering. Against a Bible that numbers
+  /// differently they would not fail — they would land on the wrong verse,
+  /// confidently — so where an import has been measured and does not
+  /// match, they are not offered at all. A translation that never said
+  /// gets the benefit of the doubt, which is every file written before
+  /// this was checked.
+  bool get _anchored =>
+      Versification.mayAnchorEnglish(_bible.translation.versification);
 
   /// The Hebrew or Greek of a verse, and from there its dictionary entry
   /// and everywhere else the word is used.

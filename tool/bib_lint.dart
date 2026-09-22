@@ -12,6 +12,7 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:openword/src/model/bib_file.dart';
 import 'package:openword/src/model/bible.dart';
+import 'package:openword/src/model/versification_check.dart';
 
 void main(List<String> args) {
   if (args.isEmpty) {
@@ -110,6 +111,26 @@ bool _check(String path) {
       'no versification named: anything anchored to a verse — '
       'cross-references, an interlinear — cannot know this lines up',
     );
+  }
+  if (info.versification == Versification.other) {
+    _note(
+      'numbered differently from the English scheme, so verse-anchored '
+      'data built for that scheme does not apply to this',
+    );
+  }
+  // What the file claims about its numbering, checked against the text.
+  final measured = VersificationCheck.against(bible);
+  if (measured.isInconclusive) {
+    _note('too few books to measure the numbering ($measured)');
+  } else {
+    _note('measured against the English numbering: $measured');
+    if (info.versification != Versification.unknown &&
+        info.versification != measured.versification) {
+      _warn(
+        'the file says its versification is ${info.versification}, but its '
+        'verse counts say ${measured.versification}',
+      );
+    }
   }
   if (info.license.isEmpty) _warn('no licence named');
 

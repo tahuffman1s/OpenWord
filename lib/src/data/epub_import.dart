@@ -6,6 +6,7 @@ import 'package:xml/xml.dart';
 
 import '../model/bible.dart';
 import '../model/book_meta.dart';
+import '../model/versification_check.dart';
 import 'reference_search.dart';
 
 /// What came of reading an EPUB: a Bible, or the reason there is not one,
@@ -119,9 +120,34 @@ class EpubImport {
       );
     }
 
+    // Which verse numbering this follows decides whether the bundled
+    // cross-references and the original-language layer can be pointed at
+    // it. They do not fail against a Bible numbered differently; they
+    // quietly land on the wrong verse, so this is measured rather than
+    // assumed.
+    final described = Bible(
+      translation: _describe(opf, fileName, builder),
+      books: books,
+    );
+    final match = VersificationCheck.against(described);
+    if (match.versification == Versification.other) {
+      builder.warn(
+        'This Bible numbers its verses differently from the ones bundled '
+        'with the app — ${match.differing} of ${match.compared} chapters '
+        'are a different length. Cross-references and the Hebrew and Greek '
+        'are not offered for it, because they would point at the wrong '
+        'verses. Everything else works.',
+      );
+      for (final example in match.examples) {
+        builder.warn(example);
+      }
+    }
+
     return ImportResult(
       bible: Bible(
-        translation: _describe(opf, fileName, builder),
+        translation: described.translation.copyWith(
+          versification: match.versification,
+        ),
         books: books,
       ),
       warnings: builder.warnings,

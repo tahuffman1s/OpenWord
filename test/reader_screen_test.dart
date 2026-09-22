@@ -643,6 +643,57 @@ void main() {
     expect(harness.reading.history.first.label, 'Genesis 2');
   });
 
+  group('a translation numbered differently', () {
+    testWidgets('is not offered the layers that would land on wrong verses', (
+      tester,
+    ) async {
+      final normal = parseFixture();
+
+      // Genesis 1:1 has both a cross-reference and a Hebrew word behind it
+      // in the fixtures, so both would be offered but for the marking.
+      await pumpReader(
+        tester,
+        bible: Bible(
+          translation: normal.translation.copyWith(
+            versification: Versification.other,
+          ),
+          books: normal.books,
+        ),
+      );
+
+      await tester.tap(verseNumber('1').first);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('cross-references'), findsNothing);
+      expect(find.text('Hebrew'), findsNothing);
+      // Everything that does not depend on the numbering still works.
+      expect(find.text('Bookmark'), findsOneWidget);
+      expect(find.text('Copy'), findsOneWidget);
+    });
+
+    testWidgets('one that never said keeps them, as it always had', (
+      tester,
+    ) async {
+      final normal = parseFixture();
+
+      await pumpReader(
+        tester,
+        bible: Bible(
+          translation: normal.translation.copyWith(
+            versification: Versification.unknown,
+          ),
+          books: normal.books,
+        ),
+      );
+
+      await tester.tap(verseNumber('1').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 cross-references'), findsOneWidget);
+      expect(find.text('Hebrew'), findsOneWidget);
+    });
+  });
+
   group('a translation that runs the other way', () {
     testWidgets('the page follows the direction the file declares', (
       tester,

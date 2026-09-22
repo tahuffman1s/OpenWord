@@ -147,7 +147,8 @@ licence, and three things worth saying out loud:
   cross-references and the interlinear included, is anchored to one
   numbering, and Bibles do not share one. A file that does not say can be
   mis-anchored with nothing appearing to go wrong, which is the worst way
-  for it to go wrong.
+  for it to go wrong. **An import is measured rather than trusted** — see
+  below.
 - **`contentHash`** — SHA-256 of the Scripture, so two copies can be told
   apart without comparing megabytes.
 
@@ -188,6 +189,44 @@ It is implemented in `lib/src/model/bib_file.dart` and
 `lib/src/model/bible_codec.dart`, both MIT like the rest of the app. It is
 a reading format, not an archival one: it keeps what a reader displays, not
 the full semantics of the USFM behind it.
+
+### Checking the verse numbering
+
+The cross-references and the Hebrew and Greek are keyed to the verse, not
+to an edition's wording, so they apply to an imported translation as much
+as to the three that ship. That only holds while the numbering agrees.
+Point them at a Bible that counts a psalm's superscription as its first
+verse, or divides Joel the Hebrew way, and they do not fail — they land on
+the wrong verse, confidently, which is worse.
+
+So an import is measured. Its per-chapter verse counts are compared with
+the English scheme (`lib/src/model/versification_table.dart`, generated
+from the Berean Standard Bible, since that is what the cross-references
+were anchored to), and where it does not match, the translation is marked
+`other` and those two layers are not offered for it. The import says so,
+and so does Settings, rather than leaving a reader to notice that a
+feature quietly went missing.
+
+The line sits at 2% of chapters, which is where the evidence puts it:
+
+- Editions of the English Bible disagree with each other a little. The
+  three bundled here differ over **2 of 1189 chapters — 0.17%** — which is
+  Romans' floating doxology, and nothing else.
+- A difference in *scheme* is nothing like that small. Counting psalm
+  superscriptions moves something like a hundred chapters of the Psalms on
+  its own, over 8%; Septuagint psalm numbering moves more.
+
+Only the sixty-six books of the Protestant canon are compared. English
+editions that agree about everything else disagree about the
+deuterocanon — the three bundled here differ over Greek Esther, Sirach,
+Baruch and 4 Maccabees — so counting those would raise a false alarm on an
+ordinary import. A Bible too small to judge, under 100 comparable
+chapters, is left as `unknown` and keeps both layers: saying nothing is
+not the same as failing.
+
+```bash
+dart run tool/build_versification.dart   # regenerate the table
+```
 
 ### What the EPUB converter does
 

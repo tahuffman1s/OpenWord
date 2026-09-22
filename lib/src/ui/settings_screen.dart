@@ -14,6 +14,7 @@ import '../data/settings.dart';
 import '../data/translations.dart';
 import '../data/updates.dart';
 import '../model/bib_file.dart';
+import '../model/bible.dart';
 import 'import_sheet.dart';
 import 'update_sheet.dart';
 
@@ -194,7 +195,21 @@ class SettingsScreen extends StatelessWidget {
                     value: translation.id,
                     title: Text(translation.name),
                     subtitle: Text(
-                      '${translation.abbreviation} • ${translation.license}',
+                      [
+                        '${translation.abbreviation} • ${translation.license}',
+                        // Said here as well as at import, so that a reader
+                        // who later wonders where the cross-references
+                        // went is not left guessing.
+                        if (!Versification.mayAnchorEnglish(
+                          translation.versification,
+                        ))
+                          'Numbers its verses differently, so '
+                              'cross-references and the Hebrew and Greek '
+                              'are not offered for it.',
+                      ].join('\n'),
+                    ),
+                    isThreeLine: !Versification.mayAnchorEnglish(
+                      translation.versification,
                     ),
                     secondary: _TranslationMenu(
                       id: translation.id,

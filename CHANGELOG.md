@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+### Added
+- **An imported Bible's verse numbering is checked, not assumed.** The
+  cross-references and the Hebrew and Greek are keyed to the verse, so they
+  have always applied to an imported translation as much as to the bundled
+  ones — but only while the numbering agrees. Against a Bible that counts
+  psalm superscriptions, or divides Joel the Hebrew way, they would not
+  fail; they would point at the wrong verse. An import is now measured
+  against the English scheme, and where it does not match it is marked and
+  those two layers are withheld, with the import and Settings both saying
+  why. The line is at 2% of chapters: the three bundled translations differ
+  from each other over 0.17%, and a real difference in scheme is several
+  per cent at least. Only the Protestant canon is compared — English
+  editions disagree about the deuterocanon while agreeing about the rest.
+  A Bible too small to judge keeps both layers.
+
 ### Changed
 - **`.bib` version 2: a Bible opens one book at a time.** The Scripture is
   now compressed per book behind an outline of the whole translation, so

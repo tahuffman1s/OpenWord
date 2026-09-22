@@ -108,9 +108,25 @@ A file that does not say which numbering it follows can be mis-anchored
 without anything appearing to go wrong, which is the worst way for it to go
 wrong.
 
-`eng` is the numbering of the English Protestant Bible. Anything else
-round-trips as written. A reader must not assume that a file which says
-nothing matches anything.
+| Value | Means |
+|---|---|
+| `eng` | The numbering of the English Protestant Bible |
+| `other` | Measured against `eng` and found not to match. Which scheme it *does* follow is not claimed |
+| `unknown`, or absent | Not established. A version 1 file can say nothing else |
+
+Anything else round-trips as written. A reader must not assume that a file
+saying `unknown` matches anything — but it should not assume the opposite
+either, since every file written before a producer started measuring says
+exactly that.
+
+OpenWord establishes this at import by comparing the incoming Bible's
+per-chapter verse counts with the English scheme, over the sixty-six books
+of the Protestant canon only — English editions disagree about the
+deuterocanon while agreeing about everything else, so counting it would
+raise a false alarm. Editions of the English Bible differ from each other
+over about 0.2% of chapters; a difference in *scheme* is an order of
+magnitude larger, so the line sits at 2%. See
+`lib/src/model/versification_check.dart`.
 
 ## `TEXT`
 
