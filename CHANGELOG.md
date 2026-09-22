@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.12.0
 
 ### Added
 - **The cross-references and the Hebrew and Greek can be had anyway.** Both
