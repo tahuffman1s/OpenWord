@@ -146,6 +146,12 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Save a copy…'), findsOneWidget);
+    // And one that carries the app's cross-references inside it, so the
+    // file stands on its own wherever it is opened.
+    expect(find.text('Save a copy with cross-references…'), findsOneWidget);
+    // This one numbers its verses the English way, so there is nothing to
+    // overrule and nothing offering to.
+    expect(find.text('Cross-references and originals anyway'), findsNothing);
     // Nothing on the shelf to take off it.
     expect(find.text('Remove'), findsNothing);
   });

@@ -1,10 +1,12 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app_scope.dart';
 import '../app_version.dart';
 import '../data/atlas.dart';
+import '../data/bib_export.dart';
 import '../data/library.dart';
 import '../data/book_intros.dart';
 import '../data/cross_references.dart';
@@ -199,21 +201,27 @@ class SettingsScreen extends StatelessWidget {
                         '${translation.abbreviation} • ${translation.license}',
                         // Said here as well as at import, so that a reader
                         // who later wonders where the cross-references
-                        // went is not left guessing.
+                        // went is not left guessing — and, where they have
+                        // asked for them regardless, what they asked for.
                         if (!Versification.mayAnchorEnglish(
                           translation.versification,
                         ))
-                          'Numbers its verses differently, so '
-                              'cross-references and the Hebrew and Greek '
-                              'are not offered for it.',
+                          settings.anchoredAnyway.contains(translation.id)
+                              ? 'Numbers its verses differently. '
+                                    'Cross-references and the Hebrew and '
+                                    'Greek are offered anyway, at your '
+                                    'word: expect some to be out by a '
+                                    'verse or two.'
+                              : 'Numbers its verses differently, so '
+                                    'cross-references and the Hebrew and '
+                                    'Greek are not offered for it.',
                       ].join('\n'),
                     ),
                     isThreeLine: !Versification.mayAnchorEnglish(
                       translation.versification,
                     ),
                     secondary: _TranslationMenu(
-                      id: translation.id,
-                      name: translation.name,
+                      translation: translation,
                       settings: settings,
                       library: library,
                     ),
@@ -588,14 +596,15 @@ class _UpdateRow extends StatelessWidget {
 /// the ones nobody can get out.
 class _TranslationMenu extends StatelessWidget {
   const _TranslationMenu({
-    required this.id,
-    required this.name,
+    required this.translation,
     required this.settings,
     required this.library,
   });
 
-  final String id;
-  final String name;
+  final TranslationInfo translation;
+
+  String get id => translation.id;
+  String get name => translation.name;
   final Settings settings;
   final LibraryController library;
 
@@ -623,12 +632,40 @@ class _TranslationMenu extends StatelessWidget {
             enabled: false,
             child: Text(shelved == null ? 'Imported' : shelved.readableSize),
           ),
+        // Only where the app has withheld them, since that is the only
+        // case there is anything to overrule.
+        if (!Versification.mayAnchorEnglish(translation.versification))
+          CheckedPopupMenuItem(
+            value: 'anchor',
+            checked: settings.anchoredAnyway.contains(id),
+            child: const Text('Cross-references and originals anyway'),
+          ),
         const PopupMenuItem(value: 'save', child: Text('Save a copy…')),
+        const PopupMenuItem(
+          value: 'save-with-refs',
+          child: Text('Save a copy with cross-references…'),
+        ),
         if (_imported)
           const PopupMenuItem(value: 'remove', child: Text('Remove')),
       ],
       onSelected: (choice) async {
         final messenger = ScaffoldMessenger.of(context);
+        if (choice == 'anchor') {
+          final wanted = !settings.anchoredAnyway.contains(id);
+          settings.setAnchoredAnyway(id, wanted);
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(
+                wanted
+                    ? 'Cross-references and the Hebrew and Greek are on for '
+                          '$name. Some will be out by a verse or two.'
+                    : 'Cross-references and the Hebrew and Greek are off '
+                          'for $name again.',
+              ),
+            ),
+          );
+          return;
+        }
         if (choice == 'save') {
           final bytes = await _bytes();
           if (bytes == null) return;
@@ -641,6 +678,10 @@ class _TranslationMenu extends StatelessWidget {
           messenger.showSnackBar(
             SnackBar(content: Text('Saved to ${_where(saved)}')),
           );
+          return;
+        }
+        if (choice == 'save-with-refs') {
+          await _saveWithReferences(messenger);
           return;
         }
         if (choice == 'remove') {
@@ -660,6 +701,66 @@ class _TranslationMenu extends StatelessWidget {
         }
       },
     );
+  }
+
+  /// Saves the `.bib` with the app's cross-references written into it, so
+  /// the file carries them wherever it goes.
+  ///
+  /// Refused where the translation's numbering was measured as different
+  /// and the reader has not overruled that: baking a set of references
+  /// into a file they do not fit would put the mistake beyond reach of
+  /// anyone who later reads it.
+  Future<void> _saveWithReferences(ScaffoldMessengerState messenger) async {
+    void say(String message) =>
+        messenger.showSnackBar(SnackBar(content: Text(message)));
+
+    if (!settings.offersVerseKeyedLayers(translation)) {
+      say(
+        '$name numbers its verses differently, so the bundled references '
+        'would point at the wrong ones. Turn them on for it first if you '
+        'want them anyway.',
+      );
+      return;
+    }
+
+    final bytes = await _bytes();
+    if (bytes == null) return;
+
+    // A translation that brought its own set keeps it: its own is anchored
+    // to its own numbering, and the bundled English set is not an
+    // improvement on that.
+    List<String> tags;
+    try {
+      tags = BibFile.tags(bytes);
+    } on Object {
+      tags = const [];
+    }
+    if (tags.contains(CrossReferences.chunkTag)) {
+      say('$name already carries its own cross-references.');
+      return;
+    }
+
+    say('Writing the references into $name…');
+    final Uint8List out;
+    try {
+      final refs = await library.bundle.load(CrossReferences.assetPath);
+      out = await compute(attachCrossReferences, (
+        bytes,
+        Uint8List.sublistView(refs),
+      ));
+    } on Object catch (error) {
+      say('Could not write the references in: $error');
+      return;
+    }
+
+    final saved = await FilePicker.saveFile(
+      dialogTitle: 'Save $name with cross-references',
+      fileName: '$id-xrefs${BibFile.extension}',
+      bytes: out,
+    );
+    if (saved == null) return;
+    final megabytes = (out.length / (1024 * 1024)).toStringAsFixed(1);
+    say('Saved $megabytes MB to ${_where(saved)}');
   }
 
   /// A file:// URI reads as a path; anything else (the browser's download,

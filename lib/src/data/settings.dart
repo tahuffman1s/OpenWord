@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../model/bible.dart';
 import 'translations.dart';
 
 /// How the book picker lists books.
@@ -49,6 +50,7 @@ class Settings extends ChangeNotifier {
   static const _kCheckUpdates = 'checkForUpdates';
   static const _kLastCheck = 'lastUpdateCheck';
   static const _kSkippedUpdate = 'skippedUpdate';
+  static const _kAnchorAnyway = 'anchorAnyway';
 
   /// Fallback palette seeds offered where the platform has no Material You
   /// palette of its own (desktop, web, older Android, iOS).
@@ -158,6 +160,32 @@ class Settings extends ChangeNotifier {
       return;
     }
     _write(_kSkippedUpdate, value);
+  }
+
+  /// Translations the reader has asked to have the verse-keyed layers on
+  /// regardless of what their numbering was measured to be.
+  Set<String> get anchoredAnyway =>
+      (_prefs.getStringList(_kAnchorAnyway) ?? const <String>[]).toSet();
+
+  /// Whether the cross-references and the Hebrew and Greek are offered for
+  /// a translation.
+  ///
+  /// Both are keyed to the verse, so they apply to any translation whose
+  /// numbering agrees with the one they were anchored to; against a Bible
+  /// numbered otherwise they do not fail, they land on the wrong verse.
+  /// A translation measured as numbering differently is therefore not
+  /// offered them — unless the reader has asked for them anyway, which is
+  /// their call to make: they can see the verse in front of them, and a
+  /// reference that is out by one is more use to them than none at all.
+  bool offersVerseKeyedLayers(TranslationInfo translation) =>
+      Versification.mayAnchorEnglish(translation.versification) ||
+      anchoredAnyway.contains(translation.id);
+
+  void setAnchoredAnyway(String id, bool value) {
+    final ids = anchoredAnyway;
+    if (value ? !ids.add(id) : !ids.remove(id)) return;
+    _prefs.setStringList(_kAnchorAnyway, ids.toList()..sort());
+    notifyListeners();
   }
 
   void _write(String key, Object value) {

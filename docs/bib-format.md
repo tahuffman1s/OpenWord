@@ -331,7 +331,9 @@ dart run tool/attach_xrefs.dart <file.bib> <xrefs.owx.gz>
 ```
 
 It reads the set, rewrites the file, reads the result back and compares
-before replacing anything.
+before replacing anything. OpenWord itself does the same to a copy, from a
+translation's menu in Settings, and refuses where the numbering it measured
+says the set would not fit.
 
 A writer must carry chunks it does not understand through a rewrite, or a
 translation would silently lose its references the first time anything

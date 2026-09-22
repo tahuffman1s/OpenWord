@@ -356,11 +356,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// Both are anchored to one numbering. Against a Bible that numbers
   /// differently they would not fail — they would land on the wrong verse,
   /// confidently — so where an import has been measured and does not
-  /// match, they are not offered at all. A translation that never said
-  /// gets the benefit of the doubt, which is every file written before
-  /// this was checked.
-  bool get _anchored =>
-      Versification.mayAnchorEnglish(_bible.translation.versification);
+  /// match, they are not offered. A translation that never said gets the
+  /// benefit of the doubt, which is every file written before this was
+  /// checked; and a reader who wants them regardless can say so in
+  /// Settings, which is the one judgement the app is in no position to
+  /// make for them.
+  bool get _anchored => _settings.offersVerseKeyedLayers(_bible.translation);
 
   /// The Hebrew or Greek of a verse, and from there its dictionary entry
   /// and everywhere else the word is used.

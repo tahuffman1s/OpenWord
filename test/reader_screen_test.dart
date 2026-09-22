@@ -672,6 +672,32 @@ void main() {
       expect(find.text('Copy'), findsOneWidget);
     });
 
+    testWidgets('unless the reader asks for them regardless', (tester) async {
+      final normal = parseFixture();
+
+      // The app is in no position to judge whether a reference out by a
+      // verse is worse than no reference: the reader can see the verse in
+      // front of them, so it is their call, and this is them making it.
+      await pumpReader(
+        tester,
+        prefs: {
+          'anchorAnyway': [testTranslation.id],
+        },
+        bible: Bible(
+          translation: normal.translation.copyWith(
+            versification: Versification.other,
+          ),
+          books: normal.books,
+        ),
+      );
+
+      await tester.tap(verseNumber('1').first);
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('cross-references'), findsOneWidget);
+      expect(find.text('Hebrew'), findsOneWidget);
+    });
+
     testWidgets('unless it brought its own, which are right for it', (
       tester,
     ) async {

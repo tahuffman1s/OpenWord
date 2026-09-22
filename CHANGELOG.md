@@ -2,6 +2,30 @@
 
 ## Unreleased
 
+### Added
+- **The cross-references and the Hebrew and Greek can be had anyway.** Both
+  are keyed to the verse, so a translation measured as numbering its verses
+  differently was refused them outright: against that numbering they do not
+  fail, they land on the wrong verse. That is the right default and it was
+  the app's verdict rather than the reader's. Whether a reference out by a
+  verse beats no reference at all is a judgement about a book they have open
+  in front of them — so a translation's menu now offers *Cross-references
+  and originals anyway*, per translation, and Settings says the layers are
+  on at their word and what to expect of them.
+- **A `.bib` can be saved with the cross-references inside it.**
+  `tool/attach_xrefs.dart` could put the app's reference set into a file
+  from a terminal and the app could not, which left the feature to whoever
+  had a Dart toolchain. *Save a copy with cross-references…* now does it to
+  a copy: about 1.7 MB becomes about 3.0 MB, and the file then carries its
+  references wherever it is opened rather than needing this app's assets.
+  Whatever chunks the file already had are kept, the result is read back
+  before it is handed over, and a translation that brought references of its
+  own keeps those instead — they are anchored to its own numbering, which
+  the bundled English set is not. Refused where the numbering was measured
+  as different and the reader has not overruled it, because baking a set
+  into a file it does not fit puts the mistake beyond the reach of whoever
+  reads it next.
+
 ### Fixed
 - **An EPUB's table of contents is no longer read as Scripture.** The
   navigation document is in the reading order of most EPUBs, and the

@@ -104,7 +104,9 @@ both the header and the same verse count behind it.
 Settings → *Add a translation* takes a file from the device, and every
 translation's menu offers *Save a copy…* — the three that ship as well as
 anything imported, since a format only one app can write is that app's
-cache rather than a format. Nothing is
+cache rather than a format. *Save a copy with cross-references…* writes the
+app's reference set into the file first, so the copy carries them wherever
+it is opened rather than needing this app's assets. Nothing is
 uploaded: the file is read where it sits, converted on the device, and kept in
 the app's own documents directory. An imported translation is then a
 translation like any other — it appears in the translation list and the
@@ -213,7 +215,9 @@ A translation can also sidestep the whole question by **bringing its own
 cross-references**, in the `xref` chunk, anchored to its own numbering. The
 app prefers those over the bundled set, so a differently-numbered Bible
 gets references that are right for it rather than none at all.
-`dart run tool/attach_xrefs.dart <file.bib> <xrefs.owx.gz>` attaches a set.
+`dart run tool/attach_xrefs.dart <file.bib> <xrefs.owx.gz>` attaches a set
+from a terminal; in the app, a translation's menu offers *Save a copy with
+cross-references…*, which does the same thing to a copy.
 
 Otherwise an import is measured. Its per-chapter verse counts are compared with
 the English scheme (`lib/src/model/versification_table.dart`, generated
@@ -222,6 +226,15 @@ were anchored to), and where it does not match, the translation is marked
 `other` and those two layers are not offered for it. The import says so,
 and so does Settings, rather than leaving a reader to notice that a
 feature quietly went missing.
+
+That is the app's default, not its verdict. Whether a reference that may be
+out by a verse beats no reference is a judgement about a book the reader has
+open in front of them, so they get to make it: the translation's menu offers
+*Cross-references and originals anyway*, and Settings then says the layers
+are on at their word and what to expect of them. Exporting a `.bib` with the
+references in it is refused until they have said so, since baking a set into
+a file it does not fit puts the mistake beyond the reach of whoever reads it
+next.
 
 The line sits at 2% of chapters, which is where the evidence puts it:
 
