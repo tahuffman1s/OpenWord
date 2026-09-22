@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **An EPUB's table of contents is no longer read as Scripture.** The
+  navigation document is in the reading order of most EPUBs, and the
+  importer read every document in that order: the whole list of the books
+  of the Bible, and the template text around it, was appended to whichever
+  chapter happened to be open when it came up — Job 42, in the edition
+  this was found in. The manifest says which file the navigation is, so
+  there was nothing to guess at, and it is now left out.
+- **Nor is a copyright page, a preface or an index.** Those carry no verse
+  numbers at all, and the open verse used to carry across a file boundary,
+  so every paragraph of them was read as a continuation of the last verse
+  of the last chapter. A document's text now belongs to a verse only once
+  that document has numbered one; the open verse is still remembered,
+  because it is the one signal that an edition heading no chapters has
+  begun a new one.
+- **A chapter no longer loses its first verse.** A printed Bible does not
+  repeat the 1 of a chapter's first verse — the chapter number stands for
+  it — and where the edition held that 1 in the marker's id rather than
+  printing it, the id was never read: the chapter opened with no verse
+  open, and the whole of verse 1 was dropped as a running head. Genesis 2
+  began at verse 2. The id is read now, and where even the id says
+  nothing, the text after a chapter's number is taken as its first verse.
+- **A psalm's heading and superscription open their own psalm.** They are
+  printed above the first verse, so in an edition that numbers the chapter
+  inside that verse's paragraph they arrive before anything has said the
+  psalm changed, and were committed to the end of the psalm before:
+  "Save Me, O My God" and "A Psalm of David, when he fled from Absalom his
+  son" sat at the foot of Psalm 2. Anything that stands above a first
+  verse is now held until it is known which chapter it opens — and no
+  longer carries a verse number from the chapter it was gathered in.
+- **The second line of a couplet is a line of verse again.** Where an
+  edition marks it as nothing but indented, it was read as prose, took a
+  paragraph's first-line indent and wrapped back to the margin — so a
+  couplet in the Psalms looked like a poetry line that had lost its
+  indent. A line marked only as indented, directly after a line of verse,
+  is now another line of the same stanza.
+- A class name is matched with its punctuation taken out, so `psalm-title`,
+  `psalmtitle` and `psalm_title` are one class rather than three, only two
+  of which were listed. This is how the superscription above was being
+  missed in the first place.
+
 ## 1.11.0
 
 ### Added

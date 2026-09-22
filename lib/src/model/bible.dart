@@ -210,6 +210,25 @@ class Block {
   bool get isEmpty =>
       segments.isEmpty || segments.every((s) => s.text.trim().isEmpty);
 
+  /// The same block with its text belonging to no verse.
+  ///
+  /// A heading or a psalm's superscription stands above a chapter's first
+  /// verse rather than inside a verse of its own. An importer that gathers
+  /// one while the chapter before is still open would otherwise have it
+  /// claim a verse of that chapter.
+  Block withoutVerses() => Block(
+    style: style,
+    indent: indent,
+    indentFirstLine: indentFirstLine,
+    level: level,
+    align: align,
+    continuesParagraph: continuesParagraph,
+    segments: [
+      for (final segment in segments)
+        VerseSegment(verse: 0, startsVerse: false, text: segment.text),
+    ],
+  );
+
   /// The cells of a [BlockStyle.tableRow], in order. One cell for anything
   /// else, which is what a row of one column is.
   ///

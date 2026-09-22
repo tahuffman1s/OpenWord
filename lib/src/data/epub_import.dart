@@ -89,7 +89,16 @@ class EpubImport {
     }
 
     final base = _directoryOf(opfPath);
-    final documents = _spineDocuments(opf, files, base);
+    // The table of contents is in the spine of most EPUBs, and it is not
+    // Scripture: read as one it puts a list of every book of the Bible in
+    // whatever chapter happened to be open. The manifest says which file
+    // it is, so there is nothing to guess at.
+    final navigation = _navigationPaths(opf, base);
+    final documents = _spineDocuments(
+      opf,
+      files,
+      base,
+    ).where((file) => !navigation.contains(_normalisePath(file.name))).toList();
     if (documents.isEmpty) {
       return const ImportResult.failed(
         'That EPUB has no readable chapters in it.',
@@ -322,6 +331,23 @@ class EpubImport {
     return documents;
   }
 
+  /// The EPUB's own navigation documents: the EPUB 3 nav, which the
+  /// manifest marks `properties="nav"`, and the EPUB 2 `toc.ncx`.
+  static Set<String> _navigationPaths(XmlDocument opf, String base) {
+    final paths = <String>{};
+    for (final item in opf.findAllElements('item', namespace: '*')) {
+      final href = item.getAttribute('href');
+      if (href == null) continue;
+      final properties = item.getAttribute('properties') ?? '';
+      final mediaType = item.getAttribute('media-type') ?? '';
+      if (properties.split(RegExp(r'\s+')).contains('nav') ||
+          mediaType.contains('x-dtbncx')) {
+        paths.add(_resolve(base, href));
+      }
+    }
+    return paths;
+  }
+
   /// What the table of contents calls each document — the EPUB 3 nav, or
   /// the EPUB 2 `toc.ncx`. A Bible whose chapter files carry no book title
   /// of their own is still named here.
@@ -461,7 +487,10 @@ class _BibleBuilder {
   /// while the reader is still in chapter 7. Holding it until the next verse
   /// opens puts it at the head of the chapter it introduces instead of
   /// stranding it at the foot of the one before.
-  final List<Block> _pending = [];
+  /// Each held block with the chapter that was open when it was gathered,
+  /// so one that turns out to open a different chapter can be stripped of
+  /// the verse number it would otherwise claim from the chapter before.
+  final List<({Block block, int chapter})> _pending = [];
 
   static final RegExp _chapterHeading = RegExp(
     r'^(?:chapter|psalm|chap\.?)?\s*(\d{1,3})\s*$',
@@ -537,6 +566,19 @@ class _BibleBuilder {
       _verse = 0;
       if (named.chapter != null) _startChapter(named.chapter!);
     }
+
+    // Nothing in this document has been numbered yet. A file that numbers
+    // nothing at all — a preface, a copyright page, an index, a table of
+    // contents — used to have every paragraph read as a continuation of the
+    // last verse of the last chapter left open, because the open verse
+    // carried across the file boundary. Text ahead of a document's own
+    // first verse marker belongs to no verse, and text belonging to no
+    // verse is dropped.
+    //
+    // The open verse itself is kept, because it is the one signal that a
+    // chapter has begun in an edition that heads none: a file whose numbers
+    // run 1, 2, 3 after a file that ended at 31 has started a new chapter.
+    _numberedHere = false;
 
     final body = document.findAllElements('body', namespace: '*').firstOrNull;
     _walk(body ?? document.rootElement, BlockStyle.paragraph, 0);
@@ -678,7 +720,7 @@ class _BibleBuilder {
     if (_skippedNames.contains(name)) return true;
 
     final classes = (element.getAttribute('class') ?? '').toLowerCase();
-    if (classes.split(RegExp(r'\s+')).any(_skippedClasses.contains)) {
+    if (_classWords(classes).any(_skippedClasses.contains)) {
       return true;
     }
 
@@ -702,26 +744,32 @@ class _BibleBuilder {
     'chapterlabel',
     'psalmlabel',
     'chapternum',
-    'chapter-num',
-    'chapter-number',
+    'chapternumber',
     // USFM's own marker for a chapter label. Not bare "c", which as often
     // as not means centred.
     'cl',
   };
 
   bool _isChapterLabel(String classes) =>
-      classes.split(RegExp(r'\s+')).any(_chapterClasses.contains);
+      _classWords(classes).any(_chapterClasses.contains);
 
   bool _isHeading(String name, String classes) =>
       const {'h1', 'h2', 'h3', 'h4', 'h5', 'h6'}.contains(name) ||
       _isChapterLabel(classes) ||
-      classes.split(RegExp(r'\s+')).any(_titleClass.hasMatch);
+      _classWords(classes).any(_titleClass.hasMatch);
 
   bool _isBlock(String name, String classes) =>
       const {'p', 'div', 'blockquote', 'li', 'tr'}.contains(name);
 
   int _listDepth = 0;
   int _cellsInRow = 0;
+
+  /// Whether a verse marker has been seen in the document being read.
+  bool _numberedHere = false;
+
+  /// What was last placed, which is how a line carrying nothing but an
+  /// indent is read: after a line of verse it is another line of verse.
+  BlockStyle? _lastStyle;
 
   /// What a verse is printed as, by the verse it is stored under.
   final Map<String, Map<int, Map<int, String>>> _labels = {};
@@ -750,7 +798,7 @@ class _BibleBuilder {
     final flattened = style.replaceAll(' ', '');
     if (flattened.contains('text-align:center')) return BlockAlign.center;
     if (flattened.contains('text-align:right')) return BlockAlign.end;
-    for (final word in classes.split(RegExp(r'\s+'))) {
+    for (final word in _classWords(classes)) {
       if (word == 'center' ||
           word == 'centre' ||
           word == 'centered' ||
@@ -777,13 +825,9 @@ class _BibleBuilder {
     's3',
     'section',
     'sectionhead',
-    'section-head',
     'sectionheading',
-    'section-heading',
     'subhead',
-    'sub-head',
     'subheading',
-    'sub-heading',
     'heading',
     'head',
   };
@@ -795,13 +839,30 @@ class _BibleBuilder {
     r'^(?:q|iq|li|pi|line|indent)-?([1-4])$',
   );
 
+  /// A class that says a line is indented and nothing else: `indent`,
+  /// `indent2`, `block-indent`.
+  static final RegExp _indentClass = RegExp(r'^(?:block)?indent([1-4])?$');
+
   static String classesOf(XmlElement element) =>
       (element.getAttribute('class') ?? '').toLowerCase();
+
+  /// The class names in an attribute, with the punctuation publishers vary
+  /// on taken out.
+  ///
+  /// `chapter-num`, `chapternum` and `chapter_num` are one class spelled
+  /// three ways, and all three turn up; the sets below used to have to
+  /// carry every spelling, and a spelling nobody had thought of — a
+  /// hyphenated `psalm-title` — simply did not match.
+  static List<String> _classWords(String classes) => classes
+      .split(RegExp(r'[\s]+'))
+      .map((word) => word.replaceAll(RegExp(r'[-_]'), ''))
+      .where((word) => word.isNotEmpty)
+      .toList();
 
   /// How major a heading is, where the markup says. An EPUB spells it
   /// either in the tag — `h1` above `h2` — or in a class, `s1` above `s2`.
   static int _headingLevel(String name, String classes) {
-    for (final word in classes.split(RegExp(r'\s+'))) {
+    for (final word in _classWords(classes)) {
       if (word == 'ms' || word == 'ms1' || word == 'majorsection') return 1;
       if (word == 's' || word == 's1') return 2;
       if (word == 's2' || word == 's3' || word == 's4') return 3;
@@ -818,14 +879,12 @@ class _BibleBuilder {
   /// divine name. Spelled as a class, or in a style attribute.
   static bool _isDivineName(String name, String classes, String style) {
     if (name == 'abbr') return false;
-    for (final word in classes.split(RegExp(r'\s+'))) {
+    for (final word in _classWords(classes)) {
       if (word == 'nd' ||
           word == 'divine' ||
           word == 'divinename' ||
-          word == 'divine-name' ||
           word == 'sc' ||
-          word == 'smallcaps' ||
-          word == 'small-caps') {
+          word == 'smallcaps') {
         return true;
       }
     }
@@ -833,16 +892,18 @@ class _BibleBuilder {
   }
 
   int? _poetryLevel(String classes) {
-    for (final word in classes.split(RegExp(r'\s+'))) {
+    for (final word in _classWords(classes)) {
       final match = _levelClass.firstMatch(word);
       if (match != null) return int.parse(match.group(1)!);
+      // An indent with no depth on it is one step in from the line above.
+      if (_indentClass.hasMatch(word)) return 2;
     }
     return null;
   }
 
   BlockStyle _styleFor(String name, String classes, BlockStyle inherited) {
     if (name == 'blockquote') return BlockStyle.poetry;
-    final words = classes.split(RegExp(r'\s+'));
+    final words = _classWords(classes);
     // Before the poetry test below: "qa" begins with a q and is not a
     // line of verse but the letter an acrostic stanza runs on.
     if (words.any((c) => c == 'qa' || c == 'acrostic')) {
@@ -861,7 +922,24 @@ class _BibleBuilder {
     )) {
       return BlockStyle.poetry;
     }
-    if (words.any((c) => c == 'd' || c == 'psalmtitle')) {
+    // A line that says nothing about itself but how far it is indented,
+    // coming straight after a line of verse, is the next line of the same
+    // stanza — which is how the ESV sets the second line of a couplet.
+    // Read as prose it took a paragraph's first-line indent and wrapped
+    // back to the margin, so a couplet came out looking like a poetry line
+    // that had lost its indent. Only after verse: an indented paragraph of
+    // prose is a common thing in its own right.
+    if (_lastStyle == BlockStyle.poetry && words.any(_indentClass.hasMatch)) {
+      return BlockStyle.poetry;
+    }
+    if (words.any(
+      (c) =>
+          c == 'd' ||
+          c == 'psalmtitle' ||
+          c == 'psalmref' ||
+          c == 'superscription' ||
+          c == 'descriptivetitle',
+    )) {
       return BlockStyle.descriptiveTitle;
     }
     if (words.any(_headingClasses.contains)) {
@@ -898,8 +976,10 @@ class _BibleBuilder {
 
     final book = _bookHeading(text);
     if (book != null) {
-      // Whatever was waiting belonged to the book that just ended.
-      _pending.clear();
+      // Whatever was waiting belonged to the book that just ended, so it
+      // is placed there rather than thrown away: the Song of Songs ends
+      // with a speaker's label and nothing follows it to flush it out.
+      _flushPending();
       _book = book.code;
       _chapter = 0;
       _verse = 0;
@@ -929,7 +1009,7 @@ class _BibleBuilder {
 
     // Anything else is a heading inside the text, worth keeping as one.
     if (_book != null && tag != 'h1') {
-      _pending.add(
+      _hold(
         Block(
           style: BlockStyle.heading,
           level: level,
@@ -965,6 +1045,15 @@ class _BibleBuilder {
     _versesSeenHere.clear();
   }
 
+  /// The block styles that stand above a chapter's first verse rather than
+  /// belonging to a verse of their own.
+  static const Set<BlockStyle> _opensChapter = {
+    BlockStyle.heading,
+    BlockStyle.descriptiveTitle,
+    BlockStyle.acrostic,
+    BlockStyle.speaker,
+  };
+
   /// Everything inside one block-level element, cut into verses.
   void _paragraph(XmlElement element, BlockStyle style, int indent) {
     _cellsInRow = 0;
@@ -975,7 +1064,11 @@ class _BibleBuilder {
     final segments = <VerseSegment>[];
     final buffer = StringBuffer();
     var startsVerse = false;
-    var verse = _verse;
+    // Until this document numbers something, its text belongs to no verse.
+    var verse = _numberedHere ? _verse : 0;
+    // Set when a chapter opened partway through this block without saying
+    // which verse it opened on, which makes the text that follows verse 1.
+    var impliesFirstVerse = false;
 
     void flush() {
       final text = buffer.toString().replaceAll(_whitespace, ' ');
@@ -1003,6 +1096,7 @@ class _BibleBuilder {
     }
 
     void openVerse(int number, {String? printed}) {
+      impliesFirstVerse = false;
       flush();
       // "1-2" for a bridged verse: the text is stored under the first and
       // printed as the edition prints it.
@@ -1023,12 +1117,16 @@ class _BibleBuilder {
       verse = number;
       startsVerse = true;
       _verse = number;
+      _numberedHere = true;
       _versesSeenHere.add(number);
     }
 
     void write(XmlNode node) {
       if (node is XmlText || node is XmlCDATA) {
         var text = node.value ?? '';
+        if (impliesFirstVerse && text.trim().isNotEmpty) {
+          openVerse(1);
+        }
         if (buffer.isEmpty && segments.isEmpty) {
           // "3:16 For God so loved…" and "16 For God so loved…" are both
           // ways of numbering a paragraph that is a verse.
@@ -1101,7 +1199,14 @@ class _BibleBuilder {
         final opened = _chapterAt(node.innerText, id);
         if (opened != null) {
           if (opened.chapter != _chapter) startChapterHere(opened.chapter);
-          if (opened.verse != null) openVerse(opened.verse!);
+          if (opened.verse != null) {
+            openVerse(opened.verse!);
+          } else {
+            // A printed Bible does not repeat the 1 of a chapter's first
+            // verse: the chapter number stands for it. So whatever follows
+            // this marker is verse 1, unless a verse marker gets in first.
+            impliesFirstVerse = true;
+          }
         }
         // Either way the marker is a number, not Scripture.
         return;
@@ -1130,7 +1235,7 @@ class _BibleBuilder {
 
       // Words quoted from elsewhere in Scripture. Not the same thing as a
       // translator's addition, though both used to be stored as one.
-      if (name == 'q' || classes.split(RegExp(r'\s+')).contains('qt')) {
+      if (name == 'q' || _classWords(classes).contains('qt')) {
         buffer.write(Markup.quotationStart);
         for (final child in node.children) {
           write(child);
@@ -1181,31 +1286,40 @@ class _BibleBuilder {
       return;
     }
 
-    if (style != BlockStyle.heading) {
-      // Text sitting before the chapter's first verse is a label, not
-      // Scripture — the book's name repeated as a running head, which the
-      // ESV prints inside the opening paragraph. Every word of Scripture
-      // belongs to a verse.
-      while (segments.isNotEmpty &&
-          segments.first.verse == 0 &&
-          !segments.first.startsVerse) {
-        segments.removeAt(0);
-      }
-      if (segments.isEmpty) return;
-    }
-    if (style == BlockStyle.heading) {
-      _pending.add(
+    // A heading, a psalm's superscription, the letter of an acrostic stanza
+    // and a speaker's label all stand above a chapter's first verse. In an
+    // edition that prints the chapter number inside that verse's own
+    // paragraph — the ESV does — they arrive before anything has said the
+    // chapter changed, so they are held and placed once it is known which
+    // chapter they open. Without this, a psalm's heading and superscription
+    // were committed to the end of the psalm before it.
+    if (_opensChapter.contains(style)) {
+      _hold(
         Block(
-          style: BlockStyle.heading,
-          level: _headingLevel(
-            element.localName.toLowerCase(),
-            classesOf(element),
-          ),
+          style: style,
+          level: style == BlockStyle.heading
+              ? _headingLevel(
+                  element.localName.toLowerCase(),
+                  classesOf(element),
+                )
+              : 0,
+          align: align,
           segments: segments,
         ),
       );
       return;
     }
+
+    // Text sitting before the chapter's first verse is a label, not
+    // Scripture — the book's name repeated as a running head, which the
+    // ESV prints inside the opening paragraph. Every word of Scripture
+    // belongs to a verse.
+    while (segments.isNotEmpty &&
+        segments.first.verse == 0 &&
+        !segments.first.startsVerse) {
+      segments.removeAt(0);
+    }
+    if (segments.isEmpty) return;
 
     // Whatever headings were waiting belong above this, in whatever chapter
     // this turned out to be.
@@ -1231,10 +1345,8 @@ class _BibleBuilder {
     'vn',
     'verse',
     'versenum',
-    'verse-num',
     'versenumber',
     'vnumber',
-    'verse-number',
   };
 
   static final RegExp _verseId = RegExp(r'^V\d', caseSensitive: false);
@@ -1254,6 +1366,20 @@ class _BibleBuilder {
   /// What chapter — and, where the marker carries it, what verse — an
   /// element that the markup calls a chapter number opens.
   ({int chapter, int? verse})? _chapterAt(String text, String id) {
+    // The id, where it carries the whole reference: `v01002001-1`.
+    ({int chapter, int verse})? packed;
+    final match = _packedId.firstMatch(id);
+    if (match != null) {
+      final chapter = int.parse(match.group(2)!);
+      final verse = int.parse(match.group(3)!);
+      if (chapter >= 1 &&
+          chapter <= EpubImport.maxChapter &&
+          verse >= 1 &&
+          verse <= EpubImport.maxVerse) {
+        packed = (chapter: chapter, verse: verse);
+      }
+    }
+
     final both = _chapterAndVerse.firstMatch(text);
     if (both != null) {
       final chapter = int.parse(both.group(1)!);
@@ -1268,21 +1394,18 @@ class _BibleBuilder {
 
     final number = _numberIn(text);
     if (number != null && number >= 1 && number <= EpubImport.maxChapter) {
-      return (chapter: number, verse: null);
+      // A chapter opening prints its number and not the 1 of its first
+      // verse, which the id holds. Without reading it the chapter opened
+      // with no verse open and the whole of verse 1 was dropped as a
+      // running head.
+      return (
+        chapter: number,
+        verse: packed?.chapter == number ? packed!.verse : null,
+      );
     }
 
-    // Nothing printed: the id may still say where we are.
-    final packed = _packedId.firstMatch(id);
-    if (packed != null) {
-      final chapter = int.parse(packed.group(2)!);
-      final verse = int.parse(packed.group(3)!);
-      if (chapter >= 1 &&
-          chapter <= EpubImport.maxChapter &&
-          verse >= 1 &&
-          verse <= EpubImport.maxVerse) {
-        return (chapter: chapter, verse: verse);
-      }
-    }
+    // Nothing printed: the id is all there is to go on.
+    if (packed != null) return packed;
     return null;
   }
 
@@ -1292,7 +1415,7 @@ class _BibleBuilder {
   /// with a stylesheet — `<a id="V3"/>` with nothing inside. The marker is
   /// still a marker; the number just has to be read from somewhere else.
   int? _verseNumber(String name, String classes, String id, String text) {
-    final words = classes.split(RegExp(r'\s+'));
+    final words = _classWords(classes);
     final marked =
         name == 'sup' ||
         words.any(_verseClasses.contains) ||
@@ -1315,12 +1438,21 @@ class _BibleBuilder {
     return number >= 1 && number <= EpubImport.maxVerse ? number : null;
   }
 
+  /// Holds a block that belongs above the next chapter's first verse.
+  void _hold(Block block) => _pending.add((block: block, chapter: _chapter));
+
   void _flushPending() {
     if (_pending.isEmpty) return;
-    final held = List<Block>.from(_pending);
+    final held = List.of(_pending);
     _pending.clear();
-    for (final block in held) {
-      _add(block);
+    for (final entry in held) {
+      // A block held across a chapter boundary was gathered while a verse
+      // of the chapter before was still open, and must not carry that
+      // verse into the chapter it opens: it stands above the first verse
+      // and belongs to none.
+      _add(
+        entry.chapter == _chapter ? entry.block : entry.block.withoutVerses(),
+      );
     }
   }
 
@@ -1328,6 +1460,7 @@ class _BibleBuilder {
     final book = _book;
     if (book == null || _chapter == 0) return;
     ((_blocks[book] ??= {})[_chapter] ??= []).add(block);
+    _lastStyle = block.style;
   }
 
   /// Reads a heading as the name of a book, and the chapter number where it
@@ -1435,6 +1568,10 @@ class _BibleBuilder {
   }
 
   List<Book> finish() {
+    // Nothing is coming to flush out what is still being held, and a
+    // heading or a speaker's label at the end of the last book is no less
+    // part of it for being last.
+    _flushPending();
     // The chapter last read has not been put away yet.
     _stashChapter();
     final books = <Book>[];

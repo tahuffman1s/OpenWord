@@ -13,6 +13,7 @@ Uint8List epub({
   String title = 'Test Standard Version',
   String? rights = 'Public Domain',
   bool withSpine = true,
+  (String name, String xhtml)? nav,
 }) {
   final manifest = StringBuffer();
   final spine = StringBuffer();
@@ -22,6 +23,14 @@ Uint8List epub({
       'media-type="application/xhtml+xml"/>',
     );
     spine.write('<itemref idref="d$i"/>');
+  }
+  // The navigation document, which most EPUBs put in the reading order.
+  if (nav != null) {
+    manifest.write(
+      '<item id="nav" href="${nav.$1}" properties="nav" '
+      'media-type="application/xhtml+xml"/>',
+    );
+    spine.write('<itemref idref="nav"/>');
   }
 
   final opf =
@@ -49,6 +58,9 @@ Uint8List epub({
     ..addFile(_file('OEBPS/content.opf', opf));
   for (final document in documents) {
     archive.addFile(_file('OEBPS/${document.$1}', _page(document.$2)));
+  }
+  if (nav != null) {
+    archive.addFile(_file('OEBPS/${nav.$1}', _page(nav.$2)));
   }
   return Uint8List.fromList(ZipEncoder().encodeBytes(archive));
 }
@@ -125,6 +137,7 @@ Uint8List epubWithToc({
 }
 
 void main() {
+  _theShapeOfARealEdition();
   group('the shapes a Bible EPUB comes in', () {
     test('numbered spans, the usual output of publishing tools', () {
       final result = EpubImport.convert(
@@ -954,6 +967,176 @@ void main() {
 
       expect(result.ok, isFalse);
       expect(result.failure, contains('No books of the Bible'));
+    });
+  });
+}
+
+/// The four faults an imported ESV showed on a phone, each reproduced from
+/// the shape of markup that caused it. The ESV prints a chapter's number
+/// inside the paragraph of its first verse and does not print that verse's
+/// own number, which is what most of this turns on.
+void _theShapeOfARealEdition() {
+  group('an edition that numbers its chapters inside the text', () {
+    const genesis =
+        '<h2>Genesis</h2>'
+        '<h3 class="section-heading">The Creation of the World</h3>'
+        '<p><b class="chapter-num" id="v01001001-1">1:1&#160;</b>'
+        'In the beginning, God created the heavens and the earth.'
+        '<b class="verse-num" id="v01001002-1">2&#160;</b>'
+        'The earth was without form and void.</p>'
+        '<h3 class="section-heading">The Seventh Day, God Rests</h3>'
+        // The chapter number alone: the 1 of its first verse lives in the id.
+        '<p><b class="chapter-num" id="v01002001-1">2&#160;</b>'
+        'Thus the heavens and the earth were finished.'
+        '<b class="verse-num" id="v01002002-1">2&#160;</b>'
+        'And on the seventh day God finished his work.</p>'
+        // And again with an id that says nothing, so only the chapter is
+        // known and verse 1 has to be taken as read.
+        '<p><b class="chapter-num" id="c3">3&#160;</b>'
+        'Now the serpent was more crafty than any other beast.</p>';
+
+    const psalms =
+        '<h2>Psalms</h2>'
+        '<h3 class="section-heading">The Way of the Righteous</h3>'
+        '<p class="line"><b class="chapter-num" id="v19001001-1">1:1&#160;</b>'
+        'Blessed is the man who walks not in the counsel of the wicked</p>'
+        '<h3 class="section-heading">The Reign of the Anointed</h3>'
+        '<p class="line"><b class="chapter-num" id="v19002001-1">2:1&#160;</b>'
+        'Why do the nations rage</p>'
+        '<p class="indent">and the peoples plot in vain, on and on and on '
+        'and on and on and on and on and on and on and on</p>'
+        // Psalm 3's heading and superscription, both of which stand ahead
+        // of anything that says the psalm has changed.
+        '<h3 class="section-heading">Save Me, O My God</h3>'
+        '<p class="psalm-title">A Psalm of David, when he fled from '
+        'Absalom his son.</p>'
+        '<p class="line"><b class="chapter-num" id="v19003001-1">3:1&#160;</b>'
+        'O LORD, how many are my foes!</p>';
+
+    // The table of contents, which the manifest marks as the navigation
+    // document, and a copyright page, which nothing marks as anything.
+    const contents =
+        '<h1>Table of Contents</h1>'
+        '<p><a href="gen.xhtml">Genesis</a> &#183; '
+        '<a href="psa.xhtml">Psalms</a></p>'
+        '<p>ESV &#183; The Old Testament &#183; BookNAME</p>';
+
+    const backMatter =
+        '<p>Copyright 2001. All rights reserved.</p>'
+        '<p>Published by arrangement.</p>';
+
+    late Bible bible;
+
+    setUpAll(() {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            ('gen.xhtml', genesis),
+            ('psa.xhtml', psalms),
+            ('rights.xhtml', backMatter),
+          ],
+          nav: ('toc.xhtml', contents),
+        ),
+      );
+      expect(result.failure, isNull, reason: result.failure ?? '');
+      bible = result.bible!;
+    });
+
+    Chapter chapterOf(String code, int number) => bible.books
+        .firstWhere((book) => book.code == code)
+        .chapters[number - 1];
+
+    /// A block's text, markers taken out.
+    String plain(Block block) => block.segments
+        .map((segment) => Markup.strip(segment.text))
+        .join(' ')
+        .trim();
+
+    String textOf(Chapter chapter, int verse) => chapter.blocks
+        .expand((block) => block.segments)
+        .where((segment) => segment.verse == verse)
+        .map((segment) => Markup.strip(segment.text))
+        .join()
+        .trim();
+
+    test('a chapter keeps its first verse', () {
+      // Genesis 2:1 was dropped outright: the marker printed "2" and the
+      // verse it opened was only ever in the id, so nothing opened a verse
+      // and the text was thrown away as a running head.
+      expect(
+        textOf(chapterOf('GEN', 2), 1),
+        'Thus the heavens and the earth were finished.',
+      );
+      expect(
+        textOf(chapterOf('GEN', 2), 2),
+        'And on the seventh day God finished his work.',
+      );
+    });
+
+    test('and keeps it where only the chapter can be known', () {
+      expect(
+        textOf(chapterOf('GEN', 3), 1),
+        'Now the serpent was more crafty than any other beast.',
+      );
+    });
+
+    test("a psalm's heading and superscription open their own psalm", () {
+      final two = chapterOf('PSA', 2);
+      final three = chapterOf('PSA', 3);
+
+      expect(
+        two.blocks.map((block) => plain(block)),
+        isNot(contains(contains('Save Me'))),
+        reason: "Psalm 3's heading was landing at the end of Psalm 2",
+      );
+      expect(
+        two.blocks.map((block) => plain(block)),
+        isNot(contains(contains('Absalom'))),
+      );
+
+      expect(plain(three.blocks.first), 'Save Me, O My God');
+      // Gathered while Psalm 2's last verse was still open, and it must
+      // not carry that verse across with it.
+      expect(three.blocks.first.segments.single.verse, 0);
+      expect(three.blocks.first.style, BlockStyle.heading);
+      expect(three.blocks[1].style, BlockStyle.descriptiveTitle);
+      expect(plain(three.blocks[1]), contains('Absalom'));
+      expect(textOf(three, 1), 'O LORD, how many are my foes!');
+    });
+
+    test('the second line of a couplet is a line of verse', () {
+      // Read as prose it took a paragraph's first-line indent and wrapped
+      // back to the margin, so the couplet looked like a poetry line that
+      // had lost its indent.
+      final lines = chapterOf(
+        'PSA',
+        2,
+      ).blocks.where((block) => plain(block).startsWith('and the peoples'));
+      expect(lines, hasLength(1));
+      expect(lines.first.style, BlockStyle.poetry);
+      expect(lines.first.indent, greaterThan(1));
+    });
+
+    test('the table of contents is not Scripture', () {
+      final everything = bible.books
+          .expand((book) => book.chapters)
+          .expand((chapter) => chapter.blocks)
+          .map((block) => plain(block))
+          .join('\n');
+      expect(everything, isNot(contains('Table of Contents')));
+      expect(everything, isNot(contains('BookNAME')));
+      expect(everything, isNot(contains('The Old Testament')));
+    });
+
+    test('nor is a copyright page with nothing numbered in it', () {
+      // It followed Psalms in the spine, so every paragraph of it used to
+      // be read as a continuation of the last verse left open.
+      final psalmThree = chapterOf('PSA', 3);
+      expect(
+        psalmThree.blocks.map((block) => plain(block)).join('\n'),
+        isNot(contains('All rights reserved')),
+      );
+      expect(textOf(psalmThree, 1), 'O LORD, how many are my foes!');
     });
   });
 }
