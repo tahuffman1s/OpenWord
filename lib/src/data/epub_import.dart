@@ -95,11 +95,15 @@ class EpubImport {
     // whatever chapter happened to be open. The manifest says which file
     // it is, so there is nothing to guess at.
     final navigation = _navigationPaths(opf, base);
-    final documents = _spineDocuments(
-      opf,
-      files,
-      base,
-    ).where((file) => !navigation.contains(_normalisePath(file.name))).toList();
+    final documents = _spineDocuments(opf, files, base)
+        .where((file) => !navigation.contains(_normalisePath(file.name)))
+        // An edition that files a book's footnotes and cross-references as
+        // documents of their own puts them in the reading order too. They
+        // are apparatus about the text rather than the text, and reading
+        // them as Scripture had every reference in them counted as a
+        // verse of chapter 1 of the book they annotate.
+        .where((file) => !_isApparatus(file.name))
+        .toList();
     if (documents.isEmpty) {
       return const ImportResult.failed(
         'That EPUB has no readable chapters in it.',
@@ -307,6 +311,22 @@ class EpubImport {
   }
 
   /// The reading order: the spine, resolved through the manifest.
+  /// Whether a document's name says it holds a book's apparatus rather
+  /// than the book: `b03.00.Leviticus.crossrefs.xhtml`.
+  static bool _isApparatus(String path) {
+    var stem = path.split('/').last;
+    final dot = stem.lastIndexOf('.');
+    if (dot > 0) stem = stem.substring(0, dot);
+    final parts = stem.split('.');
+    if (parts.length < 2) return false;
+    return const {
+      'footnotes',
+      'crossrefs',
+      'crossreferences',
+      'notes',
+    }.contains(parts.last.toLowerCase());
+  }
+
   static List<ArchiveFile> _spineDocuments(
     XmlDocument opf,
     Map<String, ArchiveFile> files,
@@ -622,6 +642,24 @@ class _BibleBuilder {
     final dot = stem.lastIndexOf('.');
     if (dot > 0) stem = stem.substring(0, dot);
 
+    // An edition that files its books as `b62.00.1-John.text.xhtml` puts
+    // three things in one name: where the file sorts, what book it holds,
+    // and which part of that book's apparatus it is. Only the middle one
+    // names a book, and leaving the other two in is how "1-John" came to
+    // be read as John — which put the whole of 1, 2 and 3 John inside the
+    // Gospel, silently.
+    final parts = stem.split('.');
+    if (parts.length > 1) {
+      while (parts.length > 1 && _orderPrefix.hasMatch(parts.first)) {
+        parts.removeAt(0);
+      }
+      while (parts.length > 1 &&
+          _apparatusName.contains(parts.last.toLowerCase())) {
+        parts.removeLast();
+      }
+      stem = parts.join(' ');
+    }
+
     stem = stem
         // "GEN01" is a book and a chapter; "1CO" is one book.
         .replaceAllMapped(
@@ -629,12 +667,38 @@ class _BibleBuilder {
           (match) => '${match[1]} ${match[2]}',
         )
         .replaceAll(RegExp(r'[_\-.]+'), ' ')
-        // A leading file-order number is not part of the name.
-        .replaceFirst(RegExp(r'^\s*\d{1,3}\s+'), '')
         .trim();
     if (stem.isEmpty) return null;
-    return _bookHeading(stem);
+
+    // As written first. A leading number is only a file-order number if
+    // the name does not read as a book with it — "1 John" is a book and
+    // stripping its 1 made it John, which put three whole epistles inside
+    // the Gospel.
+    final asWritten = _bookHeading(stem);
+    if (asWritten != null) return asWritten;
+
+    final withoutOrder = stem
+        .replaceFirst(RegExp(r'^\s*\d{1,3}\s+'), '')
+        .trim();
+    if (withoutOrder.isEmpty || withoutOrder == stem) return null;
+    return _bookHeading(withoutOrder);
   }
+
+  /// A file-name component that says where the file sorts rather than what
+  /// is in it: `b62`, `00`, `019`.
+  static final RegExp _orderPrefix = RegExp(r'^[A-Za-z]?\d{1,3}$');
+
+  /// A file-name component naming a part of a book's apparatus rather than
+  /// the book.
+  static const Set<String> _apparatusName = {
+    'text',
+    'main',
+    'footnotes',
+    'crossrefs',
+    'notes',
+    'intro',
+    'introduction',
+  };
 
   /// Walks the tree, emitting a block for each block-level element.
   void _walk(XmlNode node, BlockStyle style, int indent) {
@@ -740,6 +804,17 @@ class _BibleBuilder {
     'note',
     'noteref',
     'notemark',
+    // Hidden by the edition's own stylesheet.
+    'hide',
+    'hidden',
+    // Navigation the edition draws around the text.
+    'nav',
+    'navheader',
+    'poplink',
+    'toclink',
+    'index',
+    'link',
+    'bookname',
     'notebackref',
     'ntlbl',
     'popnote',
@@ -826,6 +901,19 @@ class _BibleBuilder {
     final name = element.localName.toLowerCase();
     if (_skippedNames.contains(name)) return true;
 
+    // What the edition hides from its own reader is not Scripture. The
+    // ESV keeps its whole navigation apparatus — every book of the Bible,
+    // every chapter of each, and the template text around them — in a
+    // `<div class="hide">` at the foot of every book's file. Nothing is
+    // more authoritative about that than the file saying so itself.
+    if (element.getAttribute('hidden') != null) return true;
+    final style = (element.getAttribute('style') ?? '')
+        .toLowerCase()
+        .replaceAll(' ', '');
+    if (style.contains('display:none') || style.contains('visibility:hidden')) {
+      return true;
+    }
+
     final classes = (element.getAttribute('class') ?? '').toLowerCase();
     if (_classWords(classes).any(_skippedClasses.contains)) {
       return true;
@@ -841,6 +929,15 @@ class _BibleBuilder {
   }
 
   static final RegExp _titleClass = RegExp(r'^(mt|ms)\d?$');
+
+  /// How an edition marks what Jesus says.
+  static const Set<String> _wordsOfChrist = {
+    'woc',
+    'wj',
+    'wordsofchrist',
+    'wordsofjesus',
+    'redletter',
+  };
 
   /// Classes that mark an element as the label opening a chapter. haiola —
   /// which generates the EPUBs on ebible.org, and so most of the freely
@@ -958,7 +1055,7 @@ class _BibleBuilder {
 
   /// A class that says a line is indented and nothing else: `indent`,
   /// `indent2`, `block-indent`.
-  static final RegExp _indentClass = RegExp(r'^(?:block)?indent([1-4])?$');
+  static final RegExp _indentClass = RegExp(r'^(?:block|line)?indent([1-4])?$');
 
   static String classesOf(XmlElement element) =>
       (element.getAttribute('class') ?? '').toLowerCase();
@@ -1001,6 +1098,7 @@ class _BibleBuilder {
           word == 'divine' ||
           word == 'divinename' ||
           word == 'sc' ||
+          word == 'smallcap' ||
           word == 'smallcaps') {
         return true;
       }
@@ -1035,7 +1133,13 @@ class _BibleBuilder {
           c == 'poetry' ||
           c == 'line' ||
           c == 'poem' ||
-          c == 'iq',
+          c == 'iq' ||
+          // A stanza, and a stanza opening under a heading.
+          c == 'linegroup' ||
+          c == 'linegroupafterheading' ||
+          c == 'lineindent' ||
+          c == 'linespace' ||
+          c == 'noindentlinespace',
     )) {
       return BlockStyle.poetry;
     }
@@ -1048,6 +1152,9 @@ class _BibleBuilder {
     // prose is a common thing in its own right.
     if (_lastStyle == BlockStyle.poetry && words.any(_indentClass.hasMatch)) {
       return BlockStyle.poetry;
+    }
+    if (words.any((c) => c == 'psalmacrostictitle' || c == 'acrostictitle')) {
+      return BlockStyle.acrostic;
     }
     if (words.any(
       (c) =>
@@ -1174,6 +1281,10 @@ class _BibleBuilder {
   /// Everything inside one block-level element, cut into verses.
   void _paragraph(XmlElement element, BlockStyle style, int indent) {
     _cellsInRow = 0;
+    // An edition that anchors each paragraph with a packed reference says
+    // which book it is in every one of them. Believing that beats
+    // believing a file name.
+    _followBook(element.getAttribute('id') ?? '');
     final align = _alignFor(
       (element.getAttribute('class') ?? '').toLowerCase(),
       (element.getAttribute('style') ?? '').toLowerCase(),
@@ -1315,6 +1426,11 @@ class _BibleBuilder {
       // `<b class="chapter-num" id="v43001001-1">1:1&nbsp;</b>`, which is the
       // chapter and its first verse in one marker.
       if (_isChapterLabel(classes)) {
+        // The id on a chapter marker often carries the book as well, and
+        // it is better evidence than a file name: `v62001001` is 1 John
+        // whatever the file is called. Believing it is what stops a book
+        // being poured into the wrong one.
+        _followBook(id);
         final opened = _chapterAt(node.innerText, id);
         if (opened != null) {
           if (opened.chapter != _chapter) startChapterHere(opened.chapter);
@@ -1349,6 +1465,29 @@ class _BibleBuilder {
         for (final child in node.children) {
           write(child);
         }
+        return;
+      }
+
+      // What Jesus says, which a red-letter edition sets apart. The
+      // marker has been in the format from the start and the EPUB
+      // importer never wrote one, so an imported Bible had no red
+      // letters however the edition marked them.
+      if (_classWords(classes).any(_wordsOfChrist.contains)) {
+        buffer.write(Markup.wjStart);
+        for (final child in node.children) {
+          write(child);
+        }
+        buffer.write(Markup.wjEnd);
+        return;
+      }
+
+      // "Selah", which is a direction rather than a word of the psalm.
+      if (_classWords(classes).contains('selah')) {
+        buffer.write(Markup.selahStart);
+        for (final child in node.children) {
+          write(child);
+        }
+        buffer.write(Markup.selahEnd);
         return;
       }
 
@@ -1400,10 +1539,12 @@ class _BibleBuilder {
 
     if (segments.isEmpty) return;
     if (_book == null) return;
-    if (_chapter == 0) {
-      // Text before any chapter heading: a preface, not Scripture.
-      return;
-    }
+    // Text before any chapter heading is a preface, not Scripture — but
+    // what stands above a first verse is held rather than dropped, or
+    // every book would lose the heading over its opening chapter. The ESV
+    // prints that heading before the paragraph the chapter number is in,
+    // so the chapter is not open yet when it arrives.
+    if (_chapter == 0 && !_opensChapter.contains(style)) return;
 
     // A heading, a psalm's superscription, the letter of an acrostic stanza
     // and a speaker's label all stand above a chapter's first verse. In an
@@ -1487,6 +1628,27 @@ class _BibleBuilder {
   /// `v43001001-1` — book, chapter and verse in one id, the scheme Crossway
   /// and several others number their anchors with.
   static final RegExp _packedId = RegExp(r'^v(\d{2})(\d{3})(\d{3})');
+
+  /// Moves to the book a packed id names, where it names a different one.
+  void _followBook(String id) {
+    final named = _bookAt(id);
+    if (named == null || named == _book) return;
+    _stashChapter();
+    _flushPending();
+    _book = named;
+    _chapter = 0;
+    _verse = 0;
+  }
+
+  /// The book a packed id names, where it names one: `v62001001` is the
+  /// sixty-second book of the canon, which is 1 John.
+  String? _bookAt(String id) {
+    final packed = _packedId.firstMatch(id);
+    if (packed == null) return null;
+    final book = int.parse(packed.group(1)!);
+    if (book < 1 || book > _canonicalOrder.length) return null;
+    return _canonicalOrder[book - 1];
+  }
 
   /// What chapter — and, where the marker carries it, what verse — an
   /// element that the markup calls a chapter number opens.
@@ -1720,6 +1882,19 @@ class _BibleBuilder {
           }
         }
         final seen = _seen[entry.key]?[number] ?? const <int>{};
+        // A verse the chapter numbers and gives no text to is omitted on
+        // purpose — Matthew 17:21 and the rest the critical texts leave
+        // out. A number past the end of the chapter is not that: it is a
+        // number this reading picked up somewhere it should not have, and
+        // claiming the chapter deliberately leaves out its verse 38 when
+        // it has seventeen would be a worse answer than saying nothing.
+        final highest = blocks.fold<int>(
+          0,
+          (most, block) => block.segments.fold(
+            most,
+            (m, segment) => segment.verse > m ? segment.verse : m,
+          ),
+        );
         final chapter = Chapter(
           // Chapters are read by position, so they have to run 1, 2, 3 with
           // no gaps. Where the source skipped one, the shift is reported
@@ -1730,7 +1905,7 @@ class _BibleBuilder {
           labels: _labels[entry.key]?[number] ?? const {},
           omitted: {
             for (final verse in seen)
-              if (!withText.contains(verse)) verse,
+              if (verse <= highest && !withText.contains(verse)) verse,
           },
         );
         if (chapter.verseCount == 0) {

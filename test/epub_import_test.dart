@@ -137,6 +137,7 @@ Uint8List epubWithToc({
 }
 
 void main() {
+  _theEditionItself();
   _aRowOfLinksIsNotScripture();
   _theShapeOfARealEdition();
   group('the shapes a Bible EPUB comes in', () {
@@ -1351,6 +1352,230 @@ void _theShapeOfARealEdition() {
         isNot(contains('All rights reserved')),
       );
       expect(textOf(psalmThree, 1), 'O LORD, how many are my foes!');
+    });
+  });
+}
+
+/// The shapes the ESV Classic Reference Bible actually uses, taken from the
+/// file rather than guessed at from a screenshot. Every one of these was a
+/// fault found by importing it.
+void _theEditionItself() {
+  group('an edition that hides its own apparatus', () {
+    test('a div the edition hides is not Scripture', () {
+      // The whole navigation apparatus — every book, every chapter, and
+      // the template text around them — sits in one of these at the foot
+      // of every book's file. Nothing is more authoritative about it than
+      // the edition saying so itself.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'b61.00.2-Peter.text.xhtml',
+              '<h1>2 Peter</h1>'
+                  '<p><span class="chapter-num"> 3 </span>'
+                  'But grow in the grace and knowledge.</p>'
+                  '<div class="hide">'
+                  '<div id="tc"><p class="nav-header">ESV</p>'
+                  '<p class="nav"><a class="pop-link" '
+                  'onclick="nav.show(\'ot\')">The Old Testament</a></p>'
+                  '<p class="nav"><a class="pop-link" '
+                  'onclick="lastHilite()">Show Last Hilite</a></p></div>'
+                  '<div id="this-book-ot"><p class="nav-header">ESV &#183; '
+                  '<span id="bookname-ot">BookNAME</span></p>'
+                  '<p class="nav" id="chapters-ot">chAPTErs</p></div>'
+                  '</div>',
+            ),
+          ],
+        ),
+      );
+      final chapter = result.bible!.bookByCode('2PE')!.chapter(1)!;
+      final everything = chapter.blocks
+          .expand((block) => block.segments)
+          .map((segment) => Markup.strip(segment.text))
+          .join('\n');
+      expect(everything, contains('But grow in the grace'));
+      for (final furniture in const [
+        'ESV',
+        'The Old Testament',
+        'Show Last Hilite',
+        'BookNAME',
+        'chAPTErs',
+      ]) {
+        expect(everything, isNot(contains(furniture)), reason: furniture);
+      }
+    });
+
+    test('and neither is anything else it hides', () {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'gen.xhtml',
+              '<h1>Genesis</h1>'
+                  '<p><span class="chapter-num"> 1 </span>In the beginning.</p>'
+                  '<p hidden="hidden">Hidden by attribute.</p>'
+                  '<p style="display: none">Hidden by style.</p>'
+                  '<p style="visibility:hidden">Hidden too.</p>',
+            ),
+          ],
+        ),
+      );
+      final everything = result.bible!
+          .bookByCode('GEN')!
+          .chapter(1)!
+          .blocks
+          .expand((block) => block.segments)
+          .map((segment) => Markup.strip(segment.text))
+          .join('\n');
+      expect(everything, contains('In the beginning.'));
+      expect(everything, isNot(contains('Hidden')));
+    });
+  });
+
+  group('a book is identified by more than its file name', () {
+    test('a numbered book keeps its number', () {
+      // `b62.00.1-John.text.xhtml` holds three things: where the file
+      // sorts, what book it is, and which part of the apparatus. Reading
+      // all three as the name made "1-John" into John, and the whole of
+      // 1, 2 and 3 John went into the Gospel — silently, with nothing
+      // missing and nothing to show for it.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'b43.00.John.text.xhtml',
+              '<p><span class="chapter-num"> 1 </span>'
+                  'In the beginning was the Word.</p>',
+            ),
+            (
+              'b62.00.1-John.text.xhtml',
+              '<p><span class="chapter-num"> 1 </span>'
+                  'That which was from the beginning.</p>',
+            ),
+            (
+              'b63.00.2-John.text.xhtml',
+              '<p><span class="chapter-num"> 1 </span>'
+                  'The elder to the elect lady.</p>',
+            ),
+          ],
+        ),
+      );
+      final bible = result.bible!;
+      expect(
+        bible.bookByCode('JHN')?.chapter(1)?.verseText(1),
+        'In the beginning was the Word.',
+      );
+      expect(
+        bible.bookByCode('1JN')?.chapter(1)?.verseText(1),
+        'That which was from the beginning.',
+      );
+      expect(
+        bible.bookByCode('2JN')?.chapter(1)?.verseText(1),
+        'The elder to the elect lady.',
+      );
+      expect(bible.bookByCode('JHN')!.chapters, hasLength(1));
+    });
+
+    test('and a packed id overrules a file name that is wrong', () {
+      // `v62001001` is the sixty-second book of the canon whatever the
+      // file is called, and an anchor is better evidence than a name.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'mystery.xhtml',
+              '<h1>John</h1>'
+                  '<p id="v62001001"><span class="chapter-num"> 1 </span>'
+                  'That which was from the beginning.</p>',
+            ),
+          ],
+        ),
+      );
+      expect(
+        result.bible!.bookByCode('1JN')?.chapter(1)?.verseText(1),
+        'That which was from the beginning.',
+      );
+    });
+  });
+
+  group('the formatting this edition actually marks', () {
+    late Chapter psalm;
+    late Chapter john;
+
+    setUpAll(() {
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'b19.00.Psalm.text.xhtml',
+              '<header><p class="heading"><span>The Reign of the '
+                  'Anointed</span></p></header>'
+                  '<p class="line"><span class="chapter-num"> 2 </span>'
+                  'Why do the nations rage</p>'
+                  '<p class="line-indent">and the peoples plot in vain?</p>'
+                  '<p class="line"><span class="verse-num">2</span>'
+                  'Serve the L<span class="smallcap">ORD</span> with fear. '
+                  '<span class="selah">Selah</span></p>',
+            ),
+            (
+              'b43.00.John.text.xhtml',
+              '<p class="no-indent"><span class="chapter-num"> 3 </span>'
+                  'Jesus answered, <span class="woc">&#8220;Truly, truly, '
+                  'I say to you.&#8221;</span> And he went.</p>',
+            ),
+          ],
+        ),
+      );
+      psalm = result.bible!.bookByCode('PSA')!.chapter(1)!;
+      john = result.bible!.bookByCode('JHN')!.chapter(1)!;
+    });
+
+    test('a heading over a chapter that has not opened yet is kept', () {
+      // It is printed before the paragraph the chapter number is in, so
+      // no chapter is open when it arrives. Every book was losing the
+      // heading over its first chapter.
+      expect(psalm.blocks.first.style, BlockStyle.heading);
+      expect(
+        Markup.strip(psalm.blocks.first.segments.first.text),
+        'The Reign of the Anointed',
+      );
+    });
+
+    test('a couplet is two lines of verse, the second indented', () {
+      final lines = psalm.blocks
+          .where((block) => block.style == BlockStyle.poetry)
+          .toList();
+      expect(lines, hasLength(greaterThanOrEqualTo(2)));
+      expect(lines[0].indent, 1);
+      expect(lines[1].indent, greaterThan(1));
+      expect(
+        Markup.strip(lines[1].segments.first.text),
+        'and the peoples plot in vain?',
+      );
+    });
+
+    test('the divine name and Selah are marked', () {
+      final second = psalm.blocks
+          .expand((block) => block.segments)
+          .where((segment) => segment.verse == 2)
+          .map((segment) => segment.text)
+          .join();
+      expect(second, contains(Markup.divineStart));
+      expect(second, contains(Markup.selahStart));
+      expect(psalm.verseText(2), 'Serve the LORD with fear. Selah');
+    });
+
+    test('and what Jesus says is red-lettered', () {
+      final verse = john.blocks
+          .expand((block) => block.segments)
+          .map((segment) => segment.text)
+          .join();
+      expect(verse, contains(Markup.wjStart));
+      expect(verse, contains(Markup.wjEnd));
+      expect(
+        john.verseText(1),
+        'Jesus answered, “Truly, truly, I say to you.” And he went.',
+      );
     });
   });
 }

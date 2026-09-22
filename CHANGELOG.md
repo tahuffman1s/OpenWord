@@ -1,5 +1,60 @@
 # Changelog
 
+## 1.15.0
+
+Everything here came out of importing a real ESV EPUB rather than reasoning
+about one. Before: 63 books, 1182 chapters, 30,973 verses. After: **66
+books, 1189 chapters, 31,102 verses** — the Protestant canon exactly.
+
+### Fixed
+- **1, 2 and 3 John were being poured into the Gospel of John.** Not lost —
+  appended to John's chapters 1 to 5, so John 1 ended with 3 John's
+  closing and nothing anywhere said so. The file name
+  `b62.00.1-John.text.xhtml` holds three things — where the file sorts,
+  what book it is, and which part of the apparatus — and reading all three
+  as the name, then stripping the leading number as a file-order number,
+  turned "1-John" into John. A name is now read as written first, its
+  leading number only dropped if the name does not parse with it; the
+  sorting prefix and the apparatus suffix are taken off; and a packed
+  anchor like `v62001001` overrules a file name that disagrees, because an
+  anchor is better evidence than a name.
+- **An edition's hidden apparatus is no longer read as Scripture.** The ESV
+  keeps its whole navigation — every book, every chapter, and the template
+  text around them — in a `<div class="hide">` at the foot of *every*
+  book's file. Three earlier attempts at this read the markup and each was
+  defeated, because the links carry `onclick` and no `href` and so did not
+  look like links. What the edition hides from its own reader is not
+  Scripture, and that is now the test, along with `hidden`,
+  `display: none` and `visibility: hidden`.
+- **A book's first heading is no longer dropped.** It is printed above the
+  paragraph the chapter number sits in, so no chapter is open when it
+  arrives and it was thrown out as front matter. Every book was losing the
+  heading over its opening chapter — 184 of them.
+- **Poetry reads as poetry.** `line-indent` marks the second line of a
+  couplet and was read as prose, which gave it a paragraph's first-line
+  indent and wrapped it back to the margin. 22,202 lines of verse now set
+  as verse, at their own depths.
+- **Footnote and cross-reference documents are not Scripture.** This
+  edition files them per book and puts them in the reading order.
+- **The repetition rule no longer takes Scripture with it.** 1.14.0 judged
+  a line furniture if it belonged to no verse and appeared in three or
+  more books. On a real Bible that took out 58 section headings — the
+  Gospels head the same events the same way — and then "The stone that the
+  builders rejected", which stands in five books. A heading is never
+  furniture however often it repeats, and furniture must also lie outside
+  a chapter's verses: a quotation is in the middle of a chapter, an
+  edition's furniture is at its edges.
+- A verse number past the end of its chapter can no longer be reported as
+  a verse the edition deliberately omits.
+
+### Added
+- **The words of Christ are marked**, so an imported Bible can be read in
+  red as the edition sets it. The marker has been in the format from the
+  start and the importer never wrote one: 2,098 passages in this edition.
+- **The divine name is set in small capitals** where an edition writes
+  `smallcap` — 6,208 of them — and **Selah** is marked as the direction it
+  is rather than a word of the psalm.
+
 ## 1.14.0
 
 ### Added
