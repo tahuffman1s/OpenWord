@@ -11,6 +11,7 @@ import 'package:openword/src/data/updates.dart';
 import 'package:openword/src/model/bib_file.dart';
 import 'package:openword/src/ui/reader_screen.dart';
 import 'package:openword/src/ui/settings_screen.dart';
+import 'package:openword/src/ui/widgets/scripture_text.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'epub_import_test.dart' show epub;
@@ -226,6 +227,67 @@ void main() {
     expect(find.text('1 verse in 1 book'), findsOneWidget);
     expect(find.text('1:2'), findsOneWidget);
     expect(find.textContaining('waste', findRichText: true), findsWidgets);
+  });
+
+  testWidgets('an imported translation gets the bundled study layers', (
+    tester,
+  ) async {
+    // The cross-references and the original languages are keyed to the
+    // verse, not to an edition's wording, so a translation the reader
+    // brought gets them the same as the three that ship.
+    final result = await onDisk(
+      tester,
+      () => shelf.add(_epub, fileName: 'imported.epub'),
+    );
+    final id = result.translation!.info.id;
+
+    SharedPreferences.setMockInitialValues(const {});
+    final settings = await Settings.load();
+    final reading = await ReadingStore.load();
+    final library = LibraryController(bundle: FixtureBundle(), shelf: shelf);
+    await onDisk(tester, () => library.load(id));
+
+    await tester.pumpWidget(
+      AppScope(
+        settings: settings,
+        library: library,
+        reading: reading,
+        updates: UpdateService(
+          settings: settings,
+          backend: FakeUpdateBackend(isSupported: false),
+          currentVersion: '1.0.0',
+        ),
+        child: const MaterialApp(home: ReaderScreen()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Genesis 1:1 of the imported text.
+    await tester.tap(
+      find
+          .descendant(of: find.byType(ScriptureBlock), matching: find.text('1'))
+          .first,
+    );
+    await tester.pumpAndSettle();
+
+    expect(
+      find.text('2 cross-references'),
+      findsOneWidget,
+      reason: 'the bundled cross-references are keyed to the verse',
+    );
+    expect(
+      find.text('Hebrew'),
+      findsOneWidget,
+      reason: 'so is the original-language layer',
+    );
+
+    await tester.tap(find.text('2 cross-references'));
+    await tester.pumpAndSettle();
+
+    // And the passages they point at are quoted in the imported wording,
+    // not in a bundled translation's.
+    expect(find.text('Psalms 1:1'), findsOneWidget);
+    expect(find.text('Matthew 1:1'), findsOneWidget);
   });
 
   testWidgets('a .bib exported from the shelf imports again unchanged', (
