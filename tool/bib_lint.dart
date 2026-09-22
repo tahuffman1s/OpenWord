@@ -12,7 +12,9 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart';
 import 'package:openword/src/model/bib_file.dart';
 import 'package:openword/src/model/bible.dart';
+import 'package:openword/src/model/strongs_codec.dart';
 import 'package:openword/src/model/versification_check.dart';
+import 'package:openword/src/model/xref_codec.dart';
 
 void main(List<String> args) {
   if (args.isEmpty) {
@@ -62,6 +64,10 @@ bool _check(String path) {
     for (final tag in tags) {
       if (tag != BibFile.tagMeta &&
           tag != BibFile.tagText &&
+          // The search index is written by this app and was being
+          // reported as unknown, which for a validator is a fault of
+          // its own.
+          tag != BibFile.tagSearch &&
           !BibFile.reservedTags.contains(tag)) {
         final critical = tag.codeUnitAt(0) >= 0x41 && tag.codeUnitAt(0) <= 0x5a;
         if (critical) {
@@ -96,6 +102,31 @@ bool _check(String path) {
     _bad('$error');
     return false;
   }
+  // What the study layers hold, where the file carries them. A chunk that
+  // is present and unreadable is a fault: a reader would lose the layer
+  // with nothing to say about it.
+  for (final (tag, describe) in <(String, String Function(Uint8List))>[
+    (
+      XrefCodec.chunkTag,
+      (chunk) => '${XrefCodec.unpack(chunk).length} verses of '
+          'cross-references',
+    ),
+    (StrongsCodec.chunkTag, (chunk) {
+      final layer = StrongsCodec.unpack(chunk);
+      return '${layer.verseCount} verses of Hebrew and Greek, '
+          '${layer.entryCount} dictionary entries';
+    }),
+  ]) {
+    final chunk = bible.extras[tag];
+    if (chunk == null) continue;
+    try {
+      _ok('$tag: ${describe(chunk)}');
+    } on Object catch (error) {
+      _bad('$tag is there and cannot be read: $error');
+      sound = false;
+    }
+  }
+
   final info = bible.translation;
   _note('${info.name} (${info.abbreviation}), ${info.id}');
   _note(

@@ -6,6 +6,9 @@ import 'package:openword/src/data/cross_references.dart';
 import 'package:openword/src/data/settings.dart';
 import 'package:openword/src/model/bib_file.dart';
 import 'package:openword/src/model/bible.dart';
+import 'package:openword/src/model/book_meta.dart';
+import 'package:openword/src/model/strongs_codec.dart';
+import 'package:openword/src/model/strongs_scope.dart';
 import 'package:openword/src/model/xref_codec.dart';
 
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +21,9 @@ Future<Settings> loadSettings() async {
 }
 
 void main() {
+  _theOriginalsInAFile();
   final references = FixtureBundle.packXrefs(fixtureXrefs);
+  StudyLayers refsOnly() => StudyLayers(crossReferences: references);
 
   group('a .bib saved with its cross-references in it', () {
     late Uint8List plain;
@@ -26,7 +31,7 @@ void main() {
 
     setUpAll(() {
       plain = BibFile.encode(parseFixture());
-      withRefs = attachCrossReferences((plain, references));
+      withRefs = attachStudyLayers((plain, refsOnly())).bytes;
     });
 
     test('gains the chunk, and the Scripture is untouched', () {
@@ -61,7 +66,7 @@ void main() {
     });
 
     test('and is the same bytes every time, as encoding is', () {
-      expect(attachCrossReferences((plain, references)), withRefs);
+      expect(attachStudyLayers((plain, refsOnly())).bytes, withRefs);
     });
 
     test('keeps whatever chunks the file already carried', () {
@@ -73,7 +78,7 @@ void main() {
           'zzzz': Uint8List.fromList([1, 2, 3]),
         },
       );
-      final out = attachCrossReferences((carrying, references));
+      final out = attachStudyLayers((carrying, refsOnly())).bytes;
       expect(BibFile.tags(out), containsAll([XrefCodec.chunkTag, 'zzzz']));
       expect(BibFile.decode(out).extras['zzzz'], [1, 2, 3]);
     });
@@ -82,9 +87,9 @@ void main() {
   group('and refused rather than written wrong', () {
     test('an empty set of references is not attached', () {
       expect(
-        () => attachCrossReferences((
+        () => attachStudyLayers((
           BibFile.encode(parseFixture()),
-          FixtureBundle.packXrefs(const []),
+          StudyLayers(crossReferences: FixtureBundle.packXrefs(const [])),
         )),
         throwsA(isA<BibFormatException>()),
       );
@@ -92,9 +97,9 @@ void main() {
 
     test('nor is anything that is not a set of references', () {
       expect(
-        () => attachCrossReferences((
+        () => attachStudyLayers((
           BibFile.encode(parseFixture()),
-          Uint8List.fromList(List.filled(64, 7)),
+          StudyLayers(crossReferences: Uint8List.fromList(List.filled(64, 7))),
         )),
         throwsA(anything),
       );
@@ -102,9 +107,9 @@ void main() {
 
     test('and a file that is not a .bib is not rewritten', () {
       expect(
-        () => attachCrossReferences((
+        () => attachStudyLayers((
           Uint8List.fromList(List.filled(64, 7)),
-          references,
+          refsOnly(),
         )),
         throwsA(isA<BibFormatException>()),
       );
@@ -146,5 +151,164 @@ void main() {
       settings.setAnchoredAnyway('other', true);
       expect(told, 1);
     });
+  });
+}
+
+/// The Hebrew and Greek travelling inside a `.bib`, which is what lets a
+/// file stand on its own and what lets a differently-numbered Bible have
+/// them at all.
+void _theOriginalsInAFile() {
+  final originals = FixtureBundle.packOriginals();
+
+  group('a .bib saved with its Hebrew and Greek in it', () {
+    late Uint8List plain;
+    late Uint8List withOriginals;
+    late AttachedLayers written;
+
+    setUpAll(() {
+      plain = BibFile.encode(parseFixture());
+      written = attachStudyLayers((plain, StudyLayers(originals: originals)));
+      withOriginals = written.bytes;
+    });
+
+    test('gains the chunk, and says what went in', () {
+      expect(BibFile.tags(plain), isNot(contains(StrongsCodec.chunkTag)));
+      expect(BibFile.tags(withOriginals), contains(StrongsCodec.chunkTag));
+      expect(written.verses, greaterThan(0));
+      expect(written.entries, greaterThan(0));
+      // Nothing was asked of the references, so nothing was written.
+      expect(written.references, 0);
+      expect(BibFile.tags(withOriginals), isNot(contains(XrefCodec.chunkTag)));
+    });
+
+    test('and the words read back, pointing and parsing and all', () {
+      final chunk = BibFile.decode(withOriginals).extras[StrongsCodec.chunkTag];
+      expect(chunk, isNotNull);
+      final layer = StrongsCodec.unpack(chunk!);
+
+      final genesis = originalsCanon.indexOf('GEN');
+      final words = layer.wordsAt(StrongsCodec.verseKey(genesis, 1, 1));
+      expect(words.map((w) => w.text), ['בְּרֵאשִׁית', 'בָּרָא', 'אֱלֹהִים']);
+      expect(words.first.strongs, const StrongsNumber('H', 7225));
+      expect(words.first.morphology, 'Noun common feminine singular absolute');
+
+      // The dictionary came too, or a number would be a number and
+      // nothing else.
+      final entry = layer.entryFor(const StrongsNumber('H', 7225));
+      expect(entry, isNotNull);
+      expect(entry!.renderings, isNotEmpty);
+    });
+
+    test('and the concordance names only verses the file has', () {
+      final layer = StrongsCodec.unpack(
+        BibFile.decode(withOriginals).extras[StrongsCodec.chunkTag]!,
+      );
+      final everywhere = layer.occurrences(const StrongsNumber('H', 430));
+      expect(everywhere, isNotEmpty);
+      for (final key in everywhere) {
+        expect(
+          layer.hasVerse(key),
+          isTrue,
+          reason: 'the concordance points at a verse the layer dropped',
+        );
+      }
+    });
+
+    test('and the Scripture is untouched', () {
+      final before = BibFile.decode(plain);
+      final after = BibFile.decode(withOriginals, verify: true);
+      expect(after.books.map((b) => b.code), before.books.map((b) => b.code));
+      expect(
+        after.bookByCode('GEN')!.chapter(1)!.verseText(1),
+        before.bookByCode('GEN')!.chapter(1)!.verseText(1),
+      );
+    });
+
+    test('both layers can sit in the same file', () {
+      final both = attachStudyLayers((
+        plain,
+        StudyLayers(
+          crossReferences: FixtureBundle.packXrefs(fixtureXrefs),
+          originals: originals,
+        ),
+      ));
+      expect(
+        BibFile.tags(both.bytes),
+        containsAll([XrefCodec.chunkTag, StrongsCodec.chunkTag]),
+      );
+      expect(both.references, greaterThan(0));
+      expect(both.verses, greaterThan(0));
+    });
+  });
+
+  group('a layer is cut to the verses the file has', () {
+    late StrongsReader whole;
+
+    setUpAll(() => whole = StrongsCodec.unpack(originals));
+
+    test('a New Testament carries no Hebrew', () {
+      final full = parseFixture();
+      final newTestament = Bible(
+        translation: full.translation,
+        books: full.books
+            .where((book) => book.section == BookSection.newTestament)
+            .toList(),
+      );
+      expect(newTestament.books, isNotEmpty);
+
+      final trimmed = StrongsReader.parse(
+        trimOriginalsTo(whole, originalsKeysOf(newTestament)),
+      );
+
+      final genesis = originalsCanon.indexOf('GEN');
+      final matthew = originalsCanon.indexOf('MAT');
+      expect(
+        trimmed.hasVerse(StrongsCodec.verseKey(genesis, 1, 1)),
+        isFalse,
+        reason: 'Genesis is not in this Bible, so its Hebrew is dead weight',
+      );
+      expect(trimmed.hasVerse(StrongsCodec.verseKey(matthew, 1, 1)), isTrue);
+
+      // And the dictionary shrinks with it: an entry nothing left reaches
+      // is carried for nobody.
+      expect(trimmed.entryCount, lessThan(whole.entryCount));
+      expect(
+        trimmed.entryFor(const StrongsNumber('H', 7225)),
+        isNull,
+        reason: 'no word left in the file uses it',
+      );
+      expect(trimmed.entryFor(const StrongsNumber('G', 976)), isNotNull);
+    });
+
+    test(
+      'and a Bible with nothing behind it is refused, not written empty',
+      () {
+        final full = parseFixture();
+        final deutero = Bible(
+          translation: full.translation,
+          books: full.books
+              .where((book) => book.section == BookSection.deuterocanon)
+              .toList(),
+        );
+        if (deutero.books.isEmpty) return;
+        expect(
+          () => attachStudyLayers((
+            BibFile.encode(deutero),
+            StudyLayers(originals: originals),
+          )),
+          throwsA(isA<BibFormatException>()),
+        );
+      },
+    );
+  });
+
+  test('nothing asked for is nothing written', () {
+    expect(
+      () => attachStudyLayers((
+        BibFile.encode(parseFixture()),
+        const StudyLayers(),
+      )),
+      throwsA(isA<BibFormatException>()),
+    );
   });
 }

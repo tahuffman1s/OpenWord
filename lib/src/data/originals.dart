@@ -1,4 +1,3 @@
-import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
@@ -14,6 +13,35 @@ import '../model/strongs_codec.dart';
 class Originals {
   Originals({AssetBundle? bundle}) : _bundle = bundle ?? rootBundle;
 
+  /// A layer already in hand, which has no bundle to go back to.
+  Originals._over(StrongsReader reader) : _bundle = null, _reader = reader;
+
+  /// The Hebrew and Greek a translation brought with it, in its own `strg`
+  /// chunk.
+  ///
+  /// A layer of its own is better than the bundled one in the way that
+  /// matters most: it is keyed to that translation's own verse numbering,
+  /// so it is right even where the bundled layer would hand back the words
+  /// of a neighbouring verse. Answers null where the bytes are not
+  /// readable, so a bad chunk costs the originals and nothing else.
+  static Future<Originals?> fromChunk(Uint8List bytes) async {
+    try {
+      final reader = bytes.length < isolateAbove
+          ? decodeOriginals(bytes)
+          : await compute(decodeOriginals, bytes);
+      return reader.verseCount == 0 ? null : Originals._over(reader);
+    } on Object catch (error) {
+      debugPrint(
+        "OpenWord: a translation's own Hebrew and Greek are "
+        'unreadable: $error',
+      );
+      return null;
+    }
+  }
+
+  /// The tag a translation's own layer travels under.
+  static const String chunkTag = StrongsCodec.chunkTag;
+
   static const String assetPath = 'assets/strongs/originals.ows.gz';
 
   static const String attribution =
@@ -25,7 +53,7 @@ class Originals {
   /// not wait on an isolate.
   static const int isolateAbove = 64 * 1024;
 
-  final AssetBundle _bundle;
+  final AssetBundle? _bundle;
   StrongsReader? _reader;
   Future<StrongsReader?>? _loading;
 
@@ -137,8 +165,10 @@ class Originals {
   }
 
   Future<StrongsReader?> _read() async {
+    final bundle = _bundle;
+    if (bundle == null) return _reader;
     try {
-      final data = await _bundle.load(assetPath);
+      final data = await bundle.load(assetPath);
       final bytes = Uint8List.sublistView(data);
       return bytes.length < isolateAbove
           ? decodeOriginals(bytes)
@@ -159,7 +189,4 @@ class Originals {
 ///
 /// What comes back is a reader over the bytes rather than four hundred
 /// thousand objects: a verse is decoded when it is looked at.
-StrongsReader decodeOriginals(Uint8List bytes) {
-  final raw = const GZipDecoder().decodeBytes(bytes);
-  return StrongsReader.parse(Uint8List.fromList(raw));
-}
+StrongsReader decodeOriginals(Uint8List bytes) => StrongsCodec.unpack(bytes);

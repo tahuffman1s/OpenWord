@@ -71,7 +71,7 @@ them:
 |---|---|
 | `srch` | Which books each word is in; see below |
 | `xref` | Cross-references anchored to this translation's own versification; see below |
-| `strg` | *(reserved)* A word-level Strong's alignment, making an interlinear exact rather than inferred |
+| `strg` | The Hebrew and Greek behind the verses, with Strong's numbers; see below |
 | `sign` | *(reserved)* A detached signature over the other chunks |
 
 Where two chunks share a tag, the later one wins.
@@ -338,6 +338,53 @@ says the set would not fit.
 A writer must carry chunks it does not understand through a rewrite, or a
 translation would silently lose its references the first time anything
 touched the file.
+
+## `strg`
+
+The original-language text behind this translation's verses, keyed to
+*this translation's* verse numbering. The payload is a gzipped `OWS`
+layer — the same encoding the app's own bundled asset uses, specified in
+[`lib/src/model/strongs_codec.dart`](../lib/src/model/strongs_codec.dart).
+
+It holds three things, each indexed so that a reader can seek rather than
+unpack all of it:
+
+- **the words of each verse**, in their own order, each with its Hebrew or
+  Greek as the source points and accents it, its Strong's number where the
+  source tags one, and its parsing spelled out;
+- **the dictionary entries** the words reach: lemma, transliteration,
+  pronunciation, derivation, definition and the King James renderings;
+- **a concordance**, every verse each number occurs in, built from the
+  verses in the layer rather than from anywhere else — so it can only ever
+  name a verse the file has.
+
+A reader should prefer this over any layer of its own, for the same reason
+as `xref`: it is keyed to the numbering of the very Bible it sits in, and a
+file cannot disagree with itself. Against a Bible numbered otherwise an
+external layer does not fail, it hands back the words of a neighbouring
+verse, which is worse than offering nothing.
+
+**Carry only what the file covers.** A layer written into a New Testament
+should hold the Greek and not the whole Hebrew Bible: the verses that are
+not there are dead weight, and so is every dictionary entry and concordance
+line only they reached. Trimming the app's own layer takes it from 3.94 MB
+to 1.08 MB for a New Testament, and to 0.15 MB for a single gospel.
+
+Attach a layer with:
+
+```bash
+dart run tool/attach_originals.dart <file.bib> <originals.ows.gz>
+```
+
+It reads the layer, cuts it to the verses the Bible has, rewrites the file,
+reads the result back and compares before replacing anything. OpenWord does
+the same to a copy, from a translation's menu in Settings, and refuses where
+the numbering it measured says the layer would not fit.
+
+The deuterocanonical books have no layer: they are in neither the Hebrew
+Bible nor the Greek New Testament as this app carries them. A verse with no
+words behind it is simply absent from the index, which a reader must treat
+as "no original here" rather than as a fault.
 
 ## Version 1
 

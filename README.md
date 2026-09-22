@@ -133,10 +133,10 @@ what it is, and what it should check out to:
 **The case of a tag's first letter says what to do with a chunk you do not
 recognise**, the rule PNG uses. Upper case is critical: a reader that meets
 an unknown one must refuse the file. Lower case is ancillary: skip it and
-carry on. That single rule is what lets the format grow — `xref`, `strg`,
-`srch` and `sign` are reserved for cross-references, a word-level Strong's
-alignment, a search index and a signature, and a file carrying any of them
-still opens in a reader written before they existed.
+carry on. That single rule is what lets the format grow — `xref` carries
+cross-references, `strg` the Hebrew and Greek, `srch` a search index, and
+`sign` is reserved for a signature; a file carrying any of them still
+opens in a reader written before they existed.
 
 Two chunks are defined, both critical. `META` is UTF-8 JSON and comes
 first, so a shelf of translations is listed by reading a few hundred bytes
@@ -211,13 +211,24 @@ Point them at a Bible that counts a psalm's superscription as its first
 verse, or divides Joel the Hebrew way, and they do not fail — they land on
 the wrong verse, confidently, which is worse.
 
-A translation can also sidestep the whole question by **bringing its own
-cross-references**, in the `xref` chunk, anchored to its own numbering. The
-app prefers those over the bundled set, so a differently-numbered Bible
-gets references that are right for it rather than none at all.
-`dart run tool/attach_xrefs.dart <file.bib> <xrefs.owx.gz>` attaches a set
-from a terminal; in the app, a translation's menu offers *Save a copy with
-cross-references…*, which does the same thing to a copy.
+A translation can also sidestep the whole question by **bringing both
+layers itself** — cross-references in the `xref` chunk, the Hebrew and
+Greek in `strg`, each keyed to its own numbering. The app prefers those
+over the bundled ones, so a differently-numbered Bible gets what is right
+for it rather than nothing at all, and a `.bib` needs none of this app's
+assets to be read with its study layers intact.
+
+```bash
+dart run tool/attach_xrefs.dart     <file.bib> <xrefs.owx.gz>
+dart run tool/attach_originals.dart <file.bib> <originals.ows.gz>
+```
+
+In the app, a translation's menu offers *Save a copy with the study
+layers…*, which does both to a copy. **The layer is cut to the verses the
+file has**: written into a New Testament it carries the Greek and not the
+whole Hebrew Bible, which takes it from 3.94 MB to 1.08 MB — 0.15 MB for a
+single gospel — and drops every dictionary entry and concordance line that
+only the missing verses reached.
 
 Otherwise an import is measured. Its per-chapter verse counts are compared with
 the English scheme (`lib/src/model/versification_table.dart`, generated
@@ -232,8 +243,8 @@ out by a verse beats no reference is a judgement about a book the reader has
 open in front of them, so they get to make it: the translation's menu offers
 *Cross-references and originals anyway*, and Settings then says the layers
 are on at their word and what to expect of them. Exporting a `.bib` with the
-references in it is refused until they have said so, since baking a set into
-a file it does not fit puts the mistake beyond the reach of whoever reads it
+layers in it is refused until they have said so, since baking them into a
+file they do not fit puts the mistake beyond the reach of whoever reads it
 next.
 
 The line sits at 2% of chapters, which is where the evidence puts it:

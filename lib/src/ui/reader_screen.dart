@@ -151,6 +151,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _matcher = ReferenceMatcher(scope.library.bible!.books);
     }
     _bible = scope.library.bible!;
+    _loadOwnOriginals();
     _settings = scope.settings;
     _reading = scope.reading;
     _rebuildIndex();
@@ -324,9 +325,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         reading: _reading,
         crossReferences: _references?.forVerse(reference) ?? const [],
         onCrossReferences: () => _openCrossReferences(reference),
-        originalWords: _anchored
-            ? _originals?.wordsFor(reference) ?? const []
-            : const [],
+        originalWords: _originalLanguages?.wordsFor(reference) ?? const [],
         onOriginal: () => _openOriginal(reference),
       ),
     );
@@ -363,10 +362,42 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// make for them.
   bool get _anchored => _settings.offersVerseKeyedLayers(_bible.translation);
 
+  /// The translation's own Hebrew and Greek, where its file brought them.
+  /// Loaded off the main isolate, so it appears once it is ready.
+  Originals? _ownOriginals;
+  String? _ownOriginalsFor;
+
+  /// Starts reading a translation's own layer, where its file brought one.
+  ///
+  /// Eagerly, when the translation changes, rather than when a verse is
+  /// first tapped: unpacking is measured in megabytes, and a verse sheet
+  /// already on screen does not gain the Hebrew when it arrives — it was
+  /// built with what there was.
+  void _loadOwnOriginals() {
+    final id = _bible.translation.id;
+    if (_ownOriginalsFor == id) return;
+    _ownOriginalsFor = id;
+    _ownOriginals = null;
+    final chunk = _bible.extras[Originals.chunkTag];
+    if (chunk == null) return;
+    Originals.fromChunk(chunk).then((own) {
+      // The reader may have moved on to another translation while those
+      // megabytes were being unpacked.
+      if (!mounted || _ownOriginalsFor != id || own == null) return;
+      setState(() => _ownOriginals = own);
+    });
+  }
+
+  /// The original-language layer to use: the translation's own where its
+  /// file carries one, the bundled layer where its numbering allows, and
+  /// none at all otherwise.
+  Originals? get _originalLanguages =>
+      _ownOriginals ?? (_anchored ? _originals : null);
+
   /// The Hebrew or Greek of a verse, and from there its dictionary entry
   /// and everywhere else the word is used.
   Future<void> _openOriginal(Reference reference) async {
-    final originals = _originals;
+    final originals = _originalLanguages;
     if (originals == null) return;
     final words = originals.wordsFor(reference);
     if (words.isEmpty) return;
@@ -384,7 +415,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   /// Every verse a Strong's number occurs in; choosing one goes there.
   Future<void> _openConcordance(StrongsNumber number) async {
-    final originals = _originals;
+    final originals = _originalLanguages;
     if (originals == null) return;
     final chosen = await showConcordance(
       context,

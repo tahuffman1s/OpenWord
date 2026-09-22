@@ -1,5 +1,45 @@
 # Changelog
 
+## 1.13.0
+
+### Added
+- **The Hebrew and Greek can travel inside a `.bib`.** The format had
+  reserved `strg` for this and nothing wrote or read one, so the
+  original-language layer was something only this app's own 3.9 MB asset
+  could supply — and that asset is keyed to English Protestant numbering,
+  which is why a differently-numbered translation was offered no originals
+  at all. A file can now carry its own: the words of each verse, pointed
+  and accented as the source has them, with their Strong's numbers and
+  parsing; the dictionary entries those words reach; and a concordance
+  built from the verses in the layer, so it can only ever name a verse the
+  file has. The app prefers a translation's own layer over the bundled one,
+  for the same reason it prefers its own cross-references — a file cannot
+  disagree with itself.
+- **The layer is cut to the verses the file actually has.** Writing the
+  whole Protestant canon into a New Testament is dead weight, and so is
+  every dictionary entry and concordance line only the missing verses
+  reached. Trimming takes the layer from 3.94 MB to **1.08 MB** for a New
+  Testament and **0.15 MB** for a single gospel; for a whole Bible it is a
+  no-op. The Berean Standard Bible with both layers written in is 6.97 MB,
+  opens in 41 ms and unpacks its 31,092 verses of Hebrew and Greek in 80,
+  because the layer is indexed rather than unpacked whole.
+- **`dart run tool/attach_originals.dart <file.bib> <originals.ows.gz>`**
+  attaches a layer from a terminal, refusing where the file is marked as
+  numbering its verses differently. In the app, *Save a copy with
+  cross-references…* is now *Save a copy with the study layers…* and writes
+  both.
+- `docs/bib-format.md` specifies `strg`, and `bib_lint` reports what each
+  study layer holds and fails a file whose layer is there and unreadable.
+
+### Fixed
+- `bib_lint` called the search index an unknown chunk. `srch` is written by
+  this app and specified in the format; a validator saying otherwise is a
+  fault of its own.
+- A translation's own layer is read when the translation changes rather
+  than when a verse is first tapped. Unpacking is measured in megabytes,
+  and a verse sheet already on screen does not gain the Hebrew when it
+  arrives — it was built with what there was.
+
 ## 1.12.0
 
 ### Added

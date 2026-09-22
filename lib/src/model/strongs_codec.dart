@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
+
 /// One word of the original text, as it stands in a particular verse.
 class OriginalWord {
   const OriginalWord({
@@ -162,8 +164,34 @@ class StrongsCodec {
   static const List<int> magic = [0x4f, 0x57, 0x53]; // 'OWS'
   static const int version = 1;
 
+  /// The `.bib` chunk a translation's own Hebrew and Greek travel in.
+  /// Ancillary, so a file gains them without becoming unreadable to
+  /// anything written before them.
+  static const String chunkTag = 'strg';
+
   static int verseKey(int book, int chapter, int verse) =>
       (book * 1000 + chapter) * 1000 + verse;
+
+  /// Reads a layer as it is stored — gzipped — or raw. Free of Flutter, so
+  /// the tools and an isolate can both read one.
+  ///
+  /// Either is accepted because the asset on disk is gzipped and a chunk
+  /// inside a `.bib` may or may not be, depending on what wrote it; the
+  /// magic says which without having to be told.
+  static StrongsReader unpack(Uint8List bytes) =>
+      StrongsReader.parse(inflate(bytes));
+
+  /// Gzipped or not, as its first two bytes say.
+  static Uint8List inflate(Uint8List bytes) {
+    final gzipped =
+        bytes.length > 2 && bytes[0] == 0x1f && bytes[1] == 0x8b;
+    if (!gzipped) return bytes;
+    return Uint8List.fromList(const GZipDecoder().decodeBytes(bytes));
+  }
+
+  /// Packs a layer the way the asset and the chunk both store it.
+  static Uint8List deflate(Uint8List raw) =>
+      Uint8List.fromList(const GZipEncoder().encodeBytes(raw));
 }
 
 /// Reads the asset without unpacking all of it.
@@ -192,6 +220,14 @@ class StrongsReader {
   int get entryCount => _lexicon.length;
 
   bool hasVerse(int key) => _verses.containsKey(key);
+
+  /// Every verse this layer has words for, in no particular order. What a
+  /// rewrite iterates over.
+  Iterable<int> get verseKeys => _verses.keys;
+
+  /// Every Strong's number this layer has a dictionary entry for.
+  Iterable<StrongsNumber> get entryNumbers =>
+      _lexicon.keys.map(StrongsNumber.fromKey);
 
   /// The words of one verse, decoded now.
   List<OriginalWord> wordsAt(int key) {
@@ -509,4 +545,41 @@ class _Reader {
     _at += length;
     return value;
   }
+}
+
+/// Rewrites an original-language layer for just the verses a Bible has.
+///
+/// The bundled layer covers the whole Protestant canon. Writing all of it
+/// into a New Testament, or into a Bible missing a book, is waste: the
+/// verses that are not there are dead weight, and so is every dictionary
+/// entry and every concordance line that only those verses reached.
+///
+/// Free of Flutter and taking nothing but what it is given, so a tool, an
+/// isolate and a test can all call it.
+Uint8List trimOriginalsTo(StrongsReader source, Set<int> wanted) {
+  final writer = StrongsWriter();
+
+  // The dictionary is the larger half of the layer, so only the entries
+  // the kept words actually reach are carried over. The concordance is
+  // rebuilt from the verses as they are added, so it needs no filtering:
+  // it can only ever name a verse that went in.
+  final reached = <int>{};
+  for (final key in source.verseKeys) {
+    if (!wanted.contains(key)) continue;
+    final words = source.wordsAt(key);
+    if (words.isEmpty) continue;
+    writer.addVerse(key, words);
+    for (final word in words) {
+      final number = word.strongs;
+      if (number != null) reached.add(number.key);
+    }
+  }
+
+  for (final number in source.entryNumbers) {
+    if (!reached.contains(number.key)) continue;
+    final entry = source.entryFor(number);
+    if (entry != null) writer.addEntry(entry);
+  }
+
+  return writer.build();
 }

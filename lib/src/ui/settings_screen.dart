@@ -642,8 +642,8 @@ class _TranslationMenu extends StatelessWidget {
           ),
         const PopupMenuItem(value: 'save', child: Text('Save a copy…')),
         const PopupMenuItem(
-          value: 'save-with-refs',
-          child: Text('Save a copy with cross-references…'),
+          value: 'save-with-layers',
+          child: Text('Save a copy with the study layers…'),
         ),
         if (_imported)
           const PopupMenuItem(value: 'remove', child: Text('Remove')),
@@ -680,8 +680,8 @@ class _TranslationMenu extends StatelessWidget {
           );
           return;
         }
-        if (choice == 'save-with-refs') {
-          await _saveWithReferences(messenger);
+        if (choice == 'save-with-layers') {
+          await _saveWithLayers(messenger);
           return;
         }
         if (choice == 'remove') {
@@ -703,22 +703,23 @@ class _TranslationMenu extends StatelessWidget {
     );
   }
 
-  /// Saves the `.bib` with the app's cross-references written into it, so
-  /// the file carries them wherever it goes.
+  /// Saves the `.bib` with the app's cross-references and its Hebrew and
+  /// Greek written into it, so the file carries them wherever it goes and
+  /// whatever opens it.
   ///
   /// Refused where the translation's numbering was measured as different
-  /// and the reader has not overruled that: baking a set of references
-  /// into a file they do not fit would put the mistake beyond reach of
-  /// anyone who later reads it.
-  Future<void> _saveWithReferences(ScaffoldMessengerState messenger) async {
+  /// and the reader has not overruled that: baking layers into a file they
+  /// do not fit would put the mistake beyond reach of anyone who later
+  /// reads it.
+  Future<void> _saveWithLayers(ScaffoldMessengerState messenger) async {
     void say(String message) =>
         messenger.showSnackBar(SnackBar(content: Text(message)));
 
     if (!settings.offersVerseKeyedLayers(translation)) {
       say(
-        '$name numbers its verses differently, so the bundled references '
-        'would point at the wrong ones. Turn them on for it first if you '
-        'want them anyway.',
+        '$name numbers its verses differently, so the bundled layers would '
+        'land on the wrong verses. Turn them on for it first if you want '
+        'them anyway.',
       );
       return;
     }
@@ -726,41 +727,55 @@ class _TranslationMenu extends StatelessWidget {
     final bytes = await _bytes();
     if (bytes == null) return;
 
-    // A translation that brought its own set keeps it: its own is anchored
-    // to its own numbering, and the bundled English set is not an
-    // improvement on that.
+    // A translation that brought layers of its own keeps them: they are
+    // keyed to its own numbering, and the bundled ones are no improvement
+    // on that.
     List<String> tags;
     try {
       tags = BibFile.tags(bytes);
     } on Object {
       tags = const [];
     }
-    if (tags.contains(CrossReferences.chunkTag)) {
-      say('$name already carries its own cross-references.');
+    final wanted = StudyLayers(
+      crossReferences: tags.contains(CrossReferences.chunkTag)
+          ? null
+          : Uint8List.sublistView(
+              await library.bundle.load(CrossReferences.assetPath),
+            ),
+      originals: tags.contains(Originals.chunkTag)
+          ? null
+          : Uint8List.sublistView(
+              await library.bundle.load(Originals.assetPath),
+            ),
+    );
+    if (wanted.isEmpty) {
+      say('$name already carries both of them.');
       return;
     }
 
-    say('Writing the references into $name…');
-    final Uint8List out;
+    say('Writing the study layers into $name…');
+    final AttachedLayers written;
     try {
-      final refs = await library.bundle.load(CrossReferences.assetPath);
-      out = await compute(attachCrossReferences, (
-        bytes,
-        Uint8List.sublistView(refs),
-      ));
+      written = await compute(attachStudyLayers, (bytes, wanted));
     } on Object catch (error) {
-      say('Could not write the references in: $error');
+      say('Could not write them in: $error');
       return;
     }
 
     final saved = await FilePicker.saveFile(
-      dialogTitle: 'Save $name with cross-references',
-      fileName: '$id-xrefs${BibFile.extension}',
-      bytes: out,
+      dialogTitle: 'Save $name with the study layers',
+      fileName: '$id-study${BibFile.extension}',
+      bytes: written.bytes,
     );
     if (saved == null) return;
-    final megabytes = (out.length / (1024 * 1024)).toStringAsFixed(1);
-    say('Saved $megabytes MB to ${_where(saved)}');
+    final megabytes = (written.bytes.length / (1024 * 1024)).toStringAsFixed(
+      1,
+    );
+    say(
+      'Saved $megabytes MB to ${_where(saved)} — '
+      '${written.references} verses of cross-references, '
+      '${written.verses} of Hebrew and Greek.',
+    );
   }
 
   /// A file:// URI reads as a path; anything else (the browser's download,

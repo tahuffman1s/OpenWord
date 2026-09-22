@@ -7,6 +7,7 @@ import 'package:openword/src/data/marks.dart';
 import 'package:openword/src/data/settings.dart';
 import 'package:openword/src/data/updates.dart';
 import 'package:openword/src/model/bible.dart';
+import 'package:openword/src/model/strongs_codec.dart';
 import 'package:openword/src/model/xref_codec.dart';
 import 'package:openword/src/ui/reader_screen.dart';
 import 'package:openword/src/ui/widgets/atlas_map.dart';
@@ -721,13 +722,48 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('2 cross-references'), findsOneWidget);
-      // The original-language layer is still anchored to the English
-      // numbering and has no per-translation form, so it stays withheld.
+      // This file brought references and no original-language layer, so
+      // the Hebrew stays withheld: the bundled one is keyed to a
+      // numbering this Bible does not use.
       expect(find.text('Hebrew'), findsNothing);
 
       await tester.tap(find.text('2 cross-references'));
       await tester.pumpAndSettle();
       expect(find.text('Psalms 1:1'), findsOneWidget);
+    });
+
+    testWidgets('and its own Hebrew and Greek, where its file has them', (
+      tester,
+    ) async {
+      final normal = parseFixture();
+
+      // The layer can travel in the file now, keyed to that file's own
+      // numbering — so a Bible the bundled layer cannot serve gets the
+      // originals from itself rather than going without.
+      await pumpReader(
+        tester,
+        bible: Bible(
+          translation: normal.translation.copyWith(
+            versification: Versification.other,
+          ),
+          books: normal.books,
+          extras: {StrongsCodec.chunkTag: FixtureBundle.packOriginals()},
+        ),
+      );
+
+      await tester.tap(verseNumber('1').first);
+      // Unpacked off the main isolate, so it arrives a frame or two later.
+      await tester.pumpAndSettle();
+      await tester.pumpAndSettle();
+
+      expect(find.text('Hebrew'), findsOneWidget);
+      // It brought no references, and the bundled set is still no use
+      // against this numbering.
+      expect(find.textContaining('cross-references'), findsNothing);
+
+      await tester.tap(find.text('Hebrew'));
+      await tester.pumpAndSettle();
+      expect(find.text('בְּרֵאשִׁית'), findsOneWidget);
     });
 
     testWidgets('one that never said keeps them, as it always had', (
