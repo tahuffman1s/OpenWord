@@ -209,7 +209,13 @@ Point them at a Bible that counts a psalm's superscription as its first
 verse, or divides Joel the Hebrew way, and they do not fail — they land on
 the wrong verse, confidently, which is worse.
 
-So an import is measured. Its per-chapter verse counts are compared with
+A translation can also sidestep the whole question by **bringing its own
+cross-references**, in the `xref` chunk, anchored to its own numbering. The
+app prefers those over the bundled set, so a differently-numbered Bible
+gets references that are right for it rather than none at all.
+`dart run tool/attach_xrefs.dart <file.bib> <xrefs.owx.gz>` attaches a set.
+
+Otherwise an import is measured. Its per-chapter verse counts are compared with
 the English scheme (`lib/src/model/versification_table.dart`, generated
 from the Berean Standard Bible, since that is what the cross-references
 were anchored to), and where it does not match, the translation is marked

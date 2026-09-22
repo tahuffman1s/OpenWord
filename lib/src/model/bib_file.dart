@@ -99,15 +99,16 @@ class BibFile {
   /// same Bible encodes to the same bytes, so a rebuilt asset that has not
   /// changed does not look as though it has.
   ///
-  /// [searchable] writes the word index; [carry] writes further chunks as
-  /// given, which is how a file keeps its cross-references or anything else
-  /// it came with through a rewrite.
+  /// [searchable] writes the word index. [carry] writes further chunks as
+  /// given; left out, the Bible's own [Bible.extras] are written, so a
+  /// rewrite keeps a translation's cross-references and anything else it
+  /// came with. Pass `{}` to write none.
   static Uint8List encode(
     Bible bible, {
     bool compress = true,
     DateTime? created,
     bool searchable = true,
-    Map<String, List<int>> carry = const {},
+    Map<String, List<int>>? carry,
   }) {
     final text = _encodeText(bible, compress: compress);
     final metadata = utf8.encode(
@@ -141,7 +142,9 @@ class BibFile {
             : index,
       );
     }
-    for (final extra in carry.entries) {
+    // Whatever the Bible came with, unless the caller says otherwise: a
+    // rewrite must not quietly drop a translation's cross-references.
+    for (final extra in (carry ?? bible.extras).entries) {
       _writeChunk(out, extra.key, extra.value);
     }
     return out.takeCopy();
@@ -253,6 +256,14 @@ class BibFile {
           ? null
           : () =>
                 SearchIndex.parse(_gunzipped(search), textCrc: getCrc32(text)),
+      // Everything else the file brought, for whoever knows what it means.
+      extras: {
+        for (final chunk in chunks.entries)
+          if (chunk.key != tagMeta &&
+              chunk.key != tagText &&
+              chunk.key != tagSearch)
+            chunk.key: chunk.value,
+      },
     );
   }
 
@@ -344,6 +355,7 @@ class BibFile {
     TranslationInfo info,
     Uint8List text, {
     SearchIndex? Function()? search,
+    Map<String, Uint8List> extras = const {},
   }) {
     final input = ByteReader(text);
     final encoding = input.byte();
@@ -409,6 +421,7 @@ class BibFile {
     return Bible(
       translation: info,
       books: books,
+      extras: extras,
       // An index built for a different set of books is no index at all.
       searchIndex: search == null
           ? null

@@ -3,8 +3,11 @@ import 'dart:io';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:openword/src/data/cross_references.dart';
+import 'package:openword/src/model/bib_file.dart';
 import 'package:openword/src/model/bible.dart';
 import 'package:openword/src/model/xref_codec.dart';
+
+import 'fixtures.dart';
 
 /// A fixture in the real shape: two anchors on Genesis 1:1.
 List<XrefEntry> fixtureEntries() => [
@@ -201,5 +204,68 @@ void main() {
         }
       }
     }
+  });
+
+  group('a translation that brings its own', () {
+    test('reads them out of the chunk, with no asset anywhere', () {
+      final own = CrossReferences.fromChunk(
+        FixtureBundle.packXrefs(fixtureXrefs),
+      );
+
+      expect(own, isNotNull);
+      expect(own!.forVerse(const Reference('GEN', 1, 1)), hasLength(1));
+      expect(own.countFor(const Reference('GEN', 1, 1)), 2);
+      expect(own.forVerse(const Reference('GEN', 1, 2)), isEmpty);
+    });
+
+    test('a chunk that is not a set of references costs only the set', () {
+      expect(
+        CrossReferences.fromChunk(Uint8List.fromList([1, 2, 3, 4])),
+        isNull,
+      );
+      expect(CrossReferences.fromChunk(Uint8List(0)), isNull);
+    });
+
+    test('an empty set is no set', () {
+      expect(
+        CrossReferences.fromChunk(FixtureBundle.packXrefs(const [])),
+        isNull,
+      );
+    });
+
+    test('a .bib keeps them through a rewrite', () {
+      final refs = FixtureBundle.packXrefs(fixtureXrefs);
+      final bible = parseFixture();
+
+      final attached = BibFile.encode(bible, carry: {XrefCodec.chunkTag: refs});
+      expect(BibFile.tags(attached), contains('xref'));
+
+      // Re-encoding what was read must not drop them: the Bible carries
+      // the chunks it came with.
+      final reopened = BibFile.decode(attached);
+      expect(reopened.extras[XrefCodec.chunkTag], isNotNull);
+      final again = BibFile.encode(reopened);
+      expect(BibFile.tags(again), contains('xref'));
+      expect(
+        CrossReferences.fromChunk(
+          BibFile.decode(again).extras[XrefCodec.chunkTag]!,
+        )!.forVerse(const Reference('GEN', 1, 1)),
+        hasLength(1),
+      );
+    });
+
+    test('and they can be dropped deliberately', () {
+      final attached = BibFile.decode(
+        BibFile.encode(
+          parseFixture(),
+          carry: {XrefCodec.chunkTag: FixtureBundle.packXrefs(fixtureXrefs)},
+        ),
+      );
+
+      expect(
+        BibFile.tags(BibFile.encode(attached, carry: {})),
+        isNot(contains('xref')),
+      );
+    });
   });
 }

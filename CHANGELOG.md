@@ -15,6 +15,15 @@
   unpacked until something searches, and carries the checksum of the text
   it was built from so a stale one is ignored rather than quietly losing
   verses. Every `.bib` the app writes gets one, imports included.
+- **A translation can carry its own cross-references.** A `.bib` may hold
+  a reference set anchored to its own verse numbering, and the app prefers
+  it over the bundled English one. This is the proper answer to the
+  numbering problem rather than the workaround: instead of a
+  differently-numbered Bible losing its cross-references because the
+  bundled set would land on the wrong verse, it brings a set that is right
+  for it. `dart run tool/attach_xrefs.dart <file.bib> <xrefs.owx.gz>`
+  attaches one, and a rewrite keeps whatever chunks a file came with, so
+  nothing silently loses them.
 - **Imported text is composed to NFC.** Unicode can spell the same word
   more than one way — `é` as one codepoint or as `e` plus a combining
   acute, Hebrew with two points on a letter in either order. The spellings

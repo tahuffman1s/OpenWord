@@ -318,9 +318,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         reference: reference,
         text: _currentChapter.verseText(verse),
         reading: _reading,
-        crossReferences: _anchored
-            ? _xrefs?.forVerse(reference) ?? const []
-            : const [],
+        crossReferences: _references?.forVerse(reference) ?? const [],
         onCrossReferences: () => _openCrossReferences(reference),
         originalWords: _anchored
             ? _originals?.wordsFor(reference) ?? const []
@@ -328,6 +326,24 @@ class _ReaderScreenState extends State<ReaderScreen> {
         onOriginal: () => _openOriginal(reference),
       ),
     );
+  }
+
+  /// The translation's own cross-references, where its file brought them.
+  /// Rebuilt whenever the translation changes.
+  CrossReferences? _ownXrefs;
+  String? _ownXrefsFor;
+
+  /// The cross-references to use: the translation's own where it has them,
+  /// the bundled English set where its numbering allows, and none at all
+  /// otherwise.
+  CrossReferences? get _references {
+    final id = _bible.translation.id;
+    if (_ownXrefsFor != id) {
+      _ownXrefsFor = id;
+      final chunk = _bible.extras[CrossReferences.chunkTag];
+      _ownXrefs = chunk == null ? null : CrossReferences.fromChunk(chunk);
+    }
+    return _ownXrefs ?? (_anchored ? _xrefs : null);
   }
 
   /// Whether this translation numbers its verses the way the bundled
@@ -379,7 +395,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// Opens the cross-references of a verse, and goes wherever one of them
   /// leads.
   Future<void> _openCrossReferences(Reference reference) async {
-    final anchors = _xrefs?.forVerse(reference) ?? const <XrefAnchor>[];
+    final anchors = _references?.forVerse(reference) ?? const <XrefAnchor>[];
     if (anchors.isEmpty) return;
     final chosen = await showCrossReferences(
       context,

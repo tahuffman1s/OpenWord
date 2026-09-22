@@ -7,6 +7,7 @@ import 'package:openword/src/data/marks.dart';
 import 'package:openword/src/data/settings.dart';
 import 'package:openword/src/data/updates.dart';
 import 'package:openword/src/model/bible.dart';
+import 'package:openword/src/model/xref_codec.dart';
 import 'package:openword/src/ui/reader_screen.dart';
 import 'package:openword/src/ui/widgets/atlas_map.dart';
 import 'package:openword/src/ui/widgets/scripture_text.dart';
@@ -669,6 +670,38 @@ void main() {
       // Everything that does not depend on the numbering still works.
       expect(find.text('Bookmark'), findsOneWidget);
       expect(find.text('Copy'), findsOneWidget);
+    });
+
+    testWidgets('unless it brought its own, which are right for it', (
+      tester,
+    ) async {
+      final normal = parseFixture();
+
+      // The whole point of letting a translation carry its own: the bundled
+      // English set cannot be trusted against this numbering, but a set
+      // anchored to its own can, so the references come back.
+      await pumpReader(
+        tester,
+        bible: Bible(
+          translation: normal.translation.copyWith(
+            versification: Versification.other,
+          ),
+          books: normal.books,
+          extras: {XrefCodec.chunkTag: FixtureBundle.packXrefs(fixtureXrefs)},
+        ),
+      );
+
+      await tester.tap(verseNumber('1').first);
+      await tester.pumpAndSettle();
+
+      expect(find.text('2 cross-references'), findsOneWidget);
+      // The original-language layer is still anchored to the English
+      // numbering and has no per-translation form, so it stays withheld.
+      expect(find.text('Hebrew'), findsNothing);
+
+      await tester.tap(find.text('2 cross-references'));
+      await tester.pumpAndSettle();
+      expect(find.text('Psalms 1:1'), findsOneWidget);
     });
 
     testWidgets('one that never said keeps them, as it always had', (

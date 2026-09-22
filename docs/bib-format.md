@@ -70,7 +70,7 @@ them:
 | Tag | For |
 |---|---|
 | `srch` | Which books each word is in; see below |
-| `xref` | *(reserved)* Cross-references anchored to this translation's own versification |
+| `xref` | Cross-references anchored to this translation's own versification; see below |
 | `strg` | *(reserved)* A word-level Strong's alignment, making an interlinear exact rather than inferred |
 | `sign` | *(reserved)* A detached signature over the other chunks |
 
@@ -257,6 +257,33 @@ searching for a word that is not there goes from 153 ms to 0.5 ms, and for
 a rare one from 144 ms to 3 ms. A word in every book costs about 0.7 ms
 more than not having the index at all. The chunk is 116 kB gzipped on a
 1.76 MB file, and is not unpacked until something searches.
+
+## `xref`
+
+Cross-references anchored to *this translation's* verse numbering. The
+payload is a gzipped `OWX` set — the same encoding the app's own bundled
+references use, specified in
+[`lib/src/model/xref_codec.dart`](../lib/src/model/xref_codec.dart).
+
+A reader should prefer these over any set of its own. They are right by
+construction: a reference set is anchored to one numbering, and the file
+carrying both cannot disagree with itself. For a Bible numbered
+differently from a reader's built-in set, this is the difference between
+having cross-references and not — the alternative is to withhold them,
+since pointing at the wrong verse is worse than pointing nowhere.
+
+Attach a set with:
+
+```bash
+dart run tool/attach_xrefs.dart <file.bib> <xrefs.owx.gz>
+```
+
+It reads the set, rewrites the file, reads the result back and compares
+before replacing anything.
+
+A writer must carry chunks it does not understand through a rewrite, or a
+translation would silently lose its references the first time anything
+touched the file.
 
 ## Version 1
 

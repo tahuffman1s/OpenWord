@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:archive/archive.dart';
+
 /// One passage a cross-reference points at.
 ///
 /// A reference is often a run of verses — "Proverbs 8:22-24" — so it carries
@@ -77,6 +79,16 @@ class XrefCodec {
 
   static const List<int> magic = [0x4f, 0x57, 0x58]; // 'OWX'
   static const int version = 1;
+
+  /// The `.bib` chunk a translation's own cross-references travel in.
+  /// Ancillary, so a file gains them without becoming unreadable to
+  /// anything written before them.
+  static const String chunkTag = 'xref';
+
+  /// Unpacks a set as it is stored — gzipped — or throws. Free of Flutter,
+  /// so the tools can read one too.
+  static List<XrefEntry> unpack(Uint8List bytes) =>
+      decode(Uint8List.fromList(const GZipDecoder().decodeBytes(bytes)));
 
   /// Verses are looked up by one number rather than three.
   static int keyOf(int book, int chapter, int verse) =>

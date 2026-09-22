@@ -12,9 +12,41 @@ import '../model/xref_codec.dart';
 /// Knowledge, each hung on the phrase of the verse that prompted it. Read on
 /// demand and kept afterwards: nothing wants them until a verse is opened.
 class CrossReferences {
-  CrossReferences({AssetBundle? bundle}) : _bundle = bundle ?? rootBundle;
+  CrossReferences({AssetBundle? bundle = _ownBundle})
+    : _bundle = bundle == _ownBundle ? rootBundle : bundle;
+
+  /// Tells "no bundle given, so use the app's" apart from "no bundle at
+  /// all", which is what a set handed over as bytes has.
+  static const AssetBundle? _ownBundle = null;
+
+  /// The references a translation brought with it, in its own `xref`
+  /// chunk, already in hand.
+  ///
+  /// A set of its own is better than the bundled one in every way that
+  /// matters: it is anchored to that translation's own verse numbering, so
+  /// it is right even where the bundled English set would land on the
+  /// wrong verse, and it needs no asset. Answers null where the bytes are
+  /// not readable, so a bad chunk costs the references and nothing else.
+  static CrossReferences? fromChunk(Uint8List bytes) {
+    try {
+      final entries = XrefCodec.unpack(bytes);
+      if (entries.isEmpty) return null;
+      final own = CrossReferences(bundle: null);
+      own._byVerse = {for (final entry in entries) entry.key: entry};
+      return own;
+    } on Object catch (error) {
+      debugPrint(
+        'OpenWord: a translation\'s own references are '
+        'unreadable: $error',
+      );
+      return null;
+    }
+  }
 
   static const String assetPath = 'assets/refs/xrefs.owx.gz';
+
+  /// The tag a translation's own references travel under.
+  static const String chunkTag = XrefCodec.chunkTag;
 
   /// Shown wherever the references are, as the licence requires.
   static const String attribution =
@@ -25,7 +57,7 @@ class CrossReferences {
   /// fixture does not wait on an isolate.
   static const int isolateAbove = 64 * 1024;
 
-  final AssetBundle _bundle;
+  final AssetBundle? _bundle;
   Map<int, XrefEntry>? _byVerse;
   Future<Map<int, XrefEntry>>? _loading;
 
@@ -63,8 +95,10 @@ class CrossReferences {
   }
 
   Future<Map<int, XrefEntry>> _read() async {
+    final bundle = _bundle;
+    if (bundle == null) return const {};
     try {
-      final data = await _bundle.load(assetPath);
+      final data = await bundle.load(assetPath);
       final bytes = Uint8List.sublistView(data);
       final entries = bytes.length < isolateAbove
           ? decodeCrossReferences(bytes)

@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'book_meta.dart';
 import 'search_index.dart';
 
@@ -359,6 +361,7 @@ class Bible {
     required this.translation,
     required List<Book> books,
     SearchIndex? Function()? searchIndex,
+    this.extras = const {},
     // A private field cannot be a named initializing formal.
     // ignore: prefer_initializing_formals
   }) : _searchIndex = searchIndex,
@@ -376,6 +379,12 @@ class Bible {
 
   final TranslationInfo translation;
   final List<Book> books;
+
+  /// The ancillary chunks the file carried and this layer does not itself
+  /// read — cross-references of its own, and whatever else a `.bib` comes
+  /// to hold. Kept as bytes, by tag, so the model stays a model and
+  /// whoever knows what a chunk means can ask for it.
+  final Map<String, Uint8List> extras;
 
   final SearchIndex? Function()? _searchIndex;
   SearchIndex? _resolved;
