@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.15.1
+
+### Fixed
+- **322 paragraphs of prose were set as poetry.** A fault of my own making
+  in 1.15.0: `line-space` asks for space above a paragraph and I read it as
+  a line of verse, so Genesis 1:28 and three hundred others came out as
+  poetry. Space above a paragraph and a line of verse are different things.
+- A paragraph an edition sets flush to the margin — `no-indent` — keeps its
+  first line flush instead of being indented like any other. 2,231 of them.
+
 ## 1.15.0
 
 Everything here came out of importing a real ESV EPUB rather than reasoning

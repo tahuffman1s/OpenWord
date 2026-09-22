@@ -930,6 +930,17 @@ class _BibleBuilder {
 
   static final RegExp _titleClass = RegExp(r'^(mt|ms)\d?$');
 
+  /// Classes for a paragraph an edition sets flush to the margin. Space
+  /// above it — which "line-space" asks for — is a different thing from a
+  /// line of verse, and reading it as one turned three hundred paragraphs
+  /// of prose into poetry.
+  static const Set<String> _flushClasses = {
+    'noindent',
+    'noindentlinespace',
+    'nofirstlineindent',
+    'flush',
+  };
+
   /// How an edition marks what Jesus says.
   static const Set<String> _wordsOfChrist = {
     'woc',
@@ -1137,9 +1148,7 @@ class _BibleBuilder {
           // A stanza, and a stanza opening under a heading.
           c == 'linegroup' ||
           c == 'linegroupafterheading' ||
-          c == 'lineindent' ||
-          c == 'linespace' ||
-          c == 'noindentlinespace',
+          c == 'lineindent',
     )) {
       return BlockStyle.poetry;
     }
@@ -1599,7 +1608,14 @@ class _BibleBuilder {
           BlockStyle.listItem => indent < 1 ? 1 : indent,
           _ => 0,
         },
-        indentFirstLine: style == BlockStyle.paragraph,
+        // "no-indent" says what it means: a paragraph the edition sets
+        // flush to the margin. Indenting it would misrepresent the text.
+        indentFirstLine:
+            style == BlockStyle.paragraph &&
+            !classesOf(element)
+                .split(RegExp(r'\s+'))
+                .map((word) => word.replaceAll(RegExp(r'[-_]'), ''))
+                .any(_flushClasses.contains),
         align: align,
         segments: segments,
       ),
