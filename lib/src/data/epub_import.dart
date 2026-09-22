@@ -578,6 +578,7 @@ class _BibleBuilder {
           child.innerText,
           name,
           labelsChapter: _isChapterLabel(classes),
+          level: _headingLevel(name, classes),
         );
         continue;
       }
@@ -728,6 +729,43 @@ class _BibleBuilder {
     r'^(?:q|iq|li|pi|line|indent)-?([1-4])$',
   );
 
+  static String classesOf(XmlElement element) =>
+      (element.getAttribute('class') ?? '').toLowerCase();
+
+  /// How major a heading is, where the markup says. An EPUB spells it
+  /// either in the tag — `h1` above `h2` — or in a class, `s1` above `s2`.
+  static int _headingLevel(String name, String classes) {
+    for (final word in classes.split(RegExp(r'\s+'))) {
+      if (word == 'ms' || word == 'ms1' || word == 'majorsection') return 1;
+      if (word == 's' || word == 's1') return 2;
+      if (word == 's2' || word == 's3' || word == 's4') return 3;
+    }
+    return switch (name) {
+      'h1' || 'h2' => 2,
+      'h3' => 2,
+      'h4' || 'h5' || 'h6' => 3,
+      _ => 0,
+    };
+  }
+
+  /// Text a publisher sets in small capitals, which in Scripture means the
+  /// divine name. Spelled as a class, or in a style attribute.
+  static bool _isDivineName(String name, String classes, String style) {
+    if (name == 'abbr') return false;
+    for (final word in classes.split(RegExp(r'\s+'))) {
+      if (word == 'nd' ||
+          word == 'divine' ||
+          word == 'divinename' ||
+          word == 'divine-name' ||
+          word == 'sc' ||
+          word == 'smallcaps' ||
+          word == 'small-caps') {
+        return true;
+      }
+    }
+    return style.replaceAll(' ', '').contains('font-variant:small-caps');
+  }
+
   int? _poetryLevel(String classes) {
     for (final word in classes.split(RegExp(r'\s+'))) {
       final match = _levelClass.firstMatch(word);
@@ -739,6 +777,14 @@ class _BibleBuilder {
   BlockStyle _styleFor(String name, String classes, BlockStyle inherited) {
     if (name == 'blockquote') return BlockStyle.poetry;
     final words = classes.split(RegExp(r'\s+'));
+    // Before the poetry test below: "qa" begins with a q and is not a
+    // line of verse but the letter an acrostic stanza runs on.
+    if (words.any((c) => c == 'qa' || c == 'acrostic')) {
+      return BlockStyle.acrostic;
+    }
+    if (words.any((c) => c == 'sp' || c == 'speaker')) {
+      return BlockStyle.speaker;
+    }
     if (words.any(
       (c) =>
           c.startsWith('q') ||
@@ -764,7 +810,12 @@ class _BibleBuilder {
 
   /// A heading either names a book, numbers a chapter, or belongs to the text
   /// as a section heading.
-  void _heading(String rawText, String tag, {bool labelsChapter = false}) {
+  void _heading(
+    String rawText,
+    String tag, {
+    bool labelsChapter = false,
+    int level = 0,
+  }) {
     final text = rawText.replaceAll(_whitespace, ' ').trim();
     if (text.isEmpty) return;
 
@@ -815,6 +866,7 @@ class _BibleBuilder {
       _pending.add(
         Block(
           style: BlockStyle.heading,
+          level: level,
           segments: [
             VerseSegment(verse: _verse, startsVerse: false, text: text),
           ],
@@ -974,6 +1026,22 @@ class _BibleBuilder {
         return;
       }
 
+      // The divine name, which an edition sets in small capitals — as a
+      // class, or in a style attribute. Every printed Bible distinguishes
+      // it from "Lord" as a title, and the marker is what lets this one.
+      if (_isDivineName(
+        name,
+        classes,
+        (node.getAttribute('style') ?? '').toLowerCase(),
+      )) {
+        buffer.write(Markup.divineStart);
+        for (final child in node.children) {
+          write(child);
+        }
+        buffer.write(Markup.divineEnd);
+        return;
+      }
+
       if (name == 'i' || name == 'em') {
         buffer.write(Markup.addStart);
         for (final child in node.children) {
@@ -1013,7 +1081,16 @@ class _BibleBuilder {
       if (segments.isEmpty) return;
     }
     if (style == BlockStyle.heading) {
-      _pending.add(Block(style: BlockStyle.heading, segments: segments));
+      _pending.add(
+        Block(
+          style: BlockStyle.heading,
+          level: _headingLevel(
+            element.localName.toLowerCase(),
+            classesOf(element),
+          ),
+          segments: segments,
+        ),
+      );
       return;
     }
 

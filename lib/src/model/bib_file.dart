@@ -177,7 +177,7 @@ class BibFile {
     }
 
     final out = ByteWriter()
-      ..byte(1) // text encoding version
+      ..byte(textEncoding)
       ..byte(compress ? _gzip : _stored)
       ..varint(bible.books.length);
     for (var i = 0; i < bible.books.length; i++) {
@@ -200,6 +200,15 @@ class BibFile {
 
   static const int _stored = 0;
   static const int _gzip = 1;
+
+  /// What [encode] writes inside the TEXT chunk.
+  ///
+  /// Version 1 carried a block's style, indent and one flag. Version 2
+  /// carries its heading level and alignment too, and a chapter's printed
+  /// verse labels and the verses it leaves out — none of which a reader of
+  /// version 1 would know to skip, so the number goes up and both are
+  /// read.
+  static const int textEncoding = 2;
 
   // ---------------------------------------------------------------- reading
 
@@ -359,12 +368,13 @@ class BibFile {
   }) {
     final input = ByteReader(text);
     final encoding = input.byte();
-    if (encoding != 1) {
+    if (encoding < 1 || encoding > textEncoding) {
       throw BibFormatException(
         'the Scripture inside is written in a way this app does not know '
         '(text encoding $encoding)',
       );
     }
+    final rich = encoding >= 2;
     final compression = input.byte();
     if (compression != _stored && compression != _gzip) {
       throw BibFormatException(
@@ -410,7 +420,7 @@ class BibFile {
             final raw = compression == _gzip
                 ? Uint8List.fromList(const GZipDecoder().decodeBytes(body))
                 : body;
-            return BibleCodec.decodeChapters(raw);
+            return BibleCodec.decodeChapters(raw, rich: rich);
           },
         ),
       );

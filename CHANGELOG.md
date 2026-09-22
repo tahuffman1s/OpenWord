@@ -3,6 +3,38 @@
 ## Unreleased
 
 ### Added
+- **A lot more of a printed Bible's typography.** The format could say six
+  things about a block and four about a run of text; a good deal of what a
+  translation actually marks had nowhere to go.
+  - **The divine name is set in small capitals**, as every printed Bible
+    sets it. `\nd` was handled nowhere at all, so L<small>ORD</small> came
+    out as plain capitals with nothing to distinguish it from "Lord" as a
+    title.
+  - **A quotation from Scripture is no longer stored as a translator's
+    addition.** Eleven character styles collapsed into one italic, which
+    put `\qt` — words taken from elsewhere in Scripture — in the same
+    bucket as `\add`, words the translator supplied. That said the
+    opposite of what it means.
+  - **Headings have levels**, and an acrostic letter and a speaker label
+    are their own styles. A division of the book, three depths of section
+    heading, Psalm 119's ALEPH and the Song of Songs' speakers all
+    rendered identically; the BSB has 3,124 headings and had one style
+    between them. A book division before the first chapter is now kept
+    rather than dropped, which is where "BOOK 1" of the Psalms lives.
+  - **Centred and right-set lines keep their alignment**, and a paragraph
+    marked as carrying on across a chapter break is no longer restarted.
+  - **Tables are rows and lists are lists.** A table cell used to be
+    replaced with three literal spaces, so the Ezra and Nehemiah
+    genealogies and the Numbers censuses read as spaced prose.
+  - **A verse can be printed as something other than its number** — "1-2"
+    for a bridged verse — and a chapter can be called what the translation
+    calls it, so the Psalter has psalms rather than chapters.
+  - **A verse the translation leaves out says so.** The BSB has sixteen —
+    Matthew 17:21, Mark 9:44 and the rest the critical texts omit — and
+    nothing could tell deliberately absent from failed to parse.
+  - `U+0011`–`U+001F` is now reserved for markers and the whole range is
+    stripped, so the next marker added cannot leak control characters into
+    search results or copied text in a reader that predates it.
 - **Search reads only the books that could match.** A `.bib` now carries an
   index of which books each of its words is in — the median word of the
   World English Bible is in two of its eighty-four — so a search unpacks

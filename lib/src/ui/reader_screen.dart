@@ -317,6 +317,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
       builder: (_) => _VerseSheet(
         reference: reference,
         text: _currentChapter.verseText(verse),
+        // Matthew 17:21 and the others the critical texts leave out are
+        // numbered in the tradition and absent from the text. Saying so
+        // beats an empty sheet with no explanation.
+        omitted: _currentChapter.isOmitted(verse),
         reading: _reading,
         crossReferences: _references?.forVerse(reference) ?? const [],
         onCrossReferences: () => _openCrossReferences(reference),
@@ -768,6 +772,7 @@ class _ChapterPageState extends State<_ChapterPage> {
         final block = blocks[i];
         final blockWidget = ScriptureBlock(
           block: block,
+          labelFor: widget.chapter.labelFor,
           style: widget.style,
           highlights: widget.highlights,
           flagged: widget.flagged,
@@ -913,7 +918,11 @@ class _ChapterPageState extends State<_ChapterPage> {
           ),
           const SizedBox(height: 2),
           Text(
-            widget.book.chapterCount > 1
+            // What the translation calls it, where it says: the Psalter
+            // has psalms, not chapters.
+            widget.chapter.label.isNotEmpty
+                ? widget.chapter.label
+                : widget.book.chapterCount > 1
                 ? 'Chapter ${widget.chapter.number}'
                 : widget.book.name,
             style: theme.textTheme.headlineMedium?.copyWith(
@@ -1164,10 +1173,14 @@ class _VerseSheet extends StatelessWidget {
     required this.onCrossReferences,
     required this.originalWords,
     required this.onOriginal,
+    this.omitted = false,
   });
 
   final Reference reference;
   final String text;
+
+  /// Whether this translation leaves the verse out on purpose.
+  final bool omitted;
   final ReadingStore reading;
   final List<XrefAnchor> crossReferences;
   final VoidCallback onCrossReferences;
@@ -1199,11 +1212,18 @@ class _VerseSheet extends StatelessWidget {
                 Text(reference.label, style: theme.textTheme.titleMedium),
                 const SizedBox(height: 8),
                 Text(
-                  text,
+                  omitted && text.isEmpty
+                      ? 'This translation does not include this verse. It is '
+                            'numbered in the tradition and absent from the '
+                            'manuscripts this edition follows.'
+                      : text,
                   maxLines: 4,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.bodyMedium?.copyWith(
                     color: theme.colorScheme.onSurfaceVariant,
+                    fontStyle: omitted && text.isEmpty
+                        ? FontStyle.italic
+                        : FontStyle.normal,
                   ),
                 ),
                 const SizedBox(height: 16),

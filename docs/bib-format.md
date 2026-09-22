@@ -175,7 +175,10 @@ varint  chapter count
                   per block:
                     1       style
                     1       indent level
-                    1       flags; bit 0: indent the first line
+                    1       flags; bit 0 indent the first line,
+                            bit 1 continues the paragraph before it
+                    1       heading level          (encoding 2)
+                    1       alignment              (encoding 2)
                     varint  segment count
                             per segment:
                               varint  verse number, 0 for text outside any verse
@@ -183,11 +186,46 @@ varint  chapter count
                               string  the text
           varint  note count
                   per note: string
+          string  what the chapter is called       (encoding 2)
+          varint  printed verse labels             (encoding 2)
+                  per label: varint verse, string label
+          varint  omitted verses, then deltas      (encoding 2)
 ```
 
 Styles: 0 paragraph, 1 poetry, 2 psalm title, 3 heading, 4 stanza break,
-5 parallel-passage reference. A reader must treat an unknown style as a
-paragraph.
+5 parallel-passage reference, 6 acrostic letter, 7 speaker, 8 list item,
+9 table row. A reader must treat an unknown style as a paragraph, which is
+what lets styles be added.
+
+Alignment: 0 to the margin, 1 centred, 2 to the right. It says what the
+source said; a reader may still centre what it knows should be centred,
+as it does a book division.
+
+**Heading level** says how major a heading is: 1 divides the book — "BOOK
+1" of the Psalms — and 2 and 3 are the sections under it. 0 where the
+translation does not say.
+
+**The chapter's name** is what the translation calls it, where it says so
+(`\cl`): "Psalm 1" rather than "Chapter 1".
+
+**Printed verse labels** are for verses printed as something other than
+their number (`\vp`) — a bridged verse set as "1-2", or a second
+numbering shown beside the first.
+
+**Omitted verses** are the ones the translation does not have: Matthew
+17:21, Mark 9:44 and the dozen others the critical texts leave out. They
+are numbered in the tradition and absent from the text, and recording
+that is what lets a reader say so rather than show a number with nothing
+after it, or look as though it failed to parse the verse.
+
+### Encoding versions
+
+Encoding 1 stopped after a block's flags and after a chapter's notes; it
+had no heading level, alignment, chapter name, verse labels or omissions.
+Encoding 2 has them all. A reader of 1 has no way to know it should skip
+them, which is why the number went up rather than the fields being
+squeezed in — a writer must emit 2 to use them, and a reader should
+accept both.
 
 A verse is split across segments wherever the layout interrupts it, which is
 how a verse can begin mid-paragraph and carry on past a line of poetry.
@@ -201,9 +239,23 @@ Four control characters carry inline formatting inside a segment's text:
 | `U+0013` … `U+0014` | words supplied by the translator, printed italic |
 | `U+0015` *digits* `U+0016` | a footnote marker; the digits index the chapter's notes |
 | `U+0017` … `U+0018` | `Selah` and other poetry directions |
+| `U+0019` … `U+001A` | the divine name, set in small capitals |
+| `U+001B` … `U+001C` | words quoted from elsewhere in Scripture |
+| `U+001D` | between the cells of a table row |
 
 Control characters are used because Scripture text never contains them, so
 nothing has to be escaped and a search over the raw text needs no parsing.
+
+**`U+0011` to `U+001F` are reserved for markers, and a reader must drop the
+whole range** — not only the ones it knows. Otherwise a marker added after
+it was written prints a control character into the middle of a verse. A
+cell boundary should become a space rather than nothing, since it stands
+between two words.
+
+The divine name and a translator's addition are not the same thing, and
+neither is a quotation from Scripture: `\add` marks words that are not in
+the original and `\qt` marks words taken from somewhere else in it. Both
+used to be stored as the first, which said the wrong thing about both.
 
 ### Text is NFC
 

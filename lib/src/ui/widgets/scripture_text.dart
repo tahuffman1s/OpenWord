@@ -101,6 +101,7 @@ class ScriptureBlock extends StatefulWidget {
     required this.isFirst,
     this.matcher,
     this.onReferenceTap,
+    this.labelFor,
     super.key,
   });
 
@@ -112,6 +113,11 @@ class ScriptureBlock extends StatefulWidget {
 
   /// Called with the chapter-level note index behind a footnote marker.
   final ValueChanged<int> onNoteTap;
+
+  /// How a verse's number is printed, where the translation prints
+  /// something other than the number — "1-2" for a bridged verse. Left
+  /// out, a verse is printed as its number.
+  final String Function(int verse)? labelFor;
 
   /// Background tints for highlighted verses.
   final Map<int, Color> highlights;
@@ -157,15 +163,74 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
       case BlockStyle.blank:
         return SizedBox(height: style.blankHeight);
       case BlockStyle.heading:
+        // A division of the book stands further from the text and larger
+        // than the sections under it; a third level smaller again. "BOOK 1"
+        // of the Psalms should not read like the heading of a passage.
+        final level = block.level;
+        final scale = switch (level) {
+          1 => 1.18,
+          3 => 0.92,
+          _ => 1.0,
+        };
+        final base = style.heading;
         return Padding(
-          padding: EdgeInsets.only(top: style.blankHeight * 1.6, bottom: 6),
-          child: Text(_plain(block), style: style.heading),
+          padding: EdgeInsets.only(
+            top: style.blankHeight * (level == 1 ? 2.2 : 1.6),
+            bottom: level == 1 ? 10 : 6,
+          ),
+          child: Text(
+            _plain(block),
+            textAlign: level == 1 ? TextAlign.center : _align(block.align),
+            style: base.copyWith(
+              fontSize: (base.fontSize ?? 18) * scale,
+              letterSpacing: level == 1 ? 1.4 : base.letterSpacing,
+            ),
+          ),
+        );
+      case BlockStyle.acrostic:
+        // The letter an acrostic stanza runs on — Psalm 119's ALEPH and
+        // the twenty-one after it. Set small, apart and centred, which is
+        // how a printed Psalter sets them.
+        return Padding(
+          padding: EdgeInsets.only(top: style.blankHeight * 1.2, bottom: 4),
+          child: Text(
+            _plain(block).toUpperCase(),
+            textAlign: TextAlign.center,
+            style: style.heading.copyWith(
+              fontSize: (style.heading.fontSize ?? 18) * 0.78,
+              letterSpacing: 2,
+            ),
+          ),
+        );
+      case BlockStyle.speaker:
+        // Who is speaking, as the Song of Songs is set.
+        return Padding(
+          padding: EdgeInsets.only(top: style.blankHeight * 0.8, bottom: 4),
+          child: Text(
+            _plain(block),
+            textAlign: _align(block.align),
+            style: style.title.copyWith(fontStyle: FontStyle.italic),
+          ),
         );
       case BlockStyle.descriptiveTitle:
         return Padding(
           padding: const EdgeInsets.only(bottom: 8),
-          child: Text(_plain(block), style: style.title),
+          child: Text(
+            _plain(block),
+            textAlign: _align(block.align),
+            style: style.title,
+          ),
         );
+      case BlockStyle.listItem:
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 12 + block.indent.clamp(0, 4) * 14.0,
+            bottom: 4,
+          ),
+          child: _richText(indentFirstLine: false),
+        );
+      case BlockStyle.tableRow:
+        return _tableRow();
       case BlockStyle.reference:
         return Padding(
           padding: const EdgeInsets.only(bottom: 10),
@@ -188,10 +253,59 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
             indentFirstLine:
                 style.paragraphLayout &&
                 block.indentFirstLine &&
+                // A paragraph carried on from before a chapter break is
+                // not the start of anything, whatever its position.
+                !block.continuesParagraph &&
                 !widget.isFirst,
           ),
         );
     }
+  }
+
+  String _label(int verse) => widget.labelFor?.call(verse) ?? '\$verse';
+
+  static TextAlign _align(BlockAlign align) => switch (align) {
+    BlockAlign.center => TextAlign.center,
+    BlockAlign.end => TextAlign.end,
+    BlockAlign.start => TextAlign.start,
+  };
+
+  /// A row of a table, its cells laid out across the column.
+  ///
+  /// Genealogies and censuses are tables in print, and used to come out of
+  /// here as runs of text with three spaces where a cell boundary was.
+  Widget _tableRow() {
+    final cells = widget.block.cells;
+    final number = widget.block.segments
+        .where((segment) => segment.startsVerse)
+        .map((segment) => segment.verse)
+        .firstOrNull;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // The gutter is there on every row, numbered or not, or the
+          // columns of a table would not line up under each other.
+          SizedBox(
+            width: 34,
+            child: Text(
+              number != null && widget.block.segments.first.startsVerse
+                  ? _label(number)
+                  : '',
+              style: widget.style.verseNumber,
+            ),
+          ),
+          for (final cell in cells)
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 10),
+                child: Text(cell, style: widget.style.body),
+              ),
+            ),
+        ],
+      ),
+    );
   }
 
   static String _plain(Block block) =>
@@ -216,9 +330,18 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
       ),
       child: Stack(
         children: [
-          Padding(
-            padding: EdgeInsets.only(left: gutter),
-            child: _richText(indentFirstLine: false, skipFirstNumber: hanging),
+          // Full width on purpose: inside a Stack the text would otherwise
+          // be given only the room it needs, and centring a line within
+          // its own width does nothing.
+          SizedBox(
+            width: double.infinity,
+            child: Padding(
+              padding: EdgeInsets.only(left: gutter),
+              child: _richText(
+                indentFirstLine: false,
+                skipFirstNumber: hanging,
+              ),
+            ),
           ),
           if (hanging)
             Positioned(
@@ -227,7 +350,7 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
               top: fontSize * ((style.body.height ?? 1.4) - 1) / 2,
               child: GestureDetector(
                 onTap: () => widget.onVerseTap(first.verse),
-                child: Text('${first.verse}', style: style.verseNumber),
+                child: Text(_label(first.verse), style: style.verseNumber),
               ),
             ),
         ],
@@ -264,6 +387,8 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
     return Text.rich(
       TextSpan(children: spans),
       style: style.body,
+      // A centred doxology or a right-set colophon says so in the file.
+      textAlign: _align(widget.block.align),
       textWidthBasis: TextWidthBasis.parent,
     );
   }
@@ -304,7 +429,7 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
             onTap: () => widget.onVerseTap(segment.verse),
             child: Padding(
               padding: const EdgeInsets.only(right: 3),
-              child: Text('${segment.verse}', style: style.verseNumber),
+              child: Text(_label(segment.verse), style: style.verseNumber),
             ),
           ),
         ),
@@ -314,18 +439,26 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
     var inWords = false;
     var inAdded = false;
     var inSelah = false;
+    var inDivine = false;
     final buffer = StringBuffer();
 
     void flush() {
       if (buffer.isEmpty) return;
       spans.add(
         TextSpan(
-          text: buffer.toString(),
+          text: inDivine ? buffer.toString().toUpperCase() : buffer.toString(),
           recognizer: recognizer,
           style: style.body.copyWith(
             color: inWords && style.redLetter ? style.wjColor : null,
             fontStyle: inAdded || inSelah ? FontStyle.italic : FontStyle.normal,
             backgroundColor: highlight,
+            // Small capitals, the way every printed Bible sets the divine
+            // name apart from "Lord" as a title. Drawn rather than
+            // declared: Flutter has no small-caps switch, so the text is
+            // upper-cased below and set a size smaller, which is what a
+            // press did with a smaller sort.
+            fontSize: inDivine ? (style.body.fontSize ?? 17) * 0.82 : null,
+            letterSpacing: inDivine ? 0.4 : null,
           ),
         ),
       );
@@ -354,6 +487,23 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
         case Markup.selahEnd:
           flush();
           inSelah = false;
+        case Markup.divineStart:
+          flush();
+          inDivine = true;
+        case Markup.divineEnd:
+          flush();
+          inDivine = false;
+        case Markup.quotationStart || Markup.quotationEnd:
+          // Consumed, and nothing done with it. The point of carrying a
+          // quotation from Scripture as its own thing is that it is no
+          // longer stored as a translator's addition and set in italics,
+          // which said the opposite of what it means. Most printed Bibles
+          // set it like the text around it, and so does this.
+          break;
+        case Markup.cell:
+          // A row's cells are laid out by the table, not here; in a run of
+          // text the separator reads as a gap.
+          buffer.write('  ');
         case Markup.noteStart:
           flush();
           final end = text.indexOf(Markup.noteEnd, i + 1);

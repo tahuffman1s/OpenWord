@@ -60,7 +60,6 @@ class UsfxParser {
     'h',
     'rem',
     'sts',
-    'vp',
     'cp',
     'ca',
     'va',
@@ -76,6 +75,10 @@ class UsfxParser {
   static const Set<String> _noteMetaTags = {'fr', 'xo', 'fv', 'fdc'};
 
   /// Character styles rendered in italics.
+  /// Character styles a printed Bible sets in italics. `\qt` used to be
+  /// among them and is not: it marks words quoted from Scripture, which is
+  /// nearly the opposite of `\add`'s "supplied by the translator", and
+  /// setting the two alike said the wrong thing about both.
   static const Set<String> _italicTags = {
     'add',
     'it',
@@ -83,12 +86,15 @@ class UsfxParser {
     'tl',
     'sls',
     'em',
-    'qt',
     'k',
     'ord',
     'pn',
     'addpn',
   };
+
+  /// The divine name, which is set in small capitals, and words quoted
+  /// from elsewhere in Scripture.
+  static const Set<String> _divineTags = {'nd', 'sc'};
 
   final List<Book> _books = [];
 
@@ -103,6 +109,10 @@ class UsfxParser {
   String _blockStyle = 'p';
   int _blockIndent = 0;
   bool _blockIndentFirstLine = true;
+  int _blockLevel = 0;
+  BlockAlign _blockAlign = BlockAlign.start;
+  bool _blockContinues = false;
+  int _cellsWritten = 0;
   List<VerseSegment> _segments = [];
   final StringBuffer _text = StringBuffer();
 
@@ -112,6 +122,16 @@ class UsfxParser {
   int _suppress = 0;
   StringBuffer? _note;
   int _noteSuppress = 0;
+
+  /// A short run of text wanted for itself — a printed verse number, a
+  /// chapter's name — rather than for the page.
+  StringBuffer? _capture;
+  final Map<int, String> _labels = {};
+  String _chapterLabel = '';
+
+  /// Every verse this chapter numbers, so that one numbered and left empty
+  /// can be told from one that was never there.
+  final Set<int> _versesSeen = {};
 
   final List<_Frame> _stack = [];
 
@@ -164,19 +184,41 @@ class UsfxParser {
 
     switch (name) {
       case 'c':
+        // A book division — "BOOK 1" of the Psalms — is printed before the
+        // chapter it opens, so it arrives before any chapter exists to put
+        // it in. Held over rather than dropped.
+        final carried = [
+          for (final block in _blocks)
+            if (block.style == BlockStyle.heading) block,
+        ];
         _finishChapter();
         _chapterNumber = _intAttr(event, 'id') ?? _chapterNumber + 1;
-        _blocks = [];
+        _blocks = _chapters.isEmpty ? carried : [];
         _notes = [];
+        _labels.clear();
+        _versesSeen.clear();
+        _chapterLabel = '';
         _verse = 0;
         _pendingVerseStart = false;
       case 'v':
         _flushSegment();
         _verse = _intAttr(event, 'id') ?? _verse + 1;
+        _versesSeen.add(_verse);
         _pendingVerseStart = true;
         if (!_blockOpen) _openBlock('p', 0);
       case 've':
         _flushSegment();
+      case 'vp':
+        // What the verse is printed as, where that is not its number — a
+        // bridged verse set as "1-2", say.
+        _flushSegment();
+        _capture = StringBuffer();
+        frame.closesCapture = _CaptureKind.verseLabel;
+      case 'cl':
+        // What the chapter is called: "Psalm 1" rather than "Chapter 1".
+        _flushBlock();
+        _capture = StringBuffer();
+        frame.closesCapture = _CaptureKind.chapterLabel;
       case 'f' || 'x' || 'ef' || 'ex':
         _note = StringBuffer();
         frame.closesNote = true;
@@ -199,10 +241,14 @@ class UsfxParser {
             _blocks.add(const Block(style: BlockStyle.blank));
           } else {
             final sfm = _attr(event, 'sfm');
+            final marker = (sfm == null || sfm.isEmpty) ? name : sfm;
             _openBlock(
               kind,
               _indentFor(name, sfm, event),
               indentFirstLine: _indentsFirstLine(name, sfm),
+              level: _levelFor(marker, event),
+              align: _alignFor(marker),
+              continuesParagraph: marker == 'nb',
             );
             frame.closesBlock = true;
           }
@@ -212,6 +258,12 @@ class UsfxParser {
         } else if (name == 'qs') {
           _write(Markup.selahStart);
           frame.inlineEnd = Markup.selahEnd;
+        } else if (_divineTags.contains(name)) {
+          _write(Markup.divineStart);
+          frame.inlineEnd = Markup.divineEnd;
+        } else if (name == 'qt') {
+          _write(Markup.quotationStart);
+          frame.inlineEnd = Markup.quotationEnd;
         } else if (_italicTags.contains(name)) {
           _write(Markup.addStart);
           frame.inlineEnd = Markup.addEnd;
@@ -219,7 +271,10 @@ class UsfxParser {
             name == 'thr' ||
             name == 'tc' ||
             name == 'tcr') {
-          _write('   ');
+          // A cell boundary, so a row can be laid out as a row. This used
+          // to be three spaces, which read as prose.
+          if (_cellsWritten > 0) _write(Markup.cell);
+          _cellsWritten++;
         }
     }
 
@@ -245,13 +300,32 @@ class UsfxParser {
     if (frame.noteSuppressed) _noteSuppress--;
     if (frame.inlineEnd != null) _write(frame.inlineEnd!);
     if (frame.closesNote) _closeNote();
+    if (frame.closesCapture != null) _closeCapture(frame.closesCapture!);
     if (frame.closesBlock) _flushBlock();
+  }
+
+  void _closeCapture(_CaptureKind kind) {
+    final captured = _capture;
+    _capture = null;
+    if (captured == null) return;
+    final text = captured.toString().replaceAll(_whitespace, ' ').trim();
+    if (text.isEmpty) return;
+    switch (kind) {
+      case _CaptureKind.verseLabel:
+        if (_verse > 0 && text != '\$_verse') _labels[_verse] = text;
+      case _CaptureKind.chapterLabel:
+        _chapterLabel = text;
+    }
   }
 
   void _onText(String value) {
     if (_bookMeta == null || value.isEmpty) return;
     final text = value.replaceAll(_whitespace, ' ');
     if (text.trim().isEmpty && _text.isEmpty) return;
+    if (_capture != null) {
+      _capture!.write(text);
+      return;
+    }
     if (_note != null) {
       if (_noteSuppress == 0) _note!.write(text);
       return;
@@ -277,15 +351,55 @@ class UsfxParser {
     _write('${Markup.noteStart}${_notes.length - 1}${Markup.noteEnd}');
   }
 
-  void _openBlock(String style, int indent, {bool indentFirstLine = true}) {
+  void _openBlock(
+    String style,
+    int indent, {
+    bool indentFirstLine = true,
+    int level = 0,
+    BlockAlign align = BlockAlign.start,
+    bool continuesParagraph = false,
+  }) {
     _flushBlock();
     _blockStyle = style;
     _blockIndent = indent;
     _blockIndentFirstLine = indentFirstLine;
+    _blockLevel = level;
+    _blockAlign = align;
+    _blockContinues = continuesParagraph;
+    _cellsWritten = 0;
     _segments = [];
     _text.clear();
     _blockOpen = true;
   }
+
+  /// How major a heading is. `\ms` divides a book — "BOOK 1" of the
+  /// Psalms — and `\s1`, `\s2`, `\s3` are the sections under it.
+  ///
+  /// USFX carries the depth in a `level` attribute rather than in the
+  /// element's name, the same way it does for poetry, so both are read.
+  static int _levelFor(String marker, XmlStartElementEvent event) {
+    if (marker.startsWith('ms')) {
+      final depth = _intAttr(event, 'level') ?? _trailingDigit(marker);
+      return depth == null || depth <= 1 ? 1 : 2;
+    }
+    if (!marker.startsWith('s') || marker == 'sp') return 0;
+    final depth = _intAttr(event, 'level') ?? _trailingDigit(marker) ?? 1;
+    // A section is level 2 under a book division; anything deeper is 3.
+    return depth <= 1 ? 2 : 3;
+  }
+
+  static int? _trailingDigit(String marker) {
+    final digits = RegExp(r'(\d+)\$').firstMatch(marker);
+    return digits == null ? null : int.tryParse(digits.group(1)!);
+  }
+
+  /// Centred and right-set blocks: a doxology, an acrostic line, the
+  /// colophon at the end of a letter.
+  static BlockAlign _alignFor(String marker) => switch (marker) {
+    'qc' || 'pc' || 'qa' || 'mt' || 'cd' => BlockAlign.center,
+    'qr' || 'pr' || 'cls' => BlockAlign.end,
+    _ => BlockAlign.start,
+  };
 
   void _flushSegment() {
     if (!_blockOpen) return;
@@ -307,6 +421,9 @@ class UsfxParser {
           style: BlockStyle.fromKey(_blockStyle),
           indent: _blockIndent,
           indentFirstLine: _blockIndentFirstLine,
+          level: _blockLevel,
+          align: _blockAlign,
+          continuesParagraph: _blockContinues,
           segments: List.unmodifiable(_segments),
         ),
       );
@@ -324,11 +441,25 @@ class UsfxParser {
       _blocks.removeLast();
     }
     if (_blocks.isEmpty) return;
+    // A verse the chapter numbers but never gives text to is left out on
+    // purpose — Matthew 17:21 and the others the critical texts drop — not
+    // a gap to be filled or an error to be hidden.
+    final withText = <int>{};
+    for (final block in _blocks) {
+      for (final segment in block.segments) {
+        if (segment.text.trim().isNotEmpty) withText.add(segment.verse);
+      }
+    }
     _chapters.add(
       Chapter(
         number: _chapterNumber,
         blocks: List.unmodifiable(_blocks),
         notes: List.unmodifiable(_notes),
+        labels: Map.unmodifiable(_labels),
+        omitted: Set.unmodifiable(
+          _versesSeen.where((verse) => !withText.contains(verse)),
+        ),
+        label: _chapterLabel,
       ),
     );
     _blocks = [];
@@ -364,12 +495,14 @@ class UsfxParser {
       return null;
     }
     if (marker == 'cl' || marker == 'cp') return null;
+    if (marker == 'qa') return 'qa';
+    if (marker == 'sp') return 'sp';
+    if (marker.startsWith('li')) return 'li';
+    if (marker == 'tr') return 'tr';
     // Parallel-passage references are set apart from the heading above them.
     if (marker == 'r' || marker == 'mr' || marker == 'sr') return 'r';
-    if (marker == 'sp') return 'd';
     if (marker.startsWith('ms') ||
         marker.startsWith('s') && marker != 'sp' ||
-        marker == 'qa' ||
         marker == 'cd') {
       return 'h';
     }
@@ -439,5 +572,9 @@ class _Frame {
   bool noteSuppressed = false;
   bool closesBlock = false;
   bool closesNote = false;
+  _CaptureKind? closesCapture;
   String? inlineEnd;
 }
+
+/// What a captured run of text is for.
+enum _CaptureKind { verseLabel, chapterLabel }

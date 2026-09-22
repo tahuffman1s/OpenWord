@@ -44,7 +44,9 @@ class BibleCodec {
 
     for (final book in bible.books) {
       out.string(book.code);
-      writeChapters(out, book.chapters);
+      // This writes the single-stream format, which predates the extra
+      // block attributes; a reader of it would not know to skip them.
+      writeChapters(out, book.chapters, rich: false);
     }
     return out.take();
   }
@@ -55,7 +57,11 @@ class BibleCodec {
   /// Genesis costs Genesis rather than the whole Bible. The bytes are
   /// exactly what [encode] writes after a book's code, which is what lets
   /// both formats share a decoder.
-  static void writeChapters(ByteWriter out, List<Chapter> chapters) {
+  static void writeChapters(
+    ByteWriter out,
+    List<Chapter> chapters, {
+    bool rich = true,
+  }) {
     out.varint(chapters.length);
     for (final chapter in chapters) {
       out
@@ -65,8 +71,19 @@ class BibleCodec {
         out
           ..byte(block.style.index)
           ..byte(block.indent.clamp(0, 255))
-          ..byte(block.indentFirstLine ? 1 : 0)
-          ..varint(block.segments.length);
+          ..byte(
+            (block.indentFirstLine ? _indentsFirstLine : 0) |
+                (block.continuesParagraph ? _continues : 0),
+          );
+        // Version 1 of the encoding had neither, and files of it are read
+        // by readers that would not know to skip them. They come before
+        // the segment count, which is where the reader looks for them.
+        if (rich) {
+          out
+            ..byte(block.level.clamp(0, 255))
+            ..byte(block.align.index);
+        }
+        out.varint(block.segments.length);
         for (final segment in block.segments) {
           out
             ..varint(segment.verse)
@@ -78,11 +95,36 @@ class BibleCodec {
       for (final note in chapter.notes) {
         out.string(note);
       }
+      if (!rich) continue;
+      // What the chapter is called, where the translation says.
+      out.string(chapter.label);
+      // What a verse is printed as, where that is not its number.
+      out.varint(chapter.labels.length);
+      for (final label in chapter.labels.entries) {
+        out
+          ..varint(label.key)
+          ..string(label.value);
+      }
+      // Verses this translation leaves out on purpose.
+      final omitted = chapter.omitted.toList()..sort();
+      out.varint(omitted.length);
+      var previous = 0;
+      for (final verse in omitted) {
+        out.varint(verse - previous);
+        previous = verse;
+      }
     }
   }
 
+  static const int _indentsFirstLine = 0x01;
+  static const int _continues = 0x02;
+
   /// The inverse of [writeChapters].
-  static List<Chapter> readChapters(ByteReader input) {
+  ///
+  /// [rich] says whether the extra block attributes and the chapter's
+  /// labels and omissions are there to read — version 1 of the text
+  /// encoding had none of them, and files of it are still read.
+  static List<Chapter> readChapters(ByteReader input, {bool rich = true}) {
     final chapterCount = input.varint();
     final chapters = <Chapter>[];
     for (var c = 0; c < chapterCount; c++) {
@@ -93,6 +135,8 @@ class BibleCodec {
         final styleIndex = input.byte();
         final indent = input.byte();
         final flags = input.byte();
+        final level = rich ? input.byte() : 0;
+        final align = rich ? BlockAlign.fromIndex(input.byte()) : null;
         final segmentCount = input.varint();
         final segments = <VerseSegment>[
           for (var s = 0; s < segmentCount; s++)
@@ -104,11 +148,16 @@ class BibleCodec {
         ];
         blocks.add(
           Block(
+            // A style added after this reader was written is read as a
+            // paragraph rather than refused.
             style: styleIndex < BlockStyle.values.length
                 ? BlockStyle.values[styleIndex]
                 : BlockStyle.paragraph,
             indent: indent,
-            indentFirstLine: flags & 1 != 0,
+            indentFirstLine: flags & _indentsFirstLine != 0,
+            continuesParagraph: flags & _continues != 0,
+            level: level,
+            align: align ?? BlockAlign.start,
             segments: segments,
           ),
         );
@@ -117,21 +166,54 @@ class BibleCodec {
       final notes = <String>[
         for (var n = 0; n < noteCount; n++) input.string(),
       ];
-      chapters.add(Chapter(number: number, blocks: blocks, notes: notes));
+
+      var chapterLabel = '';
+      var labels = const <int, String>{};
+      var omitted = const <int>{};
+      if (rich) {
+        chapterLabel = input.string();
+        final labelCount = input.varint();
+        if (labelCount > 0) {
+          labels = {
+            for (var l = 0; l < labelCount; l++) input.varint(): input.string(),
+          };
+        }
+        final omittedCount = input.varint();
+        if (omittedCount > 0) {
+          final found = <int>{};
+          var previous = 0;
+          for (var o = 0; o < omittedCount; o++) {
+            previous += input.varint();
+            found.add(previous);
+          }
+          omitted = found;
+        }
+      }
+
+      chapters.add(
+        Chapter(
+          number: number,
+          blocks: blocks,
+          notes: notes,
+          labels: labels,
+          omitted: omitted,
+          label: chapterLabel,
+        ),
+      );
     }
     return chapters;
   }
 
   /// One book's chapters, packed on their own.
-  static Uint8List encodeChapters(List<Chapter> chapters) {
+  static Uint8List encodeChapters(List<Chapter> chapters, {bool rich = true}) {
     final out = ByteWriter();
-    writeChapters(out, chapters);
+    writeChapters(out, chapters, rich: rich);
     return out.takeCopy();
   }
 
   /// Unpacks what [encodeChapters] wrote.
-  static List<Chapter> decodeChapters(Uint8List data) =>
-      readChapters(ByteReader(data));
+  static List<Chapter> decodeChapters(Uint8List data, {bool rich = true}) =>
+      readChapters(ByteReader(data), rich: rich);
 
   /// Decodes [data]. Throws [FormatException] if it is not this format or was
   /// written by a newer version.
@@ -159,7 +241,8 @@ class BibleCodec {
     final books = <Book>[];
     for (var b = 0; b < bookCount; b++) {
       final code = input.string();
-      final chapters = readChapters(input);
+      // The single-stream format predates the extra block attributes.
+      final chapters = readChapters(input, rich: false);
       // Unknown book codes are skipped rather than failing the whole file.
       final meta = BookMeta.lookup(code);
       if (meta != null) books.add(Book(meta: meta, chapters: chapters));

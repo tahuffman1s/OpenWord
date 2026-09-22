@@ -29,7 +29,7 @@ void main() {
       'p',
       'p',
       'p',
-      'd',
+      'sp',
     ]);
     expect(chapter.blocks[0].segments.first.text, 'The Creation');
     expect(chapter.blocks[1].segments.first.text, '(Psalms 1:1; Matthew 1)');
@@ -57,9 +57,11 @@ void main() {
     expect(blocks[5].indent, 1);
   });
 
-  test('a speaker label is set like a title, not like prose', () {
+  test('a speaker label is its own thing, not a psalm title', () {
+    // The two used to share a style, which made "Eliphaz the Temanite" and
+    // "A Psalm of David" indistinguishable to anything downstream.
     final blocks = bible.bookByCode('GEN')!.chapter(1)!.blocks;
-    expect(blocks.last.style, BlockStyle.descriptiveTitle);
+    expect(blocks.last.style, BlockStyle.speaker);
     expect(blocks.last.segments.first.text, 'Eliphaz the Temanite');
   });
 
