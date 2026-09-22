@@ -3,6 +3,7 @@ import 'package:openword/src/data/epub_import.dart';
 import 'package:openword/src/data/usfx_parser.dart';
 import 'package:openword/src/model/bib_file.dart';
 import 'package:openword/src/model/bible.dart';
+import 'package:openword/src/model/book_meta.dart';
 
 import 'package:flutter/material.dart';
 import 'package:openword/src/data/settings.dart';
@@ -440,6 +441,149 @@ void main() {
       expect(small, isNotNull);
       expect(normal, isNotNull);
       expect(small, lessThan(normal!));
+    });
+  });
+
+  group('an EPUB brings all of it, not only some', () {
+    late Chapter imported;
+
+    setUpAll(() {
+      // An edition marking everything it can: the divine name, quotations,
+      // heading depth, alignment, a bridged verse, a verse it leaves out,
+      // a nested list and a table.
+      final result = EpubImport.convert(
+        epub(
+          documents: [
+            (
+              'num.xhtml',
+              '<h1>Numbers</h1><h2>1</h2>'
+                  '<p class="ms">BOOK ONE</p>'
+                  '<h3 class="s1">The Census</h3>'
+                  '<p><sup>1</sup>And the '
+                  '<span class="nd">Lord</span> spoke.</p>'
+                  '<p style="text-align: center"><sup>2</sup>'
+                  'A centred line.</p>'
+                  '<p class="qr"><sup>3</sup>Set to the right.</p>'
+                  '<p><sup>4</sup>As it says, <q>a chosen stone</q>, '
+                  'and <i>indeed</i> so.</p>'
+                  '<p><sup>5-6</sup>Two printed as one.</p>'
+                  '<p><sup>7</sup></p>'
+                  '<ol><li><sup>8</sup>The sons of Judah;</li>'
+                  '<ol><li><sup>9</sup>and of Benjamin.</li></ol></ol>'
+                  '<table><tr><td><sup>10</sup>Judah</td>'
+                  '<td>seventy and four</td></tr>'
+                  '<tr><td>Benjamin</td><td>twelve</td></tr></table>',
+            ),
+          ],
+        ),
+        fileName: 'everything.epub',
+      );
+      expect(result.bible, isNotNull, reason: result.failure ?? '');
+      imported = result.bible!.bookByCode('NUM')!.chapter(1)!;
+    });
+
+    Block blockFor(int verse) => imported.blocks.firstWhere(
+      (block) => block.segments.any((segment) => segment.verse == verse),
+    );
+
+    test('the divine name', () {
+      expect(
+        blockFor(1).segments.map((s) => s.text).join(),
+        contains(Markup.divineStart),
+      );
+      expect(imported.verseText(1), 'And the Lord spoke.');
+    });
+
+    test('a quotation, apart from the italics beside it', () {
+      final text = blockFor(4).segments.map((s) => s.text).join();
+
+      expect(text, contains(Markup.quotationStart));
+      expect(text, contains(Markup.addStart));
+      expect(
+        imported.verseText(4),
+        'As it says, a chosen stone, and indeed so.',
+      );
+    });
+
+    test('alignment, from a style attribute and from a class', () {
+      expect(blockFor(2).align, BlockAlign.center);
+      expect(blockFor(3).align, BlockAlign.end);
+      expect(blockFor(1).align, BlockAlign.start);
+    });
+
+    test('heading depth', () {
+      final headings = imported.blocks
+          .where((block) => block.style == BlockStyle.heading)
+          .toList();
+
+      expect(headings.map((h) => h.segments.first.text), [
+        'BOOK ONE',
+        'The Census',
+      ]);
+      expect(headings.map((h) => h.level), [1, 2]);
+    });
+
+    test('a bridged verse keeps the number it is printed as', () {
+      expect(imported.labelFor(5), '5-6');
+      expect(imported.labelFor(4), '4');
+    });
+
+    test('a verse numbered and left empty is recorded as left out', () {
+      expect(imported.isOmitted(7), isTrue);
+      expect(imported.isOmitted(4), isFalse);
+    });
+
+    test('a nested list, at its depths', () {
+      final items = imported.blocks
+          .where((block) => block.style == BlockStyle.listItem)
+          .toList();
+
+      expect(items, hasLength(2));
+      expect(items.map((item) => item.segments.first.verse), [8, 9]);
+      expect(items.first.indent, lessThan(items.last.indent));
+    });
+
+    test('a table, as rows of cells rather than a paragraph each', () {
+      final rows = imported.blocks
+          .where((block) => block.style == BlockStyle.tableRow)
+          .toList();
+
+      expect(rows, hasLength(2));
+      expect(rows.first.cells, ['Judah', 'seventy and four']);
+      expect(rows.last.cells, ['Benjamin', 'twelve']);
+    });
+
+    test('and every bit of it survives the .bib the import writes', () {
+      final written = BibFile.decode(
+        BibFile.encode(
+          Bible(
+            translation: testTranslation,
+            books: [
+              Book(meta: BookMeta.lookup('NUM')!, chapters: [imported]),
+            ],
+          ),
+        ),
+      ).bookByCode('NUM')!.chapter(1)!;
+
+      expect(written.labelFor(5), '5-6');
+      expect(written.isOmitted(7), isTrue);
+      expect(
+        written.blocks.firstWhere((b) => b.style == BlockStyle.tableRow).cells,
+        ['Judah', 'seventy and four'],
+      );
+      expect(
+        written.blocks
+            .where((b) => b.style == BlockStyle.heading)
+            .map((b) => b.level),
+        [1, 2],
+      );
+      for (var i = 0; i < imported.blocks.length; i++) {
+        expect(
+          written.blocks[i].align,
+          imported.blocks[i].align,
+          reason: 'block $i alignment',
+        );
+      }
     });
   });
 }

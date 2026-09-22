@@ -586,15 +586,33 @@ class _BibleBuilder {
       if (_isBlock(name, classes)) {
         final blockStyle = _styleFor(name, classes, style);
         final level = _poetryLevel(classes);
-        if (_hasBlockChildren(child)) {
+        // A row holds cells, which are not blocks: the row is read whole
+        // however many cells it has, or each name of a genealogy would
+        // become a paragraph of its own.
+        if (_hasBlockChildren(child) && blockStyle != BlockStyle.tableRow) {
           _walk(
             child,
             blockStyle,
             level ?? indent + (name == 'blockquote' ? 1 : 0),
           );
         } else {
-          _paragraph(child, blockStyle, level ?? indent);
+          _paragraph(
+            child,
+            blockStyle,
+            level ??
+                (blockStyle == BlockStyle.listItem
+                    ? _listDepth
+                    : indent + (name == 'blockquote' ? 1 : 0)),
+          );
         }
+        continue;
+      }
+
+      // How deep a list is nested is the level of the items inside it.
+      if (name == 'ol' || name == 'ul') {
+        _listDepth++;
+        _walk(child, style, indent);
+        _listDepth--;
         continue;
       }
 
@@ -700,7 +718,55 @@ class _BibleBuilder {
       classes.split(RegExp(r'\s+')).any(_titleClass.hasMatch);
 
   bool _isBlock(String name, String classes) =>
-      const {'p', 'div', 'blockquote', 'li', 'td'}.contains(name);
+      const {'p', 'div', 'blockquote', 'li', 'tr'}.contains(name);
+
+  int _listDepth = 0;
+  int _cellsInRow = 0;
+
+  /// What a verse is printed as, by the verse it is stored under.
+  final Map<String, Map<int, Map<int, String>>> _labels = {};
+
+  /// The labels of the chapter being read.
+  final Map<int, String> _verseLabels = {};
+
+  /// Every verse a chapter numbers, so one numbered and left empty can be
+  /// told from one that was never there.
+  final Map<String, Map<int, Set<int>>> _seen = {};
+  final Set<int> _versesSeenHere = {};
+
+  /// A bridged verse as the edition prints it: "1-2", "1,2", "1–3".
+  static String? _printedVerse(String text) {
+    final match = _bridgedVerses.firstMatch(text.trim());
+    return match?.group(0)?.trim();
+  }
+
+  /// A cell of a table. Not a block of its own: a row is the block, and
+  /// its cells are parted inside it, or a genealogy comes out as one
+  /// paragraph per name.
+  static bool _isCell(String name) => name == 'td' || name == 'th';
+
+  /// Where the markup sets a block across the column.
+  static BlockAlign _alignFor(String classes, String style) {
+    final flattened = style.replaceAll(' ', '');
+    if (flattened.contains('text-align:center')) return BlockAlign.center;
+    if (flattened.contains('text-align:right')) return BlockAlign.end;
+    for (final word in classes.split(RegExp(r'\s+'))) {
+      if (word == 'center' ||
+          word == 'centre' ||
+          word == 'centered' ||
+          word == 'qc' ||
+          word == 'pc') {
+        return BlockAlign.center;
+      }
+      if (word == 'right' ||
+          word == 'qr' ||
+          word == 'pr' ||
+          word == 'colophon') {
+        return BlockAlign.end;
+      }
+    }
+    return BlockAlign.start;
+  }
 
   /// What a section heading is called. USFM says `s1`; the editions that
   /// were not generated from USFM spell it out.
@@ -801,9 +867,9 @@ class _BibleBuilder {
     if (words.any(_headingClasses.contains)) {
       return BlockStyle.heading;
     }
+    if (name == 'li') return BlockStyle.listItem;
+    if (name == 'tr') return BlockStyle.tableRow;
     return inherited == BlockStyle.poetry
-        ? BlockStyle.poetry
-        : name == 'li'
         ? BlockStyle.poetry
         : BlockStyle.paragraph;
   }
@@ -876,6 +942,7 @@ class _BibleBuilder {
   }
 
   void _startChapter(int number) {
+    _stashChapter();
     _chapter = number;
     _verse = 0;
     if (_book != null) {
@@ -884,8 +951,27 @@ class _BibleBuilder {
     }
   }
 
+  /// Puts away what was gathered about the chapter just left.
+  void _stashChapter() {
+    final book = _book;
+    if (book == null || _chapter == 0) return;
+    if (_verseLabels.isNotEmpty) {
+      ((_labels[book] ??= {})[_chapter] ??= {}).addAll(_verseLabels);
+    }
+    if (_versesSeenHere.isNotEmpty) {
+      ((_seen[book] ??= {})[_chapter] ??= <int>{}).addAll(_versesSeenHere);
+    }
+    _verseLabels.clear();
+    _versesSeenHere.clear();
+  }
+
   /// Everything inside one block-level element, cut into verses.
   void _paragraph(XmlElement element, BlockStyle style, int indent) {
+    _cellsInRow = 0;
+    final align = _alignFor(
+      (element.getAttribute('class') ?? '').toLowerCase(),
+      (element.getAttribute('style') ?? '').toLowerCase(),
+    );
     final segments = <VerseSegment>[];
     final buffer = StringBuffer();
     var startsVerse = false;
@@ -916,8 +1002,13 @@ class _BibleBuilder {
       _startChapter(number);
     }
 
-    void openVerse(int number) {
+    void openVerse(int number, {String? printed}) {
       flush();
+      // "1-2" for a bridged verse: the text is stored under the first and
+      // printed as the edition prints it.
+      if (printed != null && printed != '\$number') {
+        _verseLabels[number] = printed;
+      }
       // Obadiah, Philemon, 2 and 3 John and Jude have one chapter, and many
       // editions give them no chapter heading at all. A numbered verse under
       // a book heading opens chapter 1 rather than being thrown away.
@@ -932,6 +1023,7 @@ class _BibleBuilder {
       verse = number;
       startsVerse = true;
       _verse = number;
+      _versesSeenHere.add(number);
     }
 
     void write(XmlNode node) {
@@ -1017,12 +1109,33 @@ class _BibleBuilder {
 
       final number = _verseNumber(name, classes, id, node.innerText);
       if (number != null) {
-        openVerse(number);
+        openVerse(number, printed: _printedVerse(node.innerText));
         return;
       }
 
       if (name == 'br') {
         buffer.write(' ');
+        return;
+      }
+
+      // A cell boundary inside a row, so the row can be laid out as one.
+      if (_isCell(name)) {
+        if (_cellsInRow > 0) buffer.write(Markup.cell);
+        _cellsInRow++;
+        for (final child in node.children) {
+          write(child);
+        }
+        return;
+      }
+
+      // Words quoted from elsewhere in Scripture. Not the same thing as a
+      // translator's addition, though both used to be stored as one.
+      if (name == 'q' || classes.split(RegExp(r'\s+')).contains('qt')) {
+        buffer.write(Markup.quotationStart);
+        for (final child in node.children) {
+          write(child);
+        }
+        buffer.write(Markup.quotationEnd);
         return;
       }
 
@@ -1100,8 +1213,14 @@ class _BibleBuilder {
     _add(
       Block(
         style: style,
-        indent: style == BlockStyle.poetry ? (indent < 1 ? 1 : indent) : 0,
+        indent: switch (style) {
+          BlockStyle.poetry => indent < 1 ? 1 : indent,
+          // How deep the list was nested.
+          BlockStyle.listItem => indent < 1 ? 1 : indent,
+          _ => 0,
+        },
         indentFirstLine: style == BlockStyle.paragraph,
+        align: align,
         segments: segments,
       ),
     );
@@ -1316,6 +1435,8 @@ class _BibleBuilder {
   }
 
   List<Book> finish() {
+    // The chapter last read has not been put away yet.
+    _stashChapter();
     final books = <Book>[];
     for (final entry in _blocks.entries) {
       final meta = BookMeta.lookup(entry.key);
@@ -1328,6 +1449,15 @@ class _BibleBuilder {
             .where((block) => !block.isEmpty)
             .toList();
         if (blocks.isEmpty) continue;
+        // A verse the chapter numbered and never gave text to is left out
+        // on purpose, the way the critical texts drop Matthew 17:21.
+        final withText = <int>{};
+        for (final block in blocks) {
+          for (final segment in block.segments) {
+            if (segment.text.trim().isNotEmpty) withText.add(segment.verse);
+          }
+        }
+        final seen = _seen[entry.key]?[number] ?? const <int>{};
         final chapter = Chapter(
           // Chapters are read by position, so they have to run 1, 2, 3 with
           // no gaps. Where the source skipped one, the shift is reported
@@ -1335,6 +1465,11 @@ class _BibleBuilder {
           number: chapters.length + 1,
           blocks: blocks,
           notes: _notes[entry.key]?[number] ?? const [],
+          labels: _labels[entry.key]?[number] ?? const {},
+          omitted: {
+            for (final verse in seen)
+              if (!withText.contains(verse)) verse,
+          },
         );
         if (chapter.verseCount == 0) {
           warn('${meta.name} $number has no numbered verses; left out.');

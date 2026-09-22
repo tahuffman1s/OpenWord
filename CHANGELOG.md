@@ -32,6 +32,12 @@
   - **A verse the translation leaves out says so.** The BSB has sixteen —
     Matthew 17:21, Mark 9:44 and the rest the critical texts omit — and
     nothing could tell deliberately absent from failed to parse.
+  - **An imported EPUB gets all of it too, not only some.** The importer
+    read `<li>` as poetry and every `<td>` as a paragraph of its own, and
+    had nowhere to put a heading's depth, a centred line, a quotation from
+    Scripture, a bridged verse's printed label or a verse the edition
+    omits. All eight now come through, so a Bible you import is set the
+    way a bundled one is.
   - `U+0011`–`U+001F` is now reserved for markers and the whole range is
     stripped, so the next marker added cannot leak control characters into
     search results or copied text in a reader that predates it.
