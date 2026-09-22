@@ -183,8 +183,7 @@ class StrongsCodec {
 
   /// Gzipped or not, as its first two bytes say.
   static Uint8List inflate(Uint8List bytes) {
-    final gzipped =
-        bytes.length > 2 && bytes[0] == 0x1f && bytes[1] == 0x8b;
+    final gzipped = bytes.length > 2 && bytes[0] == 0x1f && bytes[1] == 0x8b;
     if (!gzipped) return bytes;
     return Uint8List.fromList(const GZipDecoder().decodeBytes(bytes));
   }

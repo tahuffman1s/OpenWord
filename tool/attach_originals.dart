@@ -45,9 +45,7 @@ void main(List<String> args) {
   // written.
   final StrongsReader whole;
   try {
-    whole = StrongsCodec.unpack(
-      Uint8List.fromList(source.readAsBytesSync()),
-    );
+    whole = StrongsCodec.unpack(Uint8List.fromList(source.readAsBytesSync()));
     if (whole.verseCount == 0) {
       throw const FormatException('no verses in it');
     }
@@ -100,9 +98,7 @@ void main(List<String> args) {
   final attached = check.extras[StrongsCodec.chunkTag];
   if (attached == null ||
       StrongsCodec.unpack(attached).verseCount != read.verseCount) {
-    stderr.writeln(
-      '${target.path}: the layer did not survive — left alone',
-    );
+    stderr.writeln('${target.path}: the layer did not survive — left alone');
     exitCode = 1;
     return;
   }

@@ -108,14 +108,18 @@ bool _check(String path) {
   for (final (tag, describe) in <(String, String Function(Uint8List))>[
     (
       XrefCodec.chunkTag,
-      (chunk) => '${XrefCodec.unpack(chunk).length} verses of '
+      (chunk) =>
+          '${XrefCodec.unpack(chunk).length} verses of '
           'cross-references',
     ),
-    (StrongsCodec.chunkTag, (chunk) {
-      final layer = StrongsCodec.unpack(chunk);
-      return '${layer.verseCount} verses of Hebrew and Greek, '
-          '${layer.entryCount} dictionary entries';
-    }),
+    (
+      StrongsCodec.chunkTag,
+      (chunk) {
+        final layer = StrongsCodec.unpack(chunk);
+        return '${layer.verseCount} verses of Hebrew and Greek, '
+            '${layer.entryCount} dictionary entries';
+      },
+    ),
   ]) {
     final chunk = bible.extras[tag];
     if (chunk == null) continue;

@@ -768,9 +768,7 @@ class _TranslationMenu extends StatelessWidget {
       bytes: written.bytes,
     );
     if (saved == null) return;
-    final megabytes = (written.bytes.length / (1024 * 1024)).toStringAsFixed(
-      1,
-    );
+    final megabytes = (written.bytes.length / (1024 * 1024)).toStringAsFixed(1);
     say(
       'Saved $megabytes MB to ${_where(saved)} — '
       '${written.references} verses of cross-references, '
