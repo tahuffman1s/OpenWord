@@ -27,8 +27,10 @@ abstract class SpeechEngine {
   });
 
   /// Speaks [text]. Completes with true when it has been said to the end,
-  /// and false when it was stopped or failed.
-  Future<bool> speak(String text);
+  /// and false when it was stopped or failed. Where the platform says how
+  /// far it has got, [onProgress] is given the offset in [text] of each
+  /// word as it is reached.
+  Future<bool> speak(String text, {void Function(int offset)? onProgress});
 
   Future<void> stop();
 
@@ -53,7 +55,15 @@ class PlatformSpeechEngine implements SpeechEngine {
       if (_started) _finish(false);
     });
     _tts.setErrorHandler((_) => _finish(false));
+    _tts.setProgressHandler((text, start, end, word) {
+      // Only for what is being said now: a word reported late from an
+      // utterance already stopped is not this one's.
+      if (text == _speaking) _onProgress?.call(start);
+    });
   }
+
+  String? _speaking;
+  void Function(int offset)? _onProgress;
 
   final FlutterTts _tts = FlutterTts();
   Completer<bool>? _pending;
@@ -130,9 +140,14 @@ class PlatformSpeechEngine implements SpeechEngine {
   }
 
   @override
-  Future<bool> speak(String text) async {
+  Future<bool> speak(
+    String text, {
+    void Function(int offset)? onProgress,
+  }) async {
     _finish(false);
     _started = false;
+    _speaking = text;
+    _onProgress = onProgress;
     final pending = _pending = Completer<bool>();
     try {
       await _tts.speak(text);
@@ -336,14 +351,30 @@ class ReadAloud extends ChangeNotifier {
     super.dispose();
   }
 
-  /// Says the current utterance, and on to the next when it is done.
+  /// How much is handed to the voice at once, in characters.
+  ///
+  /// Not a verse at a time: a voice that starts and stops between every
+  /// verse clips the first syllable of many of them, most of all over
+  /// Bluetooth, which lets the link sleep in the gaps. Several verses go
+  /// together as one utterance, and the words the platform reports as it
+  /// reaches them say which verse is being read. Short enough that
+  /// stepping to another verse, which starts a new one, is prompt.
+  static const int passageLength = 1200;
+
+  /// Whether this platform says where it has got to within an utterance:
+  /// unknown until a passage of several verses has been read. Where it
+  /// does not, the page could not follow the voice through a passage, so
+  /// verses go one at a time as they used to.
+  bool? _reportsProgress;
+
+  /// Says a passage from the current verse on, and on to the next when it
+  /// is done.
   ///
   /// With [interrupt], whatever is being said is stopped first: some
   /// platforms queue a second utterance behind the first rather than
   /// replacing it.
   Future<void> _speakCurrent({bool interrupt = false}) async {
     final generation = ++_generation;
-    final utterance = _queue[_index];
     if (interrupt) await engine.stop();
     if (generation != _generation) return;
     final wanted = (_language, _rate, _voice);
@@ -357,7 +388,37 @@ class ReadAloud extends ChangeNotifier {
       }
     }
     if (generation != _generation) return;
-    final said = await engine.speak(utterance.text);
+
+    // The passage: this verse and those after it, as far as will go.
+    final first = _index;
+    final starts = <int>[];
+    final passage = StringBuffer();
+    final length = _reportsProgress == false ? 0 : passageLength;
+    var last = first;
+    for (var i = first; i < _queue.length; i++) {
+      final text = _queue[i].text;
+      if (i > first && passage.length + 1 + text.length > length) break;
+      if (i > first) passage.write(' ');
+      starts.add(passage.length);
+      passage.write(text);
+      last = i;
+    }
+    var progressed = false;
+    final said = await engine.speak(
+      passage.toString(),
+      onProgress: (offset) {
+        if (generation != _generation) return;
+        progressed = true;
+        var k = 0;
+        while (k + 1 < starts.length && starts[k + 1] <= offset) {
+          k++;
+        }
+        if (first + k != _index) {
+          _index = first + k;
+          notifyListeners();
+        }
+      },
+    );
     if (generation != _generation) return;
     if (!said) {
       // Once is a hiccup — an engine still waking up, a stop reported
@@ -378,12 +439,18 @@ class ReadAloud extends ChangeNotifier {
       return;
     }
     _retrying = false;
-    if (_index + 1 < _queue.length) {
-      _index++;
+    if (progressed) {
+      _reportsProgress = true;
+    } else if (last > first) {
+      _reportsProgress ??= false;
+    }
+    if (last + 1 < _queue.length) {
+      _index = last + 1;
       notifyListeners();
       _speakCurrent();
       return;
     }
+    _index = last;
     _advanceChapter(heardToEnd: true);
   }
 

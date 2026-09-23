@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **The lock-screen controls never appeared on Android.** Release builds
+  shrink away resources nothing seems to use, and audio_service names its
+  notification icons — play, pause, skip, stop — only at run time, from
+  Dart, so they were stripped. On Android 13 and later its Stop control is
+  built with its icon, and with no icon Android throws while the playback
+  state is being set: the media notification was never shown, and with it
+  went every lock-screen, headset and car control. Nothing reached the app
+  to say so. The icons are now kept, and the release APK has been checked
+  for them.
+- **Reading aloud clipped now and then.** It handed the voice one verse at
+  a time, so the audio stopped and started between every verse, and the
+  first syllable of a verse could be cut — over Bluetooth most of all,
+  where the link sleeps in the gaps. Several verses now go to the voice as
+  one passage, and the words the platform reports as it reaches them say
+  which verse to tint and scroll to. A platform that reports no such
+  progress is read a verse at a time as before, so the page still follows.
+
 ## 1.20.1
 
 ### Fixed

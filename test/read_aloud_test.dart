@@ -31,10 +31,20 @@ class FakeSpeech implements SpeechEngine {
     String? voice,
   }) async => rates.add(rate);
 
+  void Function(int offset)? _progress;
+
   @override
-  Future<bool> speak(String text) {
+  Future<bool> speak(String text, {void Function(int offset)? onProgress}) {
     said.add(text);
+    _progress = onProgress;
     return (_saying = Completer<bool>()).future;
+  }
+
+  /// Reports the voice as having reached [words] in what it is saying.
+  void reach(String words) {
+    final at = said.last.indexOf(words);
+    expect(at, greaterThanOrEqualTo(0), reason: '"$words" is not being said');
+    _progress?.call(at);
   }
 
   /// Ends what is being said, as said to the end or not.
@@ -85,33 +95,40 @@ void main() {
       );
     });
 
-    test('reads a chapter verse by verse, announced, then the next', () async {
-      voice.play(const Reference('GEN', 1));
-      await settle();
-      expect(speech.said, ['Genesis, chapter 1.']);
-      expect(voice.current, const Reference('GEN', 1));
+    test(
+      'reads a chapter as one passage, announced, following the words',
+      () async {
+        voice.play(const Reference('GEN', 1));
+        await settle();
+        // Not a verse at a time: the whole short chapter goes to the voice at
+        // once, so it is not stopped and started between verses.
+        expect(speech.said, hasLength(1));
+        expect(
+          speech.said.single,
+          startsWith('Genesis, chapter 1. In the beginning'),
+        );
+        expect(speech.said.single, contains('An indented paragraph'));
+        // The footnote marker is not read out.
+        expect(speech.said.single, isNot(contains('Elohim')));
+        expect(voice.current, const Reference('GEN', 1));
 
-      for (var i = 0; i < 5; i++) {
+        // The words it reports reaching say which verse is being read.
+        speech.reach('In the beginning');
+        expect(voice.current, const Reference('GEN', 1, 1));
+        speech.reach('An indented paragraph');
+        expect(voice.current, const Reference('GEN', 1, 5));
+
         speech.finish();
         await settle();
-      }
-      expect(voice.current, const Reference('GEN', 1, 5));
-      expect(speech.said[1], startsWith('In the beginning'));
-      // The footnote marker is not read out.
-      expect(speech.said[1], isNot(contains('Elohim')));
+        expect(heard, [const Reference('GEN', 1)]);
+        expect(speech.said.last, startsWith('Genesis, chapter 2.'));
 
-      speech.finish();
-      await settle();
-      expect(heard, [const Reference('GEN', 1)]);
-      expect(speech.said.last, 'Genesis, chapter 2.');
-
-      speech.finish();
-      await settle();
-      speech.finish();
-      await settle();
-      // Nothing after Genesis 2 here, so it stops.
-      expect(voice.state, ReadAloudState.idle);
-    });
+        speech.finish();
+        await settle();
+        // Nothing after Genesis 2 here, so it stops.
+        expect(voice.state, ReadAloudState.idle);
+      },
+    );
 
     test('started part way in, a chapter is not counted as heard', () async {
       voice.play(const Reference('GEN', 1, 4));
@@ -119,36 +136,34 @@ void main() {
       expect(speech.said.single, startsWith('A paragraph set flush'));
       speech.finish();
       await settle();
-      speech.finish();
-      await settle();
       expect(heard, isEmpty);
       // It still goes on to the next chapter.
-      expect(speech.said.last, 'Genesis, chapter 2.');
+      expect(speech.said.last, startsWith('Genesis, chapter 2.'));
     });
 
     test('a selection is read and then it stops', () async {
       voice.play(const Reference('GEN', 1, 3), only: {3, 5});
       await settle();
-      speech.finish();
-      await settle();
+      expect(speech.said.single, isNot(contains('A paragraph set flush')));
+      speech.reach('An indented paragraph');
       expect(voice.current, const Reference('GEN', 1, 5));
       speech.finish();
       await settle();
       expect(voice.state, ReadAloudState.idle);
-      expect(speech.said, hasLength(2));
+      expect(speech.said, hasLength(1));
     });
 
-    test('pausing remembers the verse; resuming says it again', () async {
+    test('pausing remembers the verse it had reached', () async {
       voice.play(const Reference('GEN', 1, 3));
       await settle();
+      speech.reach('A paragraph set flush');
       voice.pause();
       await settle();
       expect(voice.state, ReadAloudState.paused);
-      expect(voice.current, const Reference('GEN', 1, 3));
+      expect(voice.current, const Reference('GEN', 1, 4));
       voice.resume();
       await settle();
-      expect(speech.said, hasLength(2));
-      expect(speech.said[0], speech.said[1]);
+      expect(speech.said.last, startsWith('A paragraph set flush'));
     });
 
     test('skips forward and back, interrupting what is being said', () async {
@@ -158,11 +173,40 @@ void main() {
       await settle();
       expect(voice.current, const Reference('GEN', 1, 3));
       expect(speech.stops, greaterThan(0));
+      expect(speech.said.last, startsWith('God said'));
       voice.skip(-1);
       voice.skip(-1);
       await settle();
       // No further back than where it started.
       expect(voice.current, const Reference('GEN', 1, 2));
+    });
+
+    test(
+      'a platform that reports no progress is read a verse at a time',
+      () async {
+        voice.play(const Reference('GEN', 1, 1));
+        await settle();
+        expect(speech.said.single, contains('An indented paragraph'));
+        // A passage of several verses went by without a word reported, so
+        // the page could not have followed it.
+        speech.finish();
+        await settle();
+        voice.play(const Reference('GEN', 1, 3));
+        await settle();
+        expect(speech.said.last, startsWith('God said'));
+        expect(speech.said.last, isNot(contains('A paragraph set flush')));
+      },
+    );
+
+    test('one that does report progress keeps its passages', () async {
+      voice.play(const Reference('GEN', 1, 1));
+      await settle();
+      speech.reach('The earth was');
+      speech.finish();
+      await settle();
+      voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      expect(speech.said.last, contains('A paragraph set flush'));
     });
 
     test('a change of speed takes effect at once', () async {
@@ -191,6 +235,7 @@ void main() {
       speech.finish(false);
       await settle();
       expect(voice.isPlaying, isTrue);
+      expect(voice.error, isNull);
     });
 
     test('a device that stops speaking ends it, and says so', () async {
@@ -334,8 +379,7 @@ void main() {
       expect(find.text('Genesis, chapter 1'), findsOneWidget);
       expect(find.textContaining('Reading aloud'), findsOneWidget);
 
-      speech.finish();
-      await tester.pump();
+      speech.reach('In the beginning');
       await tester.pump();
       expect(find.text('Genesis 1:1'), findsOneWidget);
 
@@ -420,19 +464,15 @@ void main() {
       );
       await tester.tap(find.text('LISTEN'));
       await tester.pump();
-      // The announcement and Genesis 1's five verses.
-      for (var i = 0; i < 6; i++) {
-        speech.finish();
-        await tester.pump();
-        await tester.pump();
-      }
+      // Genesis 1, announced, as one passage.
+      speech.finish();
       await tester.pumpAndSettle();
       final progress = harness.reading.progressFor(
         ReadingPlans.bibleInAYear.id,
       )!;
       expect(progress.done, {0});
       expect(appBarText('Genesis 2'), findsOneWidget);
-      expect(speech.said.last, 'Genesis, chapter 2.');
+      expect(speech.said.last, startsWith('Genesis, chapter 2.'));
     });
 
     testWidgets('speed and voice are chosen from the bar', (tester) async {

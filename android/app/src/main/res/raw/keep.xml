@@ -1,5 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The notification icon is named in Dart, not in any resource, so
-     shrinking would otherwise take it out. -->
+<!-- Icons looked up by name at run time, which resource shrinking cannot
+     see and so removes from a release build.
+
+     audio_service's own icons are the ones that matter: its lock-screen
+     controls name them from Dart, and on Android 13 and later a control
+     with no icon throws while the playback state is being set, so the
+     media notification — and with it every lock-screen control — never
+     appears. The reading-aloud notification's icon is named in Dart too. -->
 <resources xmlns:tools="http://schemas.android.com/tools"
-    tools:keep="@drawable/ic_read_aloud" />
+    tools:keep="@drawable/ic_read_aloud,@drawable/audio_service_*" />
