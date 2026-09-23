@@ -6,7 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
-import io.flutter.embedding.android.FlutterActivity
+import com.ryanheise.audioservice.AudioServiceActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import java.io.File
@@ -30,8 +30,13 @@ import java.security.MessageDigest
  *    different key, and says only "App not installed". The signatures are
  *    compared here first, so the app can explain what is wrong and offer to
  *    remove the old copy.
+ *
+ * It is an [AudioServiceActivity] rather than a plain FlutterActivity so
+ * that reading aloud can go on with the screen off: the media service and
+ * this activity share one Flutter engine, and the channel above is set up
+ * on that engine the same as ever.
  */
-class MainActivity : FlutterActivity() {
+class MainActivity : AudioServiceActivity() {
     private companion object {
         const val CHANNEL = "openword/updates"
         const val APK_TYPE = "application/vnd.android.package-archive"

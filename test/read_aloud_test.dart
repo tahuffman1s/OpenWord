@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:audio_service/audio_service.dart';
 import 'package:openword/src/data/read_aloud.dart';
+import 'package:openword/src/data/read_aloud_session.dart';
 import 'package:openword/src/model/bible.dart';
 import 'package:openword/src/model/reading_plan.dart';
 
@@ -191,12 +193,104 @@ void main() {
     });
   });
 
+  group('the lock screen', () {
+    late FakeSpeech speech;
+    late ReadAloud voice;
+    late ReadAloudHandler handler;
+
+    setUp(() {
+      speech = FakeSpeech();
+      voice = ReadAloud(
+        engine: speech,
+        chapterFor: chapterFor,
+        nextChapter: (_) => null,
+      );
+      handler = ReadAloudHandler(voice, () => 'Test Translation');
+    });
+
+    test('shows nothing to control while nothing is read', () {
+      final state = handler.playbackState.value;
+      expect(state.playing, isFalse);
+      expect(state.processingState, AudioProcessingState.idle);
+      expect(state.controls, isEmpty);
+    });
+
+    test('shows where it has got to, and the controls for it', () async {
+      voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      final state = handler.playbackState.value;
+      expect(state.playing, isTrue);
+      expect(state.processingState, AudioProcessingState.ready);
+      expect(state.controls, [
+        MediaControl.skipToPrevious,
+        MediaControl.pause,
+        MediaControl.skipToNext,
+        MediaControl.stop,
+      ]);
+      final item = handler.mediaItem.value!;
+      expect(item.title, 'Genesis 1:3');
+      expect(item.album, 'Test Translation');
+    });
+
+    test('its buttons drive the voice', () async {
+      voice.play(const Reference('GEN', 1, 2));
+      await settle();
+      await handler.pause();
+      expect(voice.state, ReadAloudState.paused);
+      expect(handler.playbackState.value.controls[1], MediaControl.play);
+      await handler.play();
+      await settle();
+      expect(voice.isPlaying, isTrue);
+      await handler.skipToNext();
+      await settle();
+      expect(voice.current, const Reference('GEN', 1, 3));
+      await handler.skipToPrevious();
+      await settle();
+      expect(voice.current, const Reference('GEN', 1, 2));
+      // A headset's one button pauses and resumes.
+      await handler.click();
+      expect(voice.state, ReadAloudState.paused);
+      await handler.click();
+      expect(voice.isPlaying, isTrue);
+      await handler.stop();
+      expect(voice.state, ReadAloudState.idle);
+      expect(
+        handler.playbackState.value.processingState,
+        AudioProcessingState.idle,
+      );
+    });
+
+    test('a new voice can take over the session', () async {
+      final another = ReadAloud(
+        engine: speech,
+        chapterFor: chapterFor,
+        nextChapter: (_) => null,
+      );
+      handler.bind(another, () => 'Another');
+      another.play(const Reference('GEN', 1, 4));
+      await settle();
+      expect(handler.mediaItem.value!.title, 'Genesis 1:4');
+      expect(handler.mediaItem.value!.album, 'Another');
+      // The first voice no longer drives what the system shows.
+      voice.play(const Reference('GEN', 1, 1));
+      await settle();
+      expect(handler.mediaItem.value!.title, 'Genesis 1:4');
+    });
+  });
+
   group('in the reader', () {
     late FakeSpeech speech;
+
+    final sessions = <ReadAloud>[];
 
     setUp(() {
       speech = FakeSpeech();
       createSpeechEngine = () => speech;
+      sessions.clear();
+      startReadAloudSession = (voice, describe) async {
+        sessions.add(voice);
+        return null;
+      };
     });
 
     tearDown(() => createSpeechEngine = PlatformSpeechEngine.new);
@@ -225,6 +319,13 @@ void main() {
       await tester.tap(find.byTooltip('Stop reading aloud'));
       await tester.pumpAndSettle();
       expect(find.byTooltip('Pause'), findsNothing);
+    });
+
+    testWidgets('listening hands the voice to the system', (tester) async {
+      await pumpReader(tester);
+      await tester.tap(find.text('LISTEN'));
+      await tester.pump();
+      expect(sessions, hasLength(1));
     });
 
     testWidgets('a verse offers to be read from', (tester) async {

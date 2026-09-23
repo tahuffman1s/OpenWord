@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- The whole Bible, its introductions and its maps are bundled, so the
          only thing OpenWord fetches is the update check against GitHub, and
          only while the reader leaves that switch on in Settings. -->
@@ -6,6 +7,12 @@
     <!-- Lets the app hand a downloaded release to the system installer.
          Android still asks the reader to confirm it. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Reading aloud with the screen off: a media-playback foreground
+         service, with the lock-screen controls that come with it, and a
+         wake lock so the voice is not cut off mid-verse. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK"/>
 
     <application
         android:label="OpenWord"
@@ -33,6 +40,26 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Reading aloud, as the system sees it: the service that keeps it
+             going in the background, and the receiver for a headset's or
+             a car's media buttons. -->
+        <service
+            android:name="com.ryanheise.audioservice.AudioService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="true"
+            tools:ignore="Instantiatable">
+            <intent-filter>
+                <action android:name="android.media.browse.MediaBrowserService"/>
+            </intent-filter>
+        </service>
+        <receiver
+            android:name="com.ryanheise.audioservice.MediaButtonReceiver"
+            android:exported="true"
+            tools:ignore="Instantiatable">
+            <intent-filter>
+                <action android:name="android.intent.action.MEDIA_BUTTON"/>
+            </intent-filter>
+        </receiver>
         <!-- Shares the downloaded release with the system installer; the
              installer cannot read a file:// path on Android 7 and later. -->
         <provider

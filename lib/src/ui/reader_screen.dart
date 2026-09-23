@@ -14,6 +14,7 @@ import '../data/originals.dart';
 import '../data/marks.dart';
 import '../data/plan_progress.dart';
 import '../data/read_aloud.dart';
+import '../data/read_aloud_session.dart';
 import '../data/reference_search.dart';
 import '../data/settings.dart';
 import '../data/updates.dart';
@@ -160,7 +161,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void _listen(Reference from, {Set<int>? only}) {
     _configureVoice();
     _voice.play(from, only: only);
+    // Handed to the system as well, so it goes on with the screen off and
+    // answers the lock screen. Started the first time it is wanted rather
+    // than at launch, and never in the way if it cannot be had.
+    startReadAloudSession(_voice, () => _bible.translation.name).then((
+      session,
+    ) {
+      if (mounted) _session = session;
+    });
   }
+
+  /// The system's media session, once reading aloud has started it.
+  ReadAloudHandler? _session;
 
   Future<void> _openVoiceSettings() async {
     await showModalBottomSheet<void>(
@@ -302,6 +314,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   void dispose() {
     _settings.removeListener(_onSettingsChanged);
     _readAloud?.removeListener(_followVoice);
+    if (_readAloud case final voice?) _session?.release(voice);
     _readAloud?.dispose();
     _pages.dispose();
     super.dispose();

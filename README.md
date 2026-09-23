@@ -63,8 +63,9 @@ no network entitlement.
   goes on. A verse's sheet offers *Listen from here*. The bar along the
   bottom pauses, steps a verse back or on, and sets the speed and the voice.
   Started from a reading plan it reads the rest of that day and stops, and a
-  plan chapter heard to its end is ticked off. Not on Linux, which the
-  speech plugin does not support.
+  plan chapter heard to its end is ticked off. It goes on with the screen
+  off: the lock screen, a headset and a car pause it and step it verse by
+  verse. Not on Linux, which the speech plugin does not support.
 - **Select several verses and share them.** Hold a verse, then tap others
   to add them; a bar along the bottom cites the selection the way a printed
   Bible would — *John 3:16–18, 20* — and copies it, shares it, highlights it

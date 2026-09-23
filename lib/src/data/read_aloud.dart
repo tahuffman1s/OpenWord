@@ -48,6 +48,30 @@ class PlatformSpeechEngine implements SpeechEngine {
 
   final FlutterTts _tts = FlutterTts();
   Completer<bool>? _pending;
+  bool _sessionReady = false;
+
+  /// On iOS the voice is played through an audio session of the app's
+  /// own. It has to be a playback session, which the silent switch and the
+  /// lock screen do not mute, and it has to stay open between verses: the
+  /// plugin closes it after every utterance by default, and an app with no
+  /// audio session open is suspended in the background between one verse
+  /// and the next.
+  Future<void> _prepareSession() async {
+    if (_sessionReady) return;
+    _sessionReady = true;
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
+    await _tts.setSharedInstance(true);
+    await _tts.autoStopSharedSession(false);
+    await _tts.setIosAudioCategory(
+      IosTextToSpeechAudioCategory.playback,
+      const [
+        IosTextToSpeechAudioCategoryOptions.allowBluetooth,
+        IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
+        IosTextToSpeechAudioCategoryOptions.allowAirPlay,
+      ],
+      IosTextToSpeechAudioMode.spokenAudio,
+    );
+  }
 
   void _finish(bool spokenToTheEnd) {
     final pending = _pending;
@@ -77,6 +101,7 @@ class PlatformSpeechEngine implements SpeechEngine {
     required double rate,
     String? voice,
   }) async {
+    await _prepareSession();
     await _tts.setLanguage(language);
     await _tts.setSpeechRate(_normalRate * rate);
     if (voice != null) {

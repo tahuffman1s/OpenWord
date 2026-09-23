@@ -18,20 +18,33 @@
   it reads the rest of that day and stops there, and a plan chapter heard
   from its first verse to its last is ticked off — someone listening cannot
   reach the button at the end of the page.
+- **It goes on with the screen off, and answers the lock screen.**
+  Reading aloud is handed to the system as a media session: on Android a
+  media notification with previous, pause and next, on iOS and macOS the
+  Now Playing controls, and in a browser its media keys. A headset's or a
+  car's buttons pause, resume and step verse by verse too, and the lock
+  screen shows the verse being read and the translation. Paused, the
+  notification stays until it is stopped, because Android 12 and later
+  will not let a paused service come back from the lock screen otherwise.
 - The words are read as they are meant to be heard. Footnote markers,
   headings and verse numbers are not read out, and the divine name printed
   in capitals, LORD, is said as a word rather than spelled.
 
 ### Notes
-- Reading aloud is made for the screen being on. With it off, the platform
-  may stop it; playing on reliably needs a media session with lock-screen
-  controls, which is a separate piece of work.
 - Linux has no text-to-speech in the plugin used, so *Listen* is not shown
-  there. A device with no voice for the translation's language says so
-  rather than falling silent.
-- `flutter_tts` is a new dependency. Android is told the app looks for a
-  text-to-speech engine, which it must be from Android 11 on; no permission
-  is asked for.
+  there, and Windows has no media session here, so on Windows it reads with
+  the app open. A device with no voice for the translation's language says
+  so rather than falling silent.
+- `flutter_tts` and `audio_service` are new dependencies. `audio_service`
+  brings a cache for artwork with it (`flutter_cache_manager`, and through
+  it sqflite and http); OpenWord gives it no artwork, so nothing is fetched.
+- On Android the app now declares `WAKE_LOCK`, `FOREGROUND_SERVICE` and
+  `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, which a media service needs and which
+  are granted at install without asking, and that it looks for a
+  text-to-speech engine, which it must from Android 11 on. On iOS it
+  declares the `audio` background mode, and the voice plays in a playback
+  audio session kept open between verses, so neither the silent switch nor
+  the gap between one verse and the next stops it.
 
 ## 1.19.0
 
