@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.20.1
 
 ### Fixed
 - **Reading aloud was twice as fast as it should be on Android.** The
