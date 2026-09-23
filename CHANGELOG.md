@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.19.0
 
 ### Added
 - **Several verses at once.** Hold a verse to start a selection, then tap
