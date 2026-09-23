@@ -57,6 +57,14 @@ no network entitlement.
   Treasury of Scripture Knowledge, grouped under the phrase that prompted
   each one and carrying the words they point at, so the list reads without
   leaving it. Tap one to go there. Bundled, like everything else.
+- **Read aloud.** *Listen* beside the chapter's name reads it in the
+  device's own voice — nothing leaves the device — a verse at a time, with
+  the verse being read tinted and kept in view and the page turning as it
+  goes on. A verse's sheet offers *Listen from here*. The bar along the
+  bottom pauses, steps a verse back or on, and sets the speed and the voice.
+  Started from a reading plan it reads the rest of that day and stops, and a
+  plan chapter heard to its end is ticked off. Not on Linux, which the
+  speech plugin does not support.
 - **Select several verses and share them.** Hold a verse, then tap others
   to add them; a bar along the bottom cites the selection the way a printed
   Bible would — *John 3:16–18, 20* — and copies it, shares it, highlights it

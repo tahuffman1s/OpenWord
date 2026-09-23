@@ -13,6 +13,7 @@ import '../data/cross_references.dart';
 import '../data/originals.dart';
 import '../data/marks.dart';
 import '../data/plan_progress.dart';
+import '../data/read_aloud.dart';
 import '../data/reference_search.dart';
 import '../data/settings.dart';
 import '../data/updates.dart';
@@ -73,6 +74,107 @@ class _ReaderScreenState extends State<ReaderScreen> {
   int? _selectionPage;
 
   bool get _selecting => _selected.isNotEmpty;
+
+  /// Reading aloud: made once, and following the translation that is open.
+  ReadAloud? _readAloud;
+  ReadAloud get _voice => _readAloud ??= _makeReadAloud();
+
+  ReadAloud _makeReadAloud() {
+    final voice = ReadAloud(
+      engine: createSpeechEngine(),
+      chapterFor: (reference) =>
+          _bible.bookByCode(reference.bookCode)?.chapter(reference.chapter),
+      nextChapter: _chapterAfterListening,
+      onChapterHeard: _heardChapter,
+    );
+    voice.addListener(_followVoice);
+    return voice;
+  }
+
+  /// Whether this platform can read aloud at all.
+  bool get _canListen => _voice.engine.isAvailable;
+
+  /// What to read after [chapter]: the rest of the plan day it belongs to,
+  /// where it belongs to one, and otherwise simply the next chapter.
+  Reference? _chapterAfterListening(Reference chapter) {
+    final hit = _planSlotFor(chapter);
+    if (hit != null) {
+      final day = hit.day;
+      for (var i = hit.slot - day.firstSlot + 1; i < day.slotCount; i++) {
+        if (hasChapter(_bible, day.chapters[i])) return day.chapters[i];
+      }
+      // The day is heard; that is where a plan's listening stops.
+      return null;
+    }
+    final page = _pageFor(chapter);
+    return page + 1 < _index.length ? _index[page + 1] : null;
+  }
+
+  /// A plan chapter heard from its first verse to its last counts as read,
+  /// since nobody listening can reach the button at the end of it.
+  void _heardChapter(Reference chapter) {
+    final hit = _planSlotFor(chapter);
+    if (hit == null) return;
+    _reading.setPlanSlot(hit.progress.plan.id, hit.slot, read: true);
+    _planFocus = PlanReading(
+      planId: hit.progress.plan.id,
+      day: hit.day.number,
+      chapter: chapter,
+    );
+  }
+
+  /// Keeps the page on the chapter being read.
+  void _followVoice() {
+    if (!mounted) return;
+    final current = _voice.current;
+    if (current != null &&
+        (current.bookCode != _current.bookCode ||
+            current.chapter != _current.chapter)) {
+      final page = _pageFor(current);
+      setState(() {
+        _page = page;
+        _pendingPage = page;
+        _pendingVerse = null;
+      });
+      if (_pages.hasClients) _pages.jumpToPage(page);
+      _reading.savePosition(current.withVerse(null));
+    } else {
+      setState(() {});
+    }
+    final error = _voice.error;
+    if (error != null && !_voice.isActive) {
+      _voice.error = null;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
+    }
+  }
+
+  void _configureVoice() {
+    _readAloud?.configure(
+      language: _bible.translation.language,
+      rate: _settings.speechRate,
+      voice: _settings.speechVoice,
+    );
+  }
+
+  void _listen(Reference from, {Set<int>? only}) {
+    _configureVoice();
+    _voice.play(from, only: only);
+  }
+
+  Future<void> _openVoiceSettings() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (_) => _VoiceSheet(
+        settings: _settings,
+        engine: _voice.engine,
+        language: _bible.translation.language,
+      ),
+    );
+    _configureVoice();
+  }
 
   // Held directly rather than looked up on demand, so they are still
   // reachable from dispose().
@@ -169,6 +271,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
       _matcherFor = scope.library.bible;
       _matcher = ReferenceMatcher(scope.library.bible!.books);
     }
+    if (_readAloud != null && !identical(_bible, scope.library.bible)) {
+      // A different translation: what was being read is not this one.
+      _readAloud!.stop();
+    }
     _bible = scope.library.bible!;
     _loadOwnOriginals();
     _settings = scope.settings;
@@ -195,11 +301,14 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void dispose() {
     _settings.removeListener(_onSettingsChanged);
+    _readAloud?.removeListener(_followVoice);
+    _readAloud?.dispose();
     _pages.dispose();
     super.dispose();
   }
 
   void _onSettingsChanged() {
+    _configureVoice();
     final current = _index.isEmpty ? null : _index[_page];
     setState(_rebuildIndex);
     if (current != null) {
@@ -314,6 +423,17 @@ class _ReaderScreenState extends State<ReaderScreen> {
       context,
     ).push<Reference>(MaterialPageRoute(builder: (_) => const LibraryScreen()));
     if (result != null && mounted) _goTo(result);
+  }
+
+  /// The verse being read aloud, where it is on this page.
+  int? _speakingVerseOn(Reference chapter) {
+    final current = _readAloud?.current;
+    if (current == null ||
+        current.bookCode != chapter.bookCode ||
+        current.chapter != chapter.chapter) {
+      return null;
+    }
+    return current.verse;
   }
 
   /// A page's highlights with the selection laid over them, so a
@@ -604,6 +724,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         originalWords: _originalLanguages?.wordsFor(reference) ?? const [],
         onOriginal: () => _openOriginal(reference),
         onSelect: () => _onVerseLongPress(verse),
+        onListen: _canListen ? () => _listen(reference) : null,
         onShare: () => _startWith(verse, _shareSelection),
         onImage: () => _startWith(verse, _shareSelectionAsImage),
       ),
@@ -790,6 +911,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     onImage: _shareSelectionAsImage,
                     onHighlight: _highlightSelection,
                   )
+                : (_readAloud?.isActive ?? false)
+                ? _PlayerBar(
+                    voice: _voice,
+                    rate: _settings.speechRate,
+                    onSettings: _openVoiceSettings,
+                  )
                 : null,
             appBar: AppBar(
               titleSpacing: 12,
@@ -841,7 +968,12 @@ class _ReaderScreenState extends State<ReaderScreen> {
               ],
             ),
             body: AnimatedBuilder(
-              animation: Listenable.merge([_settings, _reading, _library]),
+              animation: Listenable.merge([
+                _settings,
+                _reading,
+                _library,
+                ?_readAloud,
+              ]),
               builder: (context, _) {
                 final comparison = _library.comparison;
                 return PageView.builder(
@@ -913,6 +1045,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       },
                       onStep: _step,
                       planCard: _planCardFor(reference),
+                      onListen: _canListen && comparison == null
+                          ? () => _listen(reference)
+                          : null,
+                      speakingVerse: _speakingVerseOn(reference),
                       hasPrevious: page > 0,
                       hasNext: page < _index.length - 1,
                     );
@@ -952,6 +1088,8 @@ class _ChapterPage extends StatefulWidget {
     required this.hasPrevious,
     required this.hasNext,
     this.planCard,
+    this.onListen,
+    this.speakingVerse,
     super.key,
   });
 
@@ -990,6 +1128,12 @@ class _ChapterPage extends StatefulWidget {
   /// Where the chapter is part of a reading plan, the card that ticks it
   /// off; it sits where the reader finishes the chapter.
   final Widget? planCard;
+
+  /// Starts reading the chapter aloud, where the platform can.
+  final VoidCallback? onListen;
+
+  /// The verse being read aloud, which is marked and kept in view.
+  final int? speakingVerse;
 
   @override
   State<_ChapterPage> createState() => _ChapterPageState();
@@ -1046,6 +1190,40 @@ class _ChapterPageState extends State<_ChapterPage>
     if (widget.scrollToVerse != oldWidget.scrollToVerse) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToVerse());
     }
+    final speaking = widget.speakingVerse;
+    if (speaking != null && speaking != oldWidget.speakingVerse) {
+      WidgetsBinding.instance.addPostFrameCallback(
+        (_) => _keepInView(speaking),
+      );
+    }
+  }
+
+  /// Follows the voice down the page, gently: the verse being read is
+  /// brought a third of the way down, not snapped to the top.
+  void _keepInView(int verse) {
+    if (!mounted) return;
+    final target = _anchorFor(verse)?.currentContext;
+    if (target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      duration: _reduceMotion
+          ? Duration.zero
+          : const Duration(milliseconds: 500),
+      curve: Curves.easeInOutCubic,
+      alignment: 0.3,
+    );
+  }
+
+  /// The highlights with the verse being read aloud laid over them.
+  Map<int, Color> get _highlightsNow {
+    final verse = widget.speakingVerse;
+    if (verse == null) return widget.highlights;
+    final tint = Theme.of(context).colorScheme.tertiary.withValues(alpha: 0.22);
+    final under = widget.highlights[verse];
+    return {
+      ...widget.highlights,
+      verse: under == null ? tint : Color.alphaBlend(tint, under),
+    };
   }
 
   @override
@@ -1226,7 +1404,7 @@ class _ChapterPageState extends State<_ChapterPage>
                 builder: (_, _) =>
                     build(_highlightsWith(marked, _flashStrength)),
               )
-            : build(widget.highlights);
+            : build(_highlightsNow);
         final key = i < _blockKeys.length ? _blockKeys[i] : null;
         children.add(
           key == null
@@ -1302,7 +1480,11 @@ class _ChapterPageState extends State<_ChapterPage>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          // Wraps rather than runs off a narrow phone: a long book name,
+          // its places and Listen do not always fit on one line.
+          Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            runSpacing: 4,
             children: [
               // Tapping the book's name opens its background note.
               InkWell(
@@ -1363,6 +1545,37 @@ class _ChapterPageState extends State<_ChapterPage>
                           places.length == 1
                               ? '1 PLACE'
                               : '${places.length} PLACES',
+                          style: theme.textTheme.labelMedium?.copyWith(
+                            color: theme.colorScheme.primary,
+                            letterSpacing: 1.2,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+              if (widget.onListen != null) ...[
+                const SizedBox(width: 10),
+                InkWell(
+                  onTap: widget.onListen,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 4,
+                      vertical: 2,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.headphones_rounded,
+                          size: 14,
+                          color: theme.colorScheme.primary,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'LISTEN',
                           style: theme.textTheme.labelMedium?.copyWith(
                             color: theme.colorScheme.primary,
                             letterSpacing: 1.2,
@@ -1752,6 +1965,7 @@ class _VerseSheet extends StatelessWidget {
     required this.onSelect,
     required this.onShare,
     required this.onImage,
+    this.onListen,
     this.omitted = false,
   });
 
@@ -1770,6 +1984,9 @@ class _VerseSheet extends StatelessWidget {
   final VoidCallback onSelect;
   final VoidCallback onShare;
   final VoidCallback onImage;
+
+  /// Reads aloud from this verse on, where the platform can.
+  final VoidCallback? onListen;
 
   int _passageCount() {
     var total = 0;
@@ -1910,6 +2127,15 @@ class _VerseSheet extends StatelessWidget {
                       icon: const Icon(Icons.copy_rounded),
                       label: const Text('Copy'),
                     ),
+                    if (text.isNotEmpty && onListen != null)
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          onListen!();
+                        },
+                        icon: const Icon(Icons.headphones_rounded),
+                        label: const Text('Listen from here'),
+                      ),
                     if (text.isNotEmpty) ...[
                       FilledButton.tonalIcon(
                         onPressed: () {
@@ -1995,6 +2221,209 @@ class _VerseSheet extends StatelessWidget {
     controller.dispose();
     if (note == null) return;
     reading.setNote(reference, note);
+  }
+}
+
+/// Reading aloud, along the bottom of the reader while it goes on: where
+/// it has got to, and the few controls a listener needs.
+class _PlayerBar extends StatelessWidget {
+  const _PlayerBar({
+    required this.voice,
+    required this.rate,
+    required this.onSettings,
+  });
+
+  final ReadAloud voice;
+  final double rate;
+  final VoidCallback onSettings;
+
+  /// "1×", "1.25×", "1.5×".
+  static String rateLabel(double rate) =>
+      '${rate.toStringAsFixed(2).replaceFirst(RegExp(r'\.?0+$'), '')}×';
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final current = voice.current;
+    final where = current == null
+        ? ''
+        : current.verse == null
+        ? ReadAloud.announcement(current).replaceAll('.', '')
+        : current.label;
+    return Material(
+      color: theme.colorScheme.surfaceContainer,
+      elevation: 3,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Stop reading aloud',
+                onPressed: voice.stop,
+                icon: const Icon(Icons.close_rounded),
+              ),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      where,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    Text(
+                      voice.isPlaying
+                          ? 'Reading aloud · ${rateLabel(rate)}'
+                          : 'Paused',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Previous verse',
+                onPressed: () => voice.skip(-1),
+                icon: const Icon(Icons.skip_previous_rounded),
+              ),
+              IconButton.filled(
+                tooltip: voice.isPlaying ? 'Pause' : 'Resume',
+                onPressed: voice.isPlaying ? voice.pause : voice.resume,
+                icon: Icon(
+                  voice.isPlaying
+                      ? Icons.pause_rounded
+                      : Icons.play_arrow_rounded,
+                ),
+              ),
+              IconButton(
+                tooltip: 'Next verse',
+                onPressed: () => voice.skip(1),
+                icon: const Icon(Icons.skip_next_rounded),
+              ),
+              IconButton(
+                tooltip: 'Speed and voice',
+                onPressed: onSettings,
+                icon: const Icon(Icons.tune_rounded),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// How fast, and in whose voice.
+class _VoiceSheet extends StatefulWidget {
+  const _VoiceSheet({
+    required this.settings,
+    required this.engine,
+    required this.language,
+  });
+
+  final Settings settings;
+  final SpeechEngine engine;
+  final String language;
+
+  static const List<double> rates = [0.75, 1.0, 1.25, 1.5, 2.0];
+
+  @override
+  State<_VoiceSheet> createState() => _VoiceSheetState();
+}
+
+class _VoiceSheetState extends State<_VoiceSheet> {
+  late final Future<List<SpeechVoice>> _voices = widget.engine
+      .voices(widget.language)
+      .catchError((Object _) => const <SpeechVoice>[]);
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final settings = widget.settings;
+    return AnimatedBuilder(
+      animation: settings,
+      builder: (context, _) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Speed', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                children: [
+                  for (final rate in _VoiceSheet.rates)
+                    ChoiceChip(
+                      label: Text(_PlayerBar.rateLabel(rate)),
+                      selected: settings.speechRate == rate,
+                      onSelected: (_) => settings.speechRate = rate,
+                    ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text('Voice', style: theme.textTheme.titleMedium),
+              const SizedBox(height: 4),
+              FutureBuilder<List<SpeechVoice>>(
+                future: _voices,
+                builder: (context, snapshot) {
+                  final voices = snapshot.data ?? const <SpeechVoice>[];
+                  if (snapshot.connectionState != ConnectionState.done) {
+                    return const Padding(
+                      padding: EdgeInsets.all(16),
+                      child: LinearProgressIndicator(),
+                    );
+                  }
+                  return ConstrainedBox(
+                    constraints: const BoxConstraints(maxHeight: 280),
+                    child: ListView(
+                      shrinkWrap: true,
+                      children: [
+                        _voiceTile(null, 'The device’s own choice', null),
+                        for (final voice in voices)
+                          _voiceTile(voice.name, voice.name, voice.locale),
+                        if (voices.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.all(8),
+                            child: Text(
+                              'This device offers no other voices for this '
+                              'translation’s language.',
+                              style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _voiceTile(String? name, String title, String? locale) {
+    final selected = widget.settings.speechVoice == name;
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: Icon(
+        selected
+            ? Icons.radio_button_checked_rounded
+            : Icons.radio_button_unchecked_rounded,
+      ),
+      title: Text(title),
+      subtitle: locale == null ? null : Text(locale),
+      onTap: () => widget.settings.speechVoice = name,
+    );
   }
 }
 

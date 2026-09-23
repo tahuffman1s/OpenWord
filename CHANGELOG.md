@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Read aloud.** *Listen*, beside the chapter's name, reads the chapter in
+  the device's own text-to-speech voice. Nothing is downloaded and nothing
+  leaves the device. It goes a verse at a time: the chapter is announced,
+  "Genesis, chapter 1", then each verse is said while it is tinted on the
+  page and brought into view, and at the end of the chapter the page turns
+  and it goes on. A verse's sheet has *Listen from here*.
+- **The controls a listener needs, and no more.** A bar along the bottom
+  says where it has got to, pauses and resumes, steps back a verse or on to
+  the next, and opens a sheet for the speed (0.75× to 2×) and the voice —
+  the translation's own region first, so the British edition can be heard
+  in a British voice. Both are remembered.
+- **It reads a plan day through.** Started on a chapter of today's reading,
+  it reads the rest of that day and stops there, and a plan chapter heard
+  from its first verse to its last is ticked off — someone listening cannot
+  reach the button at the end of the page.
+- The words are read as they are meant to be heard. Footnote markers,
+  headings and verse numbers are not read out, and the divine name printed
+  in capitals, LORD, is said as a word rather than spelled.
+
+### Notes
+- Reading aloud is made for the screen being on. With it off, the platform
+  may stop it; playing on reliably needs a media session with lock-screen
+  controls, which is a separate piece of work.
+- Linux has no text-to-speech in the plugin used, so *Listen* is not shown
+  there. A device with no voice for the translation's language says so
+  rather than falling silent.
+- `flutter_tts` is a new dependency. Android is told the app looks for a
+  text-to-speech engine, which it must be from Android 11 on; no permission
+  is asked for.
+
 ## 1.19.0
 
 ### Added

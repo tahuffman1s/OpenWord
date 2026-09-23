@@ -51,6 +51,8 @@ class Settings extends ChangeNotifier {
   static const _kLastCheck = 'lastUpdateCheck';
   static const _kSkippedUpdate = 'skippedUpdate';
   static const _kAnchorAnyway = 'anchorAnyway';
+  static const _kSpeechRate = 'speechRate';
+  static const _kSpeechVoice = 'speechVoice';
 
   /// Fallback palette seeds offered where the platform has no Material You
   /// palette of its own (desktop, web, older Android, iOS).
@@ -86,6 +88,22 @@ class Settings extends ChangeNotifier {
 
   double get lineHeight => _prefs.getDouble(_kLineHeight) ?? 1.6;
   set lineHeight(double value) => _write(_kLineHeight, value);
+
+  /// How fast reading aloud goes, as a multiple of the voice's normal pace.
+  double get speechRate => _prefs.getDouble(_kSpeechRate) ?? 1.0;
+  set speechRate(double value) => _write(_kSpeechRate, value);
+
+  /// The voice chosen for reading aloud, by the name the platform gives
+  /// it, or null for the platform's own choice for the language.
+  String? get speechVoice => _prefs.getString(_kSpeechVoice);
+  set speechVoice(String? value) {
+    if (value == null) {
+      _prefs.remove(_kSpeechVoice);
+      notifyListeners();
+    } else {
+      _write(_kSpeechVoice, value);
+    }
+  }
 
   ReadingFont get readingFont =>
       ReadingFont.values[_prefs.getInt(_kFont) ?? ReadingFont.serif.index];
