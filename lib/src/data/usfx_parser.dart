@@ -312,7 +312,7 @@ class UsfxParser {
     if (text.isEmpty) return;
     switch (kind) {
       case _CaptureKind.verseLabel:
-        if (_verse > 0 && text != '\$_verse') _labels[_verse] = text;
+        if (_verse > 0 && text != '$_verse') _labels[_verse] = text;
       case _CaptureKind.chapterLabel:
         _chapterLabel = text;
     }
@@ -372,6 +372,51 @@ class UsfxParser {
     _blockOpen = true;
   }
 
+  /// The divine name where an edition prints it in capitals rather than
+  /// marking it.
+  ///
+  /// eBible's USFX for the Berean Standard Bible and the British edition of
+  /// the World English Bible carries no `\nd` at all: the tetragrammaton
+  /// is the plain word `LORD` (and `GOD`, for "Lord GOD"), which is how the
+  /// translation tells it from "Lord" as a title, and without the marker
+  /// the reader cannot set it in small capitals. A capitalised `LORD` or
+  /// `GOD` is marked as the divine name — unless a neighbouring word is in
+  /// capitals too, because then it is an inscription set in capitals,
+  /// "KING OF KINGS AND LORD OF LORDS", and not the name at all. Text that
+  /// already marks the name is left as the edition wrote it.
+  static String markCapitalisedName(String text) {
+    if (text.contains(Markup.divineStart)) return text;
+    return text.replaceAllMapped(_capitalisedName, (match) {
+      final before = _lastWord.firstMatch(
+        Markup.strip(text.substring(0, match.start)),
+      );
+      final after = _firstWord.firstMatch(
+        Markup.strip(text.substring(match.end)),
+      );
+      if (_inCapitals(before?.group(1)) || _inCapitals(after?.group(1))) {
+        return match[0]!;
+      }
+      return '${Markup.divineStart}${match[0]}${Markup.divineEnd}';
+    });
+  }
+
+  static final RegExp _capitalisedName = RegExp(
+    r'(?<![\p{L}\p{M}])(?:LORD|GOD)(?![\p{L}\p{M}])',
+    unicode: true,
+  );
+  static final RegExp _lastWord = RegExp(r'(\p{L}+)\P{L}*$', unicode: true);
+  static final RegExp _firstWord = RegExp(r'^\P{L}*(\p{L}+)', unicode: true);
+
+  /// A word of two letters or more set wholly in capitals, other than the
+  /// name itself: "LORD GOD" is the name twice, not an inscription.
+  static bool _inCapitals(String? word) =>
+      word != null &&
+      word.length > 1 &&
+      word != 'LORD' &&
+      word != 'GOD' &&
+      word == word.toUpperCase() &&
+      word != word.toLowerCase();
+
   /// How major a heading is. `\ms` divides a book — "BOOK 1" of the
   /// Psalms — and `\s1`, `\s2`, `\s3` are the sections under it.
   ///
@@ -389,7 +434,7 @@ class UsfxParser {
   }
 
   static int? _trailingDigit(String marker) {
-    final digits = RegExp(r'(\d+)\$').firstMatch(marker);
+    final digits = RegExp(r'(\d+)$').firstMatch(marker);
     return digits == null ? null : int.tryParse(digits.group(1)!);
   }
 
@@ -403,9 +448,12 @@ class UsfxParser {
 
   void _flushSegment() {
     if (!_blockOpen) return;
-    final text = _text.toString().replaceAll(_repeatedSpaces, ' ').trim();
+    var text = _text.toString().replaceAll(_repeatedSpaces, ' ').trim();
     _text.clear();
     if (text.isEmpty) return;
+    if (BlockStyle.fromKey(_blockStyle).isVerseText) {
+      text = markCapitalisedName(text);
+    }
     _segments.add(
       VerseSegment(verse: _verse, startsVerse: _pendingVerseStart, text: text),
     );

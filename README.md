@@ -106,14 +106,16 @@ takes the USFX in whatever shape its publisher hands it over: eBible.org's
 The typography the reader can draw — heading levels, the divine name in
 small capitals, tables, lists, acrostic letters, speakers, printed verse
 labels, omitted verses — is read out of the USFX at build time, so a
-translation only gains it when it is rebuilt. Fetch the sources and run the
-tool:
+translation only gains it when it is rebuilt. All three come from eBible.org,
+under the names eBible gives them; the tool knows `eng-webbe` is
+`eng-gb-webbe` and `engbsb` is `eng-bsb`, and finds the USFX among the other
+files in each zip:
 
 ```bash
 mkdir -p /tmp/usfx && cd /tmp/usfx
 curl -O https://ebible.org/Scriptures/eng-web_usfx.zip
-curl -O https://ebible.org/Scriptures/engwebbe_usfx.zip   # rename to eng-gb-webbe_usfx.zip
-# the Berean Standard Bible comes from https://berean.bible/downloads.htm
+curl -O https://ebible.org/Scriptures/eng-webbe_usfx.zip
+curl -O https://ebible.org/Scriptures/engbsb_usfx.zip
 cd /path/to/OpenWord && dart run tool/build_assets.dart /tmp/usfx
 ```
 
@@ -180,7 +182,7 @@ member per book. **The outline is the point.** It carries which books,
 how many chapters, and how long each chapter is — so the book list, the
 chapter grid and the verse grid are all drawn without unpacking a word, and
 a book is found and unpacked on its own when it is actually read. Opening
-the World English Bible touches none of its 84 books; reading John unpacks
+the World English Bible touches none of its 80 books; reading John unpacks
 John.
 
 Per-book compression costs 4% against one stream over the whole Bible

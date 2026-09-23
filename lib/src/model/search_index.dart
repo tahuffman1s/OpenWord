@@ -8,7 +8,7 @@ import 'byte_io.dart';
 /// Searching used to mean unpacking every book and reading every verse:
 /// 217 ms for the World English Bible, on whatever thread asked. Most words
 /// are nowhere near that widespread — the median word of the WEB is in two
-/// of its eighty-four books — so this says which books a word is in, and a
+/// of its eighty books — so this says which books a word is in, and a
 /// search reads only those.
 ///
 /// It is a filter and never an answer. The words are indexed, the query may

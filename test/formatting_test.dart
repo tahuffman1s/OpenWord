@@ -70,6 +70,54 @@ void main() {
     test('and the markers never reach the reader', () {
       expect(chapter.verseText(1), 'Blessed is the man who fears Yahweh.');
     });
+
+    group('where an edition prints it in capitals and marks nothing', () {
+      String mark(String text) => UsfxParser.markCapitalisedName(text);
+      const d = Markup.divineStart;
+      const e = Markup.divineEnd;
+
+      test('LORD and GOD are marked', () {
+        expect(
+          mark('The LORD is my shepherd.'),
+          'The ${d}LORD$e is my shepherd.',
+        );
+        expect(
+          mark('O Lord GOD, and O LORD’s house'),
+          'O Lord ${d}GOD$e, and O ${d}LORD$e’s house',
+        );
+        expect(mark('the LORD GOD'), 'the ${d}LORD$e ${d}GOD$e');
+      });
+
+      test('"Lord" as a title, and words that contain the name, are not', () {
+        expect(mark('The Lord said to my Lord'), 'The Lord said to my Lord');
+        expect(mark('LORDS and GODLY'), 'LORDS and GODLY');
+      });
+
+      test('an inscription set in capitals is not the name', () {
+        const title = 'KING OF KINGS AND LORD OF LORDS';
+        expect(mark(title), title);
+        expect(mark('HOLY TO THE LORD'), 'HOLY TO THE LORD');
+      });
+
+      test('text that already marks the name is left alone', () {
+        final marked = 'the ${d}Lord$e and the LORD';
+        expect(mark(marked), marked);
+      });
+
+      test('is applied to Scripture, not to headings', () {
+        final psalm = UsfxParser.parse(
+          '<usfx><book id="PSA"><c id="1"/><s>The LORD Our Shepherd</s>'
+          '<q level="1"><v id="1"/>The LORD is my shepherd.</q></book></usfx>',
+          testTranslation,
+        ).bookByCode('PSA')!.chapter(1)!;
+        expect(
+          psalm.blocks.first.segments.single.text,
+          'The LORD Our Shepherd',
+        );
+        expect(psalm.blocks.last.segments.single.text, contains(d));
+        expect(psalm.verseText(1), 'The LORD is my shepherd.');
+      });
+    });
   });
 
   group('a quotation from Scripture', () {
@@ -98,6 +146,20 @@ void main() {
       expect(headings.first.segments.first.text, 'BOOK 1');
       // Alignment in the file says what the source said; a book division
       // is centred by the reader whatever the source claims.
+    });
+
+    test('a depth written into the marker is read', () {
+      final headings =
+          UsfxParser.parse(
+                '<usfx><book id="GEN"><c id="1"/><s sfm="s1">One</s>'
+                '<s sfm="s2">Two</s><p><v id="1"/>Text.</p></book></usfx>',
+                testTranslation,
+              )
+              .bookByCode('GEN')!
+              .chapter(1)!
+              .blocks
+              .where((block) => block.style == BlockStyle.heading);
+      expect(headings.map((h) => h.level), [2, 3]);
     });
 
     test('an acrostic letter is its own style', () {
@@ -183,6 +245,15 @@ void main() {
     test('a printed number can differ from the stored one', () {
       expect(chapter.labelFor(5), '5-6');
       expect(chapter.labelFor(4), '4');
+    });
+
+    test('a printed number that is just the number is not a label', () {
+      final plain = UsfxParser.parse(
+        '<usfx><book id="GEN"><c id="1"/>'
+        '<p><v id="1"/><vp>1</vp>In the beginning.</p></book></usfx>',
+        testTranslation,
+      ).bookByCode('GEN')!.chapter(1)!;
+      expect(plain.labels, isEmpty);
     });
 
     test('a verse left out on purpose is recorded as such', () {

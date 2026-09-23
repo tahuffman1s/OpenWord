@@ -1,5 +1,56 @@
 # Changelog
 
+## 1.17.0
+
+### Changed
+- **The three translations that ship are rebuilt, and have the typography
+  at last.** Everything 1.11.0 taught the format to carry is read out of
+  the USFX when a translation is built, and the bundled files had been
+  built before any of it existed — so in all three it read zero. Rebuilt
+  from eBible.org's current sources:
+  - **Berean Standard Bible:** 3,102 section headings now carry their
+    depth (5 book divisions, 3,017 sections, 80 subsections), the 22
+    acrostic letters of Psalm 119 are their own style, 1,537 list items
+    are lists rather than paragraphs, and 261 lines keep the centred or
+    right-set alignment the translation gives them.
+  - **World English Bible and its British edition:** the 33 speaker
+    labels of the Song of Songs, 72 list items, levelled book divisions,
+    and 6 paragraphs that carry on across a break instead of restarting.
+  - **The divine name is set in small capitals in the BSB and the
+    WEBBE** — 6,790 and 6,879 of them. eBible's USFX for both marks it
+    nowhere: the tetragrammaton is simply the word `LORD`, or `GOD` in
+    "Lord GOD", printed in capitals. A capitalised `LORD` or `GOD` in
+    Scripture is now read as the name — except beside another word in
+    capitals, because "HOLY TO THE LORD" and "KING OF KINGS AND LORD OF
+    LORDS" are inscriptions set in capitals, not the name. Those are the
+    only ones left alone. The WEB writes the name as "Yahweh" and is
+    unaffected.
+- **The World English Bible is the current revision.** eBible has revised
+  the WEB's wording since the bundled copy was built — "Let's make man in
+  our image", not "Let us make man" — and 15,706 verses read differently.
+  Its deuterocanon is arranged as the British edition's already was: the
+  Letter of Jeremiah is Baruch 6, and Susanna, Bel and the Song of the
+  Three are in Daniel (Greek) rather than books of their own. Highlights,
+  bookmarks and notes on those four books under the WEB no longer have a
+  verse to sit on. The current source no longer marks the translators'
+  supplied words, so the WEB's 1,050 italic additions are gone with it —
+  that is the edition's choice, not something lost in the build. The BSB's
+  text is unchanged, word for word.
+
+### Fixed
+- **`tool/build_assets.dart` reads an eBible zip.** It took "the one XML
+  inside it", and there are five — the first is `BookNames.xml` — and it
+  decoded the bytes as Latin-1, which would have turned every curly quote
+  into three characters. It takes the member named for the USFX and
+  decodes it as UTF-8, and knows eBible's own names for the British WEB
+  and the BSB, so the three downloads build as they arrive.
+- A heading depth written into the marker, `s2` rather than `s` with a
+  `level`, was never read: the pattern looked for a literal `$` after the
+  digit.
+- A printed verse number that is just the verse's own number was stored as
+  a label anyway, because the comparison was against the literal text
+  `$_verse`.
+
 ## 1.16.0
 
 ### Added

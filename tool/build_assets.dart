@@ -7,6 +7,7 @@
 // `eng-web_usfx.zip` holding `eng-web_usfx.xml`, so the zip, the xml inside
 // it, and a renamed `eng-web.usfx.xml` are all read without unpacking or
 // renaming anything by hand. The output goes to assets/bible/.
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:archive/archive.dart';
@@ -21,13 +22,16 @@ import 'package:openword/src/model/bib_file.dart';
 /// right there under the name its publisher gave it.
 String? _usfxFor(Directory source, String id) {
   if (!source.existsSync()) return null;
+  final ids = [id, ...?_publisherIds[id]];
   final wanted = [
-    '$id.usfx.xml',
-    '${id}_usfx.xml',
-    '$id.xml',
-    '$id.usfx.zip',
-    '${id}_usfx.zip',
-    '$id.zip',
+    for (final id in ids) ...[
+      '$id.usfx.xml',
+      '${id}_usfx.xml',
+      '$id.xml',
+      '$id.usfx.zip',
+      '${id}_usfx.zip',
+      '$id.zip',
+    ],
   ];
   final byName = <String, File>{};
   for (final entry in source.listSync()) {
@@ -39,16 +43,33 @@ String? _usfxFor(Directory source, String id) {
     final file = byName[name.toLowerCase()];
     if (file == null) continue;
     if (!name.endsWith('.zip')) return file.readAsStringSync();
-    // The zip an eBible download arrives as: take the one XML inside it.
+    // The zip an eBible download arrives as. It is not one XML but eight
+    // files, BookNames.xml and the metadata among them, so the USFX is the
+    // member named for it; failing that, the largest XML, which a whole
+    // Bible always is.
     final archive = ZipDecoder().decodeBytes(file.readAsBytesSync());
-    for (final member in archive.files) {
-      if (member.isFile && member.name.toLowerCase().endsWith('.xml')) {
-        return String.fromCharCodes(member.content as List<int>);
-      }
-    }
+    final xml = [
+      for (final member in archive.files)
+        if (member.isFile && member.name.toLowerCase().endsWith('.xml')) member,
+    ];
+    if (xml.isEmpty) continue;
+    final usfx =
+        xml
+            .where((m) => m.name.toLowerCase().endsWith('usfx.xml'))
+            .firstOrNull ??
+        (xml..sort((a, b) => b.size.compareTo(a.size))).first;
+    return utf8.decode(usfx.content as List<int>);
   }
   return null;
 }
+
+/// What a publisher calls a translation where that is not this app's id.
+/// eBible.org files the British edition as `eng-webbe` and the Berean
+/// Standard Bible as `engbsb`.
+const _publisherIds = {
+  'eng-gb-webbe': ['eng-webbe', 'engwebbe'],
+  'eng-bsb': ['engbsb'],
+};
 
 void main(List<String> args) {
   final source = Directory(args.isEmpty ? '.' : args.first);
