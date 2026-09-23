@@ -283,10 +283,11 @@ class SettingsScreen extends StatelessWidget {
                 title: const Text('Copy a backup'),
                 subtitle: Text(
                   '${reading.all.length} '
-                  '${reading.all.length == 1 ? 'entry' : 'entries'} as JSON on '
-                  'the clipboard',
+                  '${reading.all.length == 1 ? 'entry' : 'entries'}'
+                  '${reading.plans.isEmpty ? '' : ' and your reading plans'}'
+                  ' as JSON on the clipboard',
                 ),
-                onTap: reading.all.isEmpty
+                onTap: !reading.hasBackupContent
                     ? null
                     : () async {
                         await Clipboard.setData(

@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Reading plans.** The reader's toolbar has a plan button; pick a plan,
+  tap *Start today*, and you are on day 1. At the end of every chapter in
+  the day's reading is one button — *Done — next: Matthew 2* — that ticks
+  it off and opens the next, and the last one says the day is done. Six
+  plans: the Gospels in 30 days (offered first to someone new to this),
+  the Bible in a year, the Old and New Testament together, the New
+  Testament in 90 days, the Psalms in a month, and Proverbs in a month.
+- **Built on what makes people give up.** The commonest reason a yearly
+  plan is abandoned is falling behind: the missed days pile up and catching
+  up looks impossible. Here a day is numbered, not dated, and "today" is
+  simply the first day with anything left, so ten days away leaves you on
+  the same day, not ten behind. There are no streaks. Two days or more
+  behind the pace you started at — a single missed day makes no
+  measurable difference to a habit — the plan says so once and offers
+  *Pick up from today*, which moves the pace and, like YouVersion's *Catch
+  Me Up*, marks nothing read that was not. The toolbar's dot while a
+  reading is due is the theme's colour, not an alarm's red.
+- **Days are even in reading, not in chapters.** Psalm 117 has two verses
+  and Psalm 119 has 176, so a plan that gives each day the same number of
+  chapters gives some days ten times the reading of others. Plans are
+  split on the English verse counts, so the Bible in a year is about 85
+  verses — ten minutes — every day, no chapter is ever split, no day is
+  empty, and every translation has the same days. The Old and New
+  Testament plan weaves the Psalms through the New Testament, the way
+  M'Cheyne's plan reads them, because the New Testament alone has only
+  260 chapters to spread over 365 days.
+- A plan can be ticked off passage by passage from its page, every day of
+  it can be seen and opened, it can be started over or removed (with
+  Undo), and it goes into the backup with everything else. A chapter an
+  imported translation does not have is said to be missing rather than
+  offered.
+
 ## 1.17.0
 
 ### Changed

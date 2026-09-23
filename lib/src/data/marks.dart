@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../model/bible.dart';
 import '../model/book_meta.dart';
+import '../model/reading_plan.dart';
+import 'plan_progress.dart';
 
 /// Everything a reader has attached to one verse: a bookmark, a highlight
 /// colour, a note, or any combination.
@@ -102,7 +104,7 @@ class ImportResult {
 
 /// Marks, reading position and history, persisted with [SharedPreferences].
 class ReadingStore extends ChangeNotifier {
-  ReadingStore._(this._prefs) {
+  ReadingStore._(this._prefs, this._clock) {
     _load();
   }
 
@@ -110,6 +112,7 @@ class ReadingStore extends ChangeNotifier {
   static const _kLegacyBookmarks = 'bookmarks';
   static const _kPosition = 'lastPosition';
   static const _kHistory = 'history';
+  static const _kPlans = 'plans';
   static const _historyLimit = 20;
 
   /// Number of colours in the highlight palette.
@@ -119,8 +122,19 @@ class ReadingStore extends ChangeNotifier {
   final Map<String, Mark> _marks = {};
   List<Reference> _history = [];
 
-  static Future<ReadingStore> load() async =>
-      ReadingStore._(await SharedPreferences.getInstance());
+  /// Reading plans in progress, in the order they were started.
+  final Map<String, PlanProgress> _plans = {};
+
+  /// What "today" is. A test sets it; the app reads the clock.
+  final DateTime Function() _clock;
+
+  static Future<ReadingStore> load({DateTime Function()? clock}) async =>
+      ReadingStore._(
+        await SharedPreferences.getInstance(),
+        clock ?? DateTime.now,
+      );
+
+  DateTime get today => _clock();
 
   void _load() {
     final raw = _prefs.getString(_kMarks);
@@ -133,6 +147,22 @@ class ReadingStore extends ChangeNotifier {
       for (final entry in _prefs.getStringList(_kHistory) ?? const <String>[])
         if (Reference.decode(entry) case final reference?) reference,
     ];
+    final plans = _prefs.getString(_kPlans);
+    if (plans != null) _decodePlansInto(plans, _plans);
+  }
+
+  static int _decodePlansInto(Object? raw, Map<String, PlanProgress> into) {
+    final decoded = raw is String ? jsonDecode(raw) : raw;
+    if (decoded is! List) return 0;
+    var count = 0;
+    for (final entry in decoded) {
+      if (entry is! Map) continue;
+      final progress = PlanProgress.fromJson(entry.cast<String, Object?>());
+      if (progress == null) continue;
+      into[progress.plan.id] = progress;
+      count++;
+    }
+    return count;
   }
 
   /// Version 1.0 stored plain bookmarks under another key.
@@ -298,6 +328,83 @@ class ReadingStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- reading plans ---------------------------------------------------
+
+  /// Plans in progress, finished ones included until the reader removes
+  /// them, in the order they were started.
+  List<PlanProgress> get plans => List.unmodifiable(_plans.values);
+
+  PlanProgress? progressFor(String planId) => _plans[planId];
+
+  /// Starts a plan with day 1 today. Starting one already under way starts
+  /// it over.
+  void startPlan(ReadingPlan plan) {
+    _plans.remove(plan.id);
+    _plans[plan.id] = PlanProgress(
+      plan: plan,
+      startedOn: PlanProgress.dateOnly(today),
+      done: const {},
+      updated: DateTime.now(),
+    );
+    _persistPlans();
+  }
+
+  void stopPlan(String planId) {
+    if (_plans.remove(planId) != null) _persistPlans();
+  }
+
+  /// Puts back a plan just removed, ticks and all: what Undo does.
+  void restorePlan(PlanProgress progress) {
+    _plans[progress.plan.id] = progress;
+    _persistPlans();
+  }
+
+  /// Marks one chapter of a plan read or unread.
+  void setPlanSlot(String planId, int slot, {required bool read}) {
+    final progress = _plans[planId];
+    if (progress == null || slot < 0 || slot >= progress.plan.slotCount) {
+      return;
+    }
+    if (progress.isRead(slot) == read) return;
+    final done = {...progress.done};
+    read ? done.add(slot) : done.remove(slot);
+    _plans[planId] = progress.copyWith(done: done);
+    _persistPlans();
+  }
+
+  /// Marks every chapter of a day read or unread.
+  void setPlanDay(String planId, PlanDay day, {required bool read}) {
+    final progress = _plans[planId];
+    if (progress == null) return;
+    final done = {...progress.done};
+    for (final slot in day.slots) {
+      read ? done.add(slot) : done.remove(slot);
+    }
+    _plans[planId] = progress.copyWith(done: done);
+    _persistPlans();
+  }
+
+  /// Moves a plan's pace so its current day is today, the way a reader who
+  /// has been away would want. Nothing is marked read that was not.
+  void pickUpPlanToday(String planId) {
+    final progress = _plans[planId];
+    if (progress == null) return;
+    _plans[planId] = progress.pickedUpOn(today);
+    _persistPlans();
+  }
+
+  /// Whether any plan has a reading due today that is not yet read.
+  bool get hasPlanReadingDue =>
+      _plans.values.any((progress) => progress.hasReadingDueOn(today));
+
+  void _persistPlans() {
+    _prefs.setString(
+      _kPlans,
+      jsonEncode([for (final progress in _plans.values) progress.toJson()]),
+    );
+    notifyListeners();
+  }
+
   // --- position --------------------------------------------------------
 
   /// Where the reader was last looking, used to resume on launch.
@@ -345,19 +452,47 @@ class ReadingStore extends ChangeNotifier {
     'exported': DateTime.now().toIso8601String(),
     'position': lastPosition?.encode(),
     'marks': [for (final mark in _marks.values) mark.toJson()],
+    if (_plans.isNotEmpty)
+      'plans': [for (final progress in _plans.values) progress.toJson()],
   });
+
+  /// Whether there is anything a backup would hold.
+  bool get hasBackupContent => _marks.isNotEmpty || _plans.isNotEmpty;
 
   /// Merges exported JSON back in, keeping whichever copy of a verse was
   /// touched more recently. Existing marks are never dropped.
+  ///
+  /// A reading plan is merged the same way: the copy touched more recently
+  /// wins, since a plan's ticks only make sense together.
   ImportResult import(String raw) {
     final incoming = <String, Mark>{};
+    final incomingPlans = <String, PlanProgress>{};
     try {
-      if (_decodeInto(raw, incoming) == 0) return const ImportResult.failed();
+      final marks = _decodeInto(raw, incoming);
+      final decoded = jsonDecode(raw);
+      final plans = decoded is Map
+          ? _decodePlansInto(decoded['plans'], incomingPlans)
+          : 0;
+      if (marks == 0 && plans == 0) return const ImportResult.failed();
     } on Object {
       return const ImportResult.failed();
     }
     var added = 0;
     var updated = 0;
+    var plansChanged = false;
+    for (final progress in incomingPlans.values) {
+      final existing = _plans[progress.plan.id];
+      if (existing == null) {
+        _plans[progress.plan.id] = progress;
+        added++;
+        plansChanged = true;
+      } else if (progress.updated.isAfter(existing.updated)) {
+        _plans[progress.plan.id] = progress;
+        updated++;
+        plansChanged = true;
+      }
+    }
+    if (plansChanged) _persistPlans();
     for (final mark in incoming.values) {
       final existing = _marks[mark.key];
       if (existing == null) {

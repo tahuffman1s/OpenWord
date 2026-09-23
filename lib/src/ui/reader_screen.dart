@@ -11,11 +11,13 @@ import '../data/book_intros.dart';
 import '../data/cross_references.dart';
 import '../data/originals.dart';
 import '../data/marks.dart';
+import '../data/plan_progress.dart';
 import '../data/reference_search.dart';
 import '../data/settings.dart';
 import '../data/updates.dart';
 import '../model/bible.dart';
 import '../model/book_meta.dart';
+import '../model/reading_plan.dart';
 import '../model/strongs_codec.dart';
 import '../model/xref_codec.dart';
 import 'book_sheet.dart';
@@ -27,6 +29,7 @@ import 'update_sheet.dart';
 import 'display_sheet.dart';
 import 'library_screen.dart';
 import 'navigator_sheet.dart';
+import 'plans_screen.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
 import 'theme.dart';
@@ -55,6 +58,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
 
   bool _restored = false;
   Bible? _matcherFor;
+
+  /// The plan day the reader was last sent to read, so the end of each of
+  /// its chapters can offer to tick it off — and keep offering Undo after
+  /// the day is finished and the plan has moved on to the next.
+  PlanReading? _planFocus;
 
   // Held directly rather than looked up on demand, so they are still
   // reachable from dispose().
@@ -298,6 +306,107 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (result != null && mounted) _goTo(result);
   }
 
+  Future<void> _openPlans() async {
+    final result = await Navigator.of(
+      context,
+    ).push<PlanReading>(MaterialPageRoute(builder: (_) => const PlansScreen()));
+    if (result == null || !mounted) return;
+    setState(() => _planFocus = result);
+    if (hasChapter(_bible, result.chapter)) {
+      _goTo(result.chapter);
+    }
+  }
+
+  /// Where [chapter] falls in a plan the reader is following: the day they
+  /// were sent to first, then each plan's current day.
+  ({PlanProgress progress, PlanDay day, int slot})? _planSlotFor(
+    Reference chapter,
+  ) {
+    final candidates = <(PlanProgress, PlanDay)>[];
+    final focus = _planFocus;
+    if (focus != null) {
+      final progress = _reading.progressFor(focus.planId);
+      if (progress != null &&
+          focus.day >= 1 &&
+          focus.day <= progress.plan.length) {
+        candidates.add((progress, progress.plan.days[focus.day - 1]));
+      }
+    }
+    for (final progress in _reading.plans) {
+      final day = progress.currentDay;
+      if (day != null) candidates.add((progress, day));
+    }
+    for (final (progress, day) in candidates) {
+      for (var i = 0; i < day.slotCount; i++) {
+        final entry = day.chapters[i];
+        if (entry.bookCode == chapter.bookCode &&
+            entry.chapter == chapter.chapter) {
+          return (progress: progress, day: day, slot: day.firstSlot + i);
+        }
+      }
+    }
+    return null;
+  }
+
+  /// The next chapter of the day still to read after [slot], skipping any
+  /// this translation does not have.
+  Reference? _nextInDay(PlanProgress progress, PlanDay day, int slot) {
+    for (var i = 0; i < day.slotCount; i++) {
+      final candidate = day.firstSlot + i;
+      if (candidate == slot || progress.isRead(candidate)) continue;
+      final chapter = day.chapters[i];
+      if (hasChapter(_bible, chapter)) return chapter;
+    }
+    return null;
+  }
+
+  Widget? _planCardFor(Reference chapter) {
+    final hit = _planSlotFor(chapter);
+    if (hit == null) return null;
+    final (:progress, :day, :slot) = hit;
+    final next = _nextInDay(progress, day, slot);
+    final plan = progress.plan;
+    return PlanChapterCard(
+      planName: plan.name,
+      day: day.number,
+      read: progress.isRead(slot),
+      nextLabel: next == null ? null : Passage.labelFor(next),
+      onDone: () {
+        _reading.setPlanSlot(plan.id, slot, read: true);
+        _planFocus = PlanReading(
+          planId: plan.id,
+          day: day.number,
+          chapter: chapter,
+        );
+        if (next != null) {
+          _goTo(next);
+          return;
+        }
+        final after = _reading.progressFor(plan.id);
+        final finishedDay = after != null && after.isDayRead(day);
+        if (!finishedDay) {
+          // Everything else in the day is in a book this translation
+          // lacks; the plan page says so.
+          setState(() {});
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              after.isComplete
+                  ? 'You finished ${plan.name}. Well done.'
+                  : 'Day ${day.number} done. That’s today’s reading.',
+            ),
+            action: SnackBarAction(label: 'Plans', onPressed: _openPlans),
+          ),
+        );
+        setState(() {});
+      },
+      onUndo: () => _reading.setPlanSlot(plan.id, slot, read: false),
+      onNext: next == null ? null : () => _goTo(next),
+    );
+  }
+
   void _openDisplay() {
     showModalBottomSheet<void>(
       context: context,
@@ -490,6 +599,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
         const SingleActivator(LogicalKeyboardKey.pageUp): () => _step(-1),
         const SingleActivator(LogicalKeyboardKey.keyG): _openNavigator,
         const SingleActivator(LogicalKeyboardKey.slash): _openSearch,
+        const SingleActivator(LogicalKeyboardKey.keyP): _openPlans,
       },
       child: Focus(
         autofocus: true,
@@ -506,6 +616,23 @@ class _ReaderScreenState extends State<ReaderScreen> {
                 icon: const Icon(Icons.search_rounded),
                 tooltip: 'Search (/)',
                 onPressed: _openSearch,
+              ),
+              AnimatedBuilder(
+                animation: _reading,
+                builder: (context, _) => IconButton(
+                  // A dot while today's reading in a plan is still to do;
+                  // nothing louder than that.
+                  icon: Badge(
+                    isLabelVisible: _reading.hasPlanReadingDue,
+                    smallSize: 8,
+                    // The theme's colour, not the error red a badge
+                    // defaults to: a reading waiting is not a fault.
+                    backgroundColor: theme.colorScheme.primary,
+                    child: const Icon(Icons.event_note_rounded),
+                  ),
+                  tooltip: 'Reading plans (P)',
+                  onPressed: _openPlans,
+                ),
               ),
               IconButton(
                 icon: const Icon(Icons.bookmarks_rounded),
@@ -590,6 +717,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       );
                     },
                     onStep: _step,
+                    planCard: _planCardFor(reference),
                     hasPrevious: page > 0,
                     hasNext: page < _index.length - 1,
                   );
@@ -626,6 +754,7 @@ class _ChapterPage extends StatefulWidget {
     required this.onStep,
     required this.hasPrevious,
     required this.hasNext,
+    this.planCard,
     super.key,
   });
 
@@ -659,6 +788,10 @@ class _ChapterPage extends StatefulWidget {
   final ValueChanged<int> onStep;
   final bool hasPrevious;
   final bool hasNext;
+
+  /// Where the chapter is part of a reading plan, the card that ticks it
+  /// off; it sits where the reader finishes the chapter.
+  final Widget? planCard;
 
   @override
   State<_ChapterPage> createState() => _ChapterPageState();
@@ -905,6 +1038,20 @@ class _ChapterPageState extends State<_ChapterPage>
         // paragraph opening it is set flush like the chapter's first.
         isFirst = !block.style.isVerseText;
       }
+    }
+
+    if (widget.planCard != null) {
+      children.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 28),
+          // The card is the app talking, not the text, so it keeps the
+          // device's direction even under a right-to-left translation.
+          child: Directionality(
+            textDirection: Directionality.of(this.context),
+            child: widget.planCard!,
+          ),
+        ),
+      );
     }
 
     children.add(
@@ -1180,6 +1327,102 @@ class _ChapterPageState extends State<_ChapterPage>
           style: primary
               ? style.body
               : style.body.copyWith(color: theme.colorScheme.onSurfaceVariant),
+        ),
+      ),
+    );
+  }
+}
+
+/// The end of a chapter that belongs to a plan: one tap marks it read and
+/// goes on to the next chapter of the day.
+class PlanChapterCard extends StatelessWidget {
+  const PlanChapterCard({
+    required this.planName,
+    required this.day,
+    required this.read,
+    required this.nextLabel,
+    required this.onDone,
+    required this.onUndo,
+    required this.onNext,
+    super.key,
+  });
+
+  final String planName;
+  final int day;
+  final bool read;
+
+  /// The next chapter of the day still to read, or null when this is the
+  /// last.
+  final String? nextLabel;
+  final VoidCallback onDone;
+  final VoidCallback onUndo;
+  final VoidCallback? onNext;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Card.filled(
+      margin: EdgeInsets.zero,
+      color: theme.colorScheme.secondaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(
+                  read ? Icons.check_circle_rounded : Icons.event_note_rounded,
+                  size: 18,
+                  color: theme.colorScheme.onSecondaryContainer,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '$planName · day $day',
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: theme.colorScheme.onSecondaryContainer,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            if (!read)
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.icon(
+                  onPressed: onDone,
+                  icon: const Icon(Icons.check_rounded),
+                  label: Text(
+                    nextLabel == null
+                        ? 'Done — that’s day $day'
+                        : 'Done — next: $nextLabel',
+                  ),
+                ),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Read',
+                      style: theme.textTheme.bodyLarge?.copyWith(
+                        color: theme.colorScheme.onSecondaryContainer,
+                      ),
+                    ),
+                  ),
+                  TextButton(onPressed: onUndo, child: const Text('Undo')),
+                  if (onNext != null) ...[
+                    const SizedBox(width: 4),
+                    FilledButton(
+                      onPressed: onNext,
+                      child: Text('Next: $nextLabel'),
+                    ),
+                  ],
+                ],
+              ),
+          ],
         ),
       ),
     );

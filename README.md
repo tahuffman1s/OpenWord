@@ -57,6 +57,14 @@ no network entitlement.
   Treasury of Scripture Knowledge, grouped under the phrase that prompted
   each one and carrying the words they point at, so the list reads without
   leaving it. Tap one to go there. Bundled, like everything else.
+- **Reading plans that wait for you.** Six plans, from the Gospels in 30
+  days to the whole Bible in a year, with the Old and New Testament side by
+  side or Psalms and Proverbs by the month. Days are even in length rather
+  than in chapters, and are numbered rather than dated, so a plan starts
+  whenever you start it and a missed day is still there tomorrow instead of
+  piling up. The end of each chapter in today's reading has one button:
+  *Done — next: Matthew 2*. Fall two days behind and the plan says so once,
+  kindly, with *Pick up from today*; it never marks anything read for you.
 - **Your library** in one place: bookmarks, highlights, notes and the chapters
   you have been reading, each a tap away from the text.
 - **Search** the whole Bible, one testament or the book you are in, with an
