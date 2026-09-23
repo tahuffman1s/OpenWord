@@ -37,6 +37,7 @@ dependencies:
   file_picker: ^13.1.0
   # Where imported translations are kept — the app's own documents directory.
   path_provider: ^2.1.6
+  share_plus: ^13.3.0
 
 dev_dependencies:
   flutter_test:

@@ -57,6 +57,13 @@ no network entitlement.
   Treasury of Scripture Knowledge, grouped under the phrase that prompted
   each one and carrying the words they point at, so the list reads without
   leaving it. Tap one to go there. Bundled, like everything else.
+- **Select several verses and share them.** Hold a verse, then tap others
+  to add them; a bar along the bottom cites the selection the way a printed
+  Bible would — *John 3:16–18, 20* — and copies it, shares it, highlights it
+  all at once, or makes a picture of it. The picture is a 1080 × 1350 card in
+  one of four styles, with the words, the reference and the translation,
+  shared through the system share sheet (saved as a file on Linux, which has
+  none). A single verse's sheet shares it in one tap too.
 - **Reading plans that wait for you.** Six plans, from the Gospels in 30
   days to the whole Bible in a year, with the Old and New Testament side by
   side or Psalms and Proverbs by the month. Days are even in length rather

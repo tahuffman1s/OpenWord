@@ -99,6 +99,7 @@ class ScriptureBlock extends StatefulWidget {
     required this.highlights,
     required this.flagged,
     required this.isFirst,
+    this.onVerseLongPress,
     this.matcher,
     this.onReferenceTap,
     this.labelFor,
@@ -110,6 +111,10 @@ class ScriptureBlock extends StatefulWidget {
 
   /// Called when any part of a verse is tapped.
   final ValueChanged<int> onVerseTap;
+
+  /// Called when any part of a verse is held: how a selection of several
+  /// verses begins.
+  final ValueChanged<int>? onVerseLongPress;
 
   /// Called with the chapter-level note index behind a footnote marker.
   final ValueChanged<int> onNoteTap;
@@ -151,7 +156,9 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
 
   TapGestureRecognizer _recognizerFor(int verse) =>
       _recognizers.putIfAbsent(verse, () {
-        return TapGestureRecognizer()..onTap = () => widget.onVerseTap(verse);
+        return _VerseGestureRecognizer(
+          onLongPress: () => widget.onVerseLongPress?.call(verse),
+        )..onTap = () => widget.onVerseTap(verse);
       });
 
   @override
@@ -350,6 +357,9 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
               top: fontSize * ((style.body.height ?? 1.4) - 1) / 2,
               child: GestureDetector(
                 onTap: () => widget.onVerseTap(first.verse),
+                onLongPress: widget.onVerseLongPress == null
+                    ? null
+                    : () => widget.onVerseLongPress!(first.verse),
                 child: Text(_label(first.verse), style: style.verseNumber),
               ),
             ),
@@ -427,6 +437,9 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
           alignment: PlaceholderAlignment.top,
           child: GestureDetector(
             onTap: () => widget.onVerseTap(segment.verse),
+            onLongPress: widget.onVerseLongPress == null
+                ? null
+                : () => widget.onVerseLongPress!(segment.verse),
             child: Padding(
               padding: const EdgeInsets.only(right: 3),
               child: Text(_label(segment.verse), style: style.verseNumber),
@@ -537,6 +550,32 @@ class _ScriptureBlockState extends State<ScriptureBlock> {
         ),
       ),
     );
+  }
+}
+
+/// A tap that is also a long press.
+///
+/// A run of text can carry only one recognizer, and a verse wants both: a
+/// tap opens it, holding it starts a selection. The long press is entered
+/// in the same arena for the same pointer, so whichever the finger does
+/// wins — lifting before the long-press timeout is a tap, holding past it
+/// is a long press, and moving off is a scroll.
+class _VerseGestureRecognizer extends TapGestureRecognizer {
+  _VerseGestureRecognizer({required VoidCallback onLongPress})
+    : _longPress = LongPressGestureRecognizer()..onLongPress = onLongPress;
+
+  final LongPressGestureRecognizer _longPress;
+
+  @override
+  void addAllowedPointer(PointerDownEvent event) {
+    super.addAllowedPointer(event);
+    _longPress.addPointer(event);
+  }
+
+  @override
+  void dispose() {
+    _longPress.dispose();
+    super.dispose();
   }
 }
 

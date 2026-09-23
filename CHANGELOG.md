@@ -1,5 +1,32 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Several verses at once.** Hold a verse to start a selection, then tap
+  others to add or drop them — while a selection is open a tap selects
+  rather than opening the verse. A bar along the bottom names the
+  selection as it would be cited, "John 3:16–18, 20", and offers Copy,
+  Share, Share as an image and Highlight. A gap in the selection is kept:
+  the citation says 16–18, 20 rather than claiming 19, and the quoted words
+  put an ellipsis where it was left out. Turning the page, Back or Escape
+  ends the selection. For someone who never thinks to hold a verse, its
+  sheet has *Select more*.
+- **Share a passage as a picture.** A card with the words, the reference
+  and the translation, in one of four styles — Paper, Night, the app's own
+  colours, and Dawn — rendered at 1080 × 1350, the portrait shape social
+  apps show without cropping. Long passages are set smaller and, past
+  that, scaled to fit rather than cut off. It goes to the system share
+  sheet; Linux has no share sheet for files, so there it is saved instead,
+  and a browser without one downloads it.
+- **Share and copy say where the words are from.** Text goes out as the
+  words followed by "— Genesis 1:3–5 (WEB)". A single verse's sheet now
+  has Share and Image beside Copy.
+
+### Changed
+- `share_plus` is a new dependency, for the platform's share sheet. It adds
+  no network access and no permission.
+
 ## 1.18.0
 
 ### Added

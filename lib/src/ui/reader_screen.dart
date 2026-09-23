@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:share_plus/share_plus.dart' show ShareParams;
 
 import '../app_scope.dart';
 import '../data/library.dart';
@@ -19,6 +20,7 @@ import '../model/bible.dart';
 import '../model/book_meta.dart';
 import '../model/reading_plan.dart';
 import '../model/strongs_codec.dart';
+import '../model/verse_selection.dart';
 import '../model/xref_codec.dart';
 import 'book_sheet.dart';
 import 'concordance_screen.dart';
@@ -33,6 +35,7 @@ import 'plans_screen.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
 import 'theme.dart';
+import 'verse_share.dart';
 import 'widgets/scripture_text.dart';
 
 /// The main reading surface: one swipeable page per chapter.
@@ -63,6 +66,13 @@ class _ReaderScreenState extends State<ReaderScreen> {
   /// its chapters can offer to tick it off — and keep offering Undo after
   /// the day is finished and the plan has moved on to the next.
   PlanReading? _planFocus;
+
+  /// Verses chosen together to copy, share or highlight, and the page they
+  /// are on. A selection belongs to one chapter; turning the page ends it.
+  final Set<int> _selected = {};
+  int? _selectionPage;
+
+  bool get _selecting => _selected.isNotEmpty;
 
   // Held directly rather than looked up on demand, so they are still
   // reachable from dispose().
@@ -306,6 +316,24 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (result != null && mounted) _goTo(result);
   }
 
+  /// A page's highlights with the selection laid over them, so a
+  /// selected verse shows as selected whatever colour it already had.
+  Map<int, Color> _withSelection(
+    int page,
+    Map<int, Color> highlights,
+    ColorScheme scheme,
+  ) {
+    if (page != _selectionPage || _selected.isEmpty) return highlights;
+    final tint = scheme.primary.withValues(alpha: 0.28);
+    return {
+      ...highlights,
+      for (final verse in _selected)
+        verse: highlights[verse] == null
+            ? tint
+            : Color.alphaBlend(tint, highlights[verse]!),
+    };
+  }
+
   Future<void> _openPlans() async {
     final result = await Navigator.of(
       context,
@@ -417,7 +445,145 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
+  /// Holding a verse starts a selection, or adds to the one under way.
+  void _onVerseLongPress(int verse) {
+    HapticFeedback.selectionClick();
+    setState(() {
+      if (_selectionPage != _page) _selected.clear();
+      _selectionPage = _page;
+      _selected.add(verse);
+    });
+  }
+
+  /// Runs a selection action on one verse, from the verse's own sheet.
+  void _startWith(int verse, Future<void> Function() action) {
+    setState(() {
+      _selected
+        ..clear()
+        ..add(verse);
+      _selectionPage = _page;
+    });
+    action();
+  }
+
+  void _toggleSelected(int verse) {
+    setState(() {
+      if (!_selected.remove(verse)) _selected.add(verse);
+      if (_selected.isEmpty) _selectionPage = null;
+    });
+  }
+
+  void _clearSelection() {
+    if (!_selecting) return;
+    setState(() {
+      _selected.clear();
+      _selectionPage = null;
+    });
+  }
+
+  String get _selectionCitation => VerseSelection.citation(_current, _selected);
+
+  String get _selectionQuotation => VerseSelection.quotation(
+    chapter: _currentChapter,
+    reference: _current,
+    verses: _selected,
+    translation: _bible.translation.abbreviation,
+  );
+
+  Future<void> _copySelection() async {
+    final citation = _selectionCitation;
+    await Clipboard.setData(ClipboardData(text: _selectionQuotation));
+    if (!mounted) return;
+    _clearSelection();
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text('Copied $citation')));
+  }
+
+  Future<void> _shareSelection() async {
+    final params = ShareParams(
+      text: _selectionQuotation,
+      subject: _selectionCitation,
+    );
+    _clearSelection();
+    try {
+      await VerseSharing.share(params);
+    } on Object catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text('Could not share: $error')));
+    }
+  }
+
+  Future<void> _shareSelectionAsImage() async {
+    final text = VerseSelection.text(_currentChapter, _selected);
+    final citation = _selectionCitation;
+    if (text.isEmpty) return;
+    await showVerseImageSheet(
+      context,
+      text: text,
+      citation: citation,
+      translation: _bible.translation.name,
+    );
+    _clearSelection();
+  }
+
+  Future<void> _highlightSelection() async {
+    final verses = [..._selected];
+    final chapter = _current;
+    final chosen = await showModalBottomSheet<int>(
+      context: context,
+      showDragHandle: true,
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Highlight ${VerseSelection.citation(chapter, verses)}',
+                style: Theme.of(sheetContext).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  for (var i = 0; i < ReadingStore.paletteSize; i++)
+                    _Swatch(
+                      color: AppTheme.highlightSwatch(i),
+                      name: AppTheme.highlightNames[i],
+                      selected: false,
+                      onTap: () => Navigator.of(sheetContext).pop(i),
+                    ),
+                  TextButton.icon(
+                    onPressed: () => Navigator.of(sheetContext).pop(-1),
+                    icon: const Icon(Icons.format_color_reset_rounded),
+                    label: const Text('Remove'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (chosen == null || !mounted) return;
+    for (final verse in verses) {
+      _reading.setHighlight(
+        chapter.withVerse(verse),
+        chosen < 0 ? null : chosen,
+      );
+    }
+    _clearSelection();
+  }
+
   void _onVerseTap(int verse) {
+    if (_selecting) {
+      _toggleSelected(verse);
+      return;
+    }
     final reference = _current.withVerse(verse);
     showModalBottomSheet<void>(
       context: context,
@@ -437,6 +603,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
         onCrossReferences: () => _openCrossReferences(reference),
         originalWords: _originalLanguages?.wordsFor(reference) ?? const [],
         onOriginal: () => _openOriginal(reference),
+        onSelect: () => _onVerseLongPress(verse),
+        onShare: () => _startWith(verse, _shareSelection),
+        onImage: () => _startWith(verse, _shareSelectionAsImage),
       ),
     );
   }
@@ -600,130 +769,157 @@ class _ReaderScreenState extends State<ReaderScreen> {
         const SingleActivator(LogicalKeyboardKey.keyG): _openNavigator,
         const SingleActivator(LogicalKeyboardKey.slash): _openSearch,
         const SingleActivator(LogicalKeyboardKey.keyP): _openPlans,
+        const SingleActivator(LogicalKeyboardKey.escape): _clearSelection,
       },
       child: Focus(
         autofocus: true,
-        child: Scaffold(
-          appBar: AppBar(
-            titleSpacing: 12,
-            title: _ReferenceButton(
-              label: '${_currentBook.name} ${_current.chapter}',
-              badge: _library.comparison?.translation.abbreviation,
-              onTap: _openNavigator,
-            ),
-            actions: [
-              IconButton(
-                icon: const Icon(Icons.search_rounded),
-                tooltip: 'Search (/)',
-                onPressed: _openSearch,
+        // Back ends a selection before it leaves anything.
+        child: PopScope(
+          canPop: !_selecting,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) _clearSelection();
+          },
+          child: Scaffold(
+            bottomNavigationBar: _selecting
+                ? _SelectionBar(
+                    citation: _selectionCitation,
+                    count: _selected.length,
+                    onClose: _clearSelection,
+                    onCopy: _copySelection,
+                    onShare: _shareSelection,
+                    onImage: _shareSelectionAsImage,
+                    onHighlight: _highlightSelection,
+                  )
+                : null,
+            appBar: AppBar(
+              titleSpacing: 12,
+              title: _ReferenceButton(
+                label: '${_currentBook.name} ${_current.chapter}',
+                badge: _library.comparison?.translation.abbreviation,
+                onTap: _openNavigator,
               ),
-              AnimatedBuilder(
-                animation: _reading,
-                builder: (context, _) => IconButton(
-                  // A dot while today's reading in a plan is still to do;
-                  // nothing louder than that.
-                  icon: Badge(
-                    isLabelVisible: _reading.hasPlanReadingDue,
-                    smallSize: 8,
-                    // The theme's colour, not the error red a badge
-                    // defaults to: a reading waiting is not a fault.
-                    backgroundColor: theme.colorScheme.primary,
-                    child: const Icon(Icons.event_note_rounded),
+              actions: [
+                IconButton(
+                  icon: const Icon(Icons.search_rounded),
+                  tooltip: 'Search (/)',
+                  onPressed: _openSearch,
+                ),
+                AnimatedBuilder(
+                  animation: _reading,
+                  builder: (context, _) => IconButton(
+                    // A dot while today's reading in a plan is still to do;
+                    // nothing louder than that.
+                    icon: Badge(
+                      isLabelVisible: _reading.hasPlanReadingDue,
+                      smallSize: 8,
+                      // The theme's colour, not the error red a badge
+                      // defaults to: a reading waiting is not a fault.
+                      backgroundColor: theme.colorScheme.primary,
+                      child: const Icon(Icons.event_note_rounded),
+                    ),
+                    tooltip: 'Reading plans (P)',
+                    onPressed: _openPlans,
                   ),
-                  tooltip: 'Reading plans (P)',
-                  onPressed: _openPlans,
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.bookmarks_rounded),
-                tooltip: 'Bookmarks, highlights and notes',
-                onPressed: _openLibrary,
-              ),
-              IconButton(
-                icon: const Icon(Icons.text_fields_rounded),
-                tooltip: 'Display',
-                onPressed: _openDisplay,
-              ),
-              IconButton(
-                icon: const Icon(Icons.settings_rounded),
-                tooltip: 'Settings',
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                IconButton(
+                  icon: const Icon(Icons.bookmarks_rounded),
+                  tooltip: 'Bookmarks, highlights and notes',
+                  onPressed: _openLibrary,
                 ),
-              ),
-            ],
-          ),
-          body: AnimatedBuilder(
-            animation: Listenable.merge([_settings, _reading, _library]),
-            builder: (context, _) {
-              final comparison = _library.comparison;
-              return PageView.builder(
-                controller: _pages,
-                itemCount: _index.length,
-                onPageChanged: (page) {
-                  final programmatic = page == _pendingPage;
-                  setState(() {
-                    _page = page;
-                    if (!programmatic) {
-                      _pendingPage = null;
-                      _pendingVerse = null;
-                    }
-                  });
-                  // A jump has already saved its own position, verse and all.
-                  if (!programmatic) _reading.savePosition(_index[page]);
-                },
-                itemBuilder: (context, page) {
-                  final reference = _index[page];
-                  final book = _bible.bookByCode(reference.bookCode)!;
-                  final chapter = book.chapter(reference.chapter)!;
-                  return _ChapterPage(
-                    key: ValueKey(
-                      '${reference.bookCode}/${reference.chapter}'
-                      '/${comparison?.translation.id ?? ''}',
-                    ),
-                    book: book,
-                    chapter: chapter,
-                    direction: _bible.translation.direction,
-                    style: ScriptureStyle.of(context, _settings),
-                    highlights: {
-                      for (final entry
-                          in _reading
-                              .highlightsIn(book.code, chapter.number)
-                              .entries)
-                        entry.key: AppTheme.highlights(
-                          theme.colorScheme,
-                        )[entry.value % ReadingStore.paletteSize],
-                    },
-                    flagged: _reading.flaggedVersesIn(
-                      book.code,
-                      chapter.number,
-                    ),
-                    matcher: _matcher,
-                    onReferenceTap: _goTo,
-                    intros: _intros,
-                    atlas: _atlasData,
-                    comparison: comparison
-                        ?.bookByCode(book.code)
-                        ?.chapter(chapter.number),
-                    comparisonLabel: comparison?.translation.abbreviation ?? '',
-                    primaryLabel: _bible.translation.abbreviation,
-                    scrollToVerse: page == _pendingPage ? _pendingVerse : null,
-                    onVerseTap: _onVerseTap,
-                    onNoteTap: _onNoteTap,
-                    onTopVerseChanged: (verse) {
-                      if (page != _page) return;
-                      _reading.savePosition(
-                        Reference(book.code, chapter.number, verse),
-                      );
-                    },
-                    onStep: _step,
-                    planCard: _planCardFor(reference),
-                    hasPrevious: page > 0,
-                    hasNext: page < _index.length - 1,
-                  );
-                },
-              );
-            },
+                IconButton(
+                  icon: const Icon(Icons.text_fields_rounded),
+                  tooltip: 'Display',
+                  onPressed: _openDisplay,
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings_rounded),
+                  tooltip: 'Settings',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  ),
+                ),
+              ],
+            ),
+            body: AnimatedBuilder(
+              animation: Listenable.merge([_settings, _reading, _library]),
+              builder: (context, _) {
+                final comparison = _library.comparison;
+                return PageView.builder(
+                  controller: _pages,
+                  itemCount: _index.length,
+                  onPageChanged: (page) {
+                    final programmatic = page == _pendingPage;
+                    setState(() {
+                      _page = page;
+                      if (_selectionPage != page) {
+                        _selected.clear();
+                        _selectionPage = null;
+                      }
+                      if (!programmatic) {
+                        _pendingPage = null;
+                        _pendingVerse = null;
+                      }
+                    });
+                    // A jump has already saved its own position, verse and all.
+                    if (!programmatic) _reading.savePosition(_index[page]);
+                  },
+                  itemBuilder: (context, page) {
+                    final reference = _index[page];
+                    final book = _bible.bookByCode(reference.bookCode)!;
+                    final chapter = book.chapter(reference.chapter)!;
+                    return _ChapterPage(
+                      key: ValueKey(
+                        '${reference.bookCode}/${reference.chapter}'
+                        '/${comparison?.translation.id ?? ''}',
+                      ),
+                      book: book,
+                      chapter: chapter,
+                      direction: _bible.translation.direction,
+                      style: ScriptureStyle.of(context, _settings),
+                      highlights: _withSelection(page, {
+                        for (final entry
+                            in _reading
+                                .highlightsIn(book.code, chapter.number)
+                                .entries)
+                          entry.key: AppTheme.highlights(
+                            theme.colorScheme,
+                          )[entry.value % ReadingStore.paletteSize],
+                      }, theme.colorScheme),
+                      flagged: _reading.flaggedVersesIn(
+                        book.code,
+                        chapter.number,
+                      ),
+                      matcher: _matcher,
+                      onReferenceTap: _goTo,
+                      intros: _intros,
+                      atlas: _atlasData,
+                      comparison: comparison
+                          ?.bookByCode(book.code)
+                          ?.chapter(chapter.number),
+                      comparisonLabel:
+                          comparison?.translation.abbreviation ?? '',
+                      primaryLabel: _bible.translation.abbreviation,
+                      scrollToVerse: page == _pendingPage
+                          ? _pendingVerse
+                          : null,
+                      onVerseTap: _onVerseTap,
+                      onVerseLongPress: _onVerseLongPress,
+                      onNoteTap: _onNoteTap,
+                      onTopVerseChanged: (verse) {
+                        if (page != _page) return;
+                        _reading.savePosition(
+                          Reference(book.code, chapter.number, verse),
+                        );
+                      },
+                      onStep: _step,
+                      planCard: _planCardFor(reference),
+                      hasPrevious: page > 0,
+                      hasNext: page < _index.length - 1,
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ),
       ),
@@ -751,6 +947,7 @@ class _ChapterPage extends StatefulWidget {
     required this.onVerseTap,
     required this.onNoteTap,
     required this.onTopVerseChanged,
+    this.onVerseLongPress,
     required this.onStep,
     required this.hasPrevious,
     required this.hasNext,
@@ -783,6 +980,7 @@ class _ChapterPage extends StatefulWidget {
 
   final int? scrollToVerse;
   final ValueChanged<int> onVerseTap;
+  final ValueChanged<int>? onVerseLongPress;
   final ValueChanged<int> onNoteTap;
   final ValueChanged<int> onTopVerseChanged;
   final ValueChanged<int> onStep;
@@ -1014,6 +1212,7 @@ class _ChapterPageState extends State<_ChapterPage>
           matcher: widget.matcher,
           onReferenceTap: widget.onReferenceTap,
           onVerseTap: widget.onVerseTap,
+          onVerseLongPress: widget.onVerseLongPress,
           onNoteTap: widget.onNoteTap,
         );
         // Only the block holding the verse is rebuilt as the mark comes
@@ -1306,6 +1505,9 @@ class _ChapterPageState extends State<_ChapterPage>
   ) {
     return GestureDetector(
       onTap: primary ? () => widget.onVerseTap(verse) : null,
+      onLongPress: primary && widget.onVerseLongPress != null
+          ? () => widget.onVerseLongPress!(verse)
+          : null,
       child: Container(
         decoration: BoxDecoration(
           color: primary ? tint : null,
@@ -1547,6 +1749,9 @@ class _VerseSheet extends StatelessWidget {
     required this.onCrossReferences,
     required this.originalWords,
     required this.onOriginal,
+    required this.onSelect,
+    required this.onShare,
+    required this.onImage,
     this.omitted = false,
   });
 
@@ -1560,6 +1765,11 @@ class _VerseSheet extends StatelessWidget {
   final VoidCallback onCrossReferences;
   final List<OriginalWord> originalWords;
   final VoidCallback onOriginal;
+
+  /// Starts a selection with this verse, to add more to it.
+  final VoidCallback onSelect;
+  final VoidCallback onShare;
+  final VoidCallback onImage;
 
   int _passageCount() {
     var total = 0;
@@ -1700,6 +1910,32 @@ class _VerseSheet extends StatelessWidget {
                       icon: const Icon(Icons.copy_rounded),
                       label: const Text('Copy'),
                     ),
+                    if (text.isNotEmpty) ...[
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          onShare();
+                        },
+                        icon: const Icon(Icons.share_rounded),
+                        label: const Text('Share'),
+                      ),
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          Navigator.of(context).pop();
+                          onImage();
+                        },
+                        icon: const Icon(Icons.image_outlined),
+                        label: const Text('Image'),
+                      ),
+                    ],
+                    FilledButton.tonalIcon(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        onSelect();
+                      },
+                      icon: const Icon(Icons.checklist_rounded),
+                      label: const Text('Select more'),
+                    ),
                   ],
                 ),
                 if (mark?.hasNote ?? false)
@@ -1759,6 +1995,96 @@ class _VerseSheet extends StatelessWidget {
     controller.dispose();
     if (note == null) return;
     reading.setNote(reference, note);
+  }
+}
+
+/// What can be done with the verses selected, along the bottom of the
+/// reader while there are any.
+class _SelectionBar extends StatelessWidget {
+  const _SelectionBar({
+    required this.citation,
+    required this.count,
+    required this.onClose,
+    required this.onCopy,
+    required this.onShare,
+    required this.onImage,
+    required this.onHighlight,
+  });
+
+  final String citation;
+  final int count;
+  final VoidCallback onClose;
+  final VoidCallback onCopy;
+  final VoidCallback onShare;
+  final VoidCallback onImage;
+  final VoidCallback onHighlight;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Material(
+      color: theme.colorScheme.surfaceContainer,
+      elevation: 3,
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Clear selection',
+                onPressed: onClose,
+                icon: const Icon(Icons.close_rounded),
+              ),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      citation,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    Text(
+                      count == 1
+                          ? '1 verse · tap more to add'
+                          : '$count verses',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: theme.textTheme.labelSmall?.copyWith(
+                        color: theme.colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'Copy',
+                onPressed: onCopy,
+                icon: const Icon(Icons.copy_rounded),
+              ),
+              IconButton(
+                tooltip: 'Share',
+                onPressed: onShare,
+                icon: const Icon(Icons.share_rounded),
+              ),
+              IconButton(
+                tooltip: 'Share as an image',
+                onPressed: onImage,
+                icon: const Icon(Icons.image_outlined),
+              ),
+              IconButton(
+                tooltip: 'Highlight',
+                onPressed: onHighlight,
+                icon: const Icon(Icons.format_color_fill_rounded),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 
