@@ -1,5 +1,19 @@
 # Changelog
 
+## 1.16.0
+
+### Added
+- **A verse you were sent to is pointed out.** Search, a cross-reference,
+  the concordance, a map, a bookmark, or picking up where you left off —
+  the app scrolled the verse into view and left you to find it, which in
+  prose means hunting for a small number in the middle of a paragraph. It
+  now puts a colour behind that verse and takes it away again, twice, and
+  then the page is as it was. A verse you highlighted yourself keeps its
+  own colour underneath and gets it back afterwards. Where the platform is
+  set to reduce motion the colour is held steady and faded out rather than
+  blinked. Only the paragraph holding the verse is redrawn as it pulses,
+  not the chapter.
+
 ## 1.15.1
 
 ### Fixed

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -663,8 +664,21 @@ class _ChapterPage extends StatefulWidget {
   State<_ChapterPage> createState() => _ChapterPageState();
 }
 
-class _ChapterPageState extends State<_ChapterPage> {
+class _ChapterPageState extends State<_ChapterPage>
+    with SingleTickerProviderStateMixin {
   final ScrollController _scroll = ScrollController();
+
+  /// Twice, because once reads as a trick of the eye and three times is
+  /// fussing. The whole point is to be noticed and then to be over.
+  static const int _flashes = 2;
+  static const Duration _flashLength = Duration(milliseconds: 1100);
+
+  /// The verse the reader was sent to, while it is being pointed out.
+  late final AnimationController _flash = AnimationController(
+    vsync: this,
+    duration: _flashLength,
+  );
+  int? _flashVerse;
 
   /// Scroll anchors: the verse a block starts, to the key on that block. Built
   /// once per chapter — a fresh [GlobalKey] on every build would re-inflate
@@ -682,6 +696,11 @@ class _ChapterPageState extends State<_ChapterPage> {
     super.initState();
     _scroll.addListener(_onScroll);
     _buildAnchors();
+    _flash.addStatusListener((status) {
+      if (status == AnimationStatus.completed && mounted) {
+        setState(() => _flashVerse = null);
+      }
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) => _jumpToVerse());
   }
 
@@ -701,6 +720,7 @@ class _ChapterPageState extends State<_ChapterPage> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _flash.dispose();
     _scroll.dispose();
     super.dispose();
   }
@@ -752,7 +772,11 @@ class _ChapterPageState extends State<_ChapterPage> {
   /// itself carries no anchor. Used by the pending-jump machinery and by the
   /// map, where tapping a reference should land on the words.
   void _scrollToVerse(int? verse) {
-    if (verse == null || verse <= 1) return;
+    if (verse == null || verse < 1) return;
+    _pointOut(verse);
+    // Verse 1 is already at the top of the chapter; there is nowhere to
+    // scroll to, which is not a reason to leave it unmarked.
+    if (verse == 1) return;
     final context = _anchorFor(verse)?.currentContext;
     if (context == null) return;
     Scrollable.ensureVisible(
@@ -761,6 +785,49 @@ class _ChapterPageState extends State<_ChapterPage> {
       curve: Curves.easeOutCubic,
       alignment: 0.08,
     );
+  }
+
+  /// Marks a verse the reader was sent to, so they do not have to hunt for
+  /// it.
+  ///
+  /// Scrolling a verse into view is not the same as showing it: in prose a
+  /// verse is a sentence or two in the middle of a paragraph, with nothing
+  /// but a small number to find it by. This puts a colour behind it and
+  /// takes it away again, twice, and then the page is as it was.
+  void _pointOut(int verse) {
+    setState(() => _flashVerse = verse);
+    _flash.forward(from: 0);
+  }
+
+  /// How strong the mark is now: nothing, to full, to nothing, twice over.
+  double get _flashStrength {
+    if (_flashVerse == null) return 0;
+    // Where the platform is set to reduce motion, hold the colour steady
+    // rather than blinking it, and let it fade at the end.
+    if (_reduceMotion) {
+      return _flash.value > 0.75 ? (1 - _flash.value) * 4 : 1;
+    }
+    return (1 - math.cos(_flashes * 2 * math.pi * _flash.value)) / 2;
+  }
+
+  bool get _reduceMotion =>
+      MediaQuery.maybeOf(context)?.disableAnimations ?? false;
+
+  /// The highlights to draw with, the pointed-out verse among them.
+  ///
+  /// A reader's own highlight stays under it: the mark is laid over
+  /// whatever colour the verse already had, and is gone a second later.
+  Map<int, Color> _highlightsWith(int verse, double strength) {
+    // Exactly zero twice during the pulse, and floating point will not
+    // land on it; below this there is nothing to see anyway.
+    if (strength <= 0.01) return widget.highlights;
+    final mark = Theme.of(context).colorScheme.primary
+        .withValues(alpha: 0.30 * strength);
+    final under = widget.highlights[verse];
+    return {
+      ...widget.highlights,
+      verse: under == null ? mark : Color.alphaBlend(mark, under),
+    };
   }
 
   void _onScroll() {
@@ -800,20 +867,34 @@ class _ChapterPageState extends State<_ChapterPage> {
     } else {
       var isFirst = true;
       final blocks = widget.chapter.blocks;
+      final marked = _flashVerse;
       for (var i = 0; i < blocks.length; i++) {
         final block = blocks[i];
-        final blockWidget = ScriptureBlock(
+        final firstOfBlock = isFirst;
+        ScriptureBlock build(Map<int, Color> highlights) => ScriptureBlock(
           block: block,
           labelFor: widget.chapter.labelFor,
           style: widget.style,
-          highlights: widget.highlights,
+          highlights: highlights,
           flagged: widget.flagged,
-          isFirst: isFirst,
+          isFirst: firstOfBlock,
           matcher: widget.matcher,
           onReferenceTap: widget.onReferenceTap,
           onVerseTap: widget.onVerseTap,
           onNoteTap: widget.onNoteTap,
         );
+        // Only the block holding the verse is rebuilt as the mark comes
+        // and goes. Animating the whole chapter would rebuild every
+        // paragraph of it sixty times a second to colour one sentence.
+        final Widget blockWidget =
+            marked != null &&
+                block.segments.any((segment) => segment.verse == marked)
+            ? AnimatedBuilder(
+                animation: _flash,
+                builder: (_, _) =>
+                    build(_highlightsWith(marked, _flashStrength)),
+              )
+            : build(widget.highlights);
         final key = i < _blockKeys.length ? _blockKeys[i] : null;
         children.add(
           key == null
@@ -996,27 +1077,45 @@ class _ChapterPageState extends State<_ChapterPage> {
           final mine = widget.chapter.verseText(verse);
           final theirs = other.verseText(verse);
           if (mine.isEmpty && theirs.isEmpty) continue;
-          final tint = widget.highlights[verse];
-          final left = _compareCell(theme, style, verse, mine, tint, true);
-          final right = _compareCell(theme, style, verse, theirs, tint, false);
+          Widget row(Map<int, Color> highlights) {
+            final tint = highlights[verse];
+            final left = _compareCell(theme, style, verse, mine, tint, true);
+            final right = _compareCell(
+              theme,
+              style,
+              verse,
+              theirs,
+              tint,
+              false,
+            );
+            return columns
+                ? Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: left),
+                      const SizedBox(width: 20),
+                      Expanded(child: right),
+                    ],
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [left, const SizedBox(height: 6), right],
+                  );
+          }
+
+          final marked = _flashVerse;
           rows.add(
             KeyedSubtree(
               key: _verseKeys[verse],
               child: Padding(
                 padding: const EdgeInsets.only(bottom: 14),
-                child: columns
-                    ? Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: left),
-                          const SizedBox(width: 20),
-                          Expanded(child: right),
-                        ],
+                child: marked == verse
+                    ? AnimatedBuilder(
+                        animation: _flash,
+                        builder: (_, _) =>
+                            row(_highlightsWith(verse, _flashStrength)),
                       )
-                    : Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [left, const SizedBox(height: 6), right],
-                      ),
+                    : row(widget.highlights),
               ),
             ),
           );

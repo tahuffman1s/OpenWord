@@ -3,7 +3,7 @@
 ///
 /// Kept in step with `pubspec.yaml` by a test, because a version that drifts
 /// would either hide a release or offer one that is already installed.
-const String appVersion = '1.15.1';
+const String appVersion = '1.16.0';
 
 /// Where releases are published.
 const String releaseOwner = 'tahuffman1s';

@@ -41,6 +41,9 @@ Future<Harness> pumpReader(
   Map<String, Object> prefs = const {},
   Bible? bible,
   FakeUpdateBackend? updateBackend,
+  // Settling runs every animation to its end, which is no use to a test
+  // about what an animation looks like part way through.
+  bool settle = true,
 }) async {
   SharedPreferences.setMockInitialValues({
     ...prefs,
@@ -66,11 +69,17 @@ Future<Harness> pumpReader(
       child: const MaterialApp(home: ReaderScreen()),
     ),
   );
-  await tester.pumpAndSettle();
+  if (settle) {
+    await tester.pumpAndSettle();
+  } else {
+    // One more frame, so the post-frame jump to the resumed verse runs.
+    await tester.pump();
+  }
   return Harness(settings, reading, library, updates);
 }
 
 void main() {
+  _pointingOutTheVerse();
   testWidgets('opens at Genesis 1 on a fresh install', (tester) async {
     await pumpReader(tester);
     expect(appBarText('Genesis 1'), findsOneWidget);
@@ -832,6 +841,80 @@ void main() {
             .first,
       );
       expect(block.textDirection, TextDirection.ltr);
+    });
+  });
+}
+
+/// A verse the reader was sent to is pointed out, because scrolling it
+/// into view is not the same as showing it.
+void _pointingOutTheVerse() {
+  /// The highlight the block holding [verse] is drawing with.
+  Color? markOn(WidgetTester tester, int verse) {
+    for (final block in tester.widgetList<ScriptureBlock>(
+      find.byType(ScriptureBlock),
+    )) {
+      if (block.block.segments.any((segment) => segment.verse == verse)) {
+        final tint = block.highlights[verse];
+        if (tint != null) return tint;
+      }
+    }
+    return null;
+  }
+
+  group('a verse the reader is sent to', () {
+    testWidgets('is marked, twice, and then the page is as it was', (
+      tester,
+    ) async {
+      await pumpReader(
+        tester,
+        resume: const Reference('GEN', 1, 3),
+        settle: false,
+      );
+
+      // The pulse runs nothing, full, nothing, full, nothing over its
+      // length. Sampling the peaks and the trough between them is what
+      // makes this a test of "twice" rather than of "at all".
+      await tester.pump(const Duration(milliseconds: 275));
+      final first = markOn(tester, 3);
+      expect(first, isNotNull, reason: 'the first mark');
+
+      await tester.pump(const Duration(milliseconds: 275));
+      expect(markOn(tester, 3), isNull, reason: 'between the two');
+
+      await tester.pump(const Duration(milliseconds: 275));
+      final second = markOn(tester, 3);
+      expect(second, isNotNull, reason: 'the second mark');
+      expect(second!.a, closeTo(first!.a, 0.02));
+
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(
+        markOn(tester, 3),
+        isNull,
+        reason: 'the mark does not outstay the arrival',
+      );
+    });
+
+    testWidgets('and a verse the reader highlighted keeps its own colour', (
+      tester,
+    ) async {
+      final harness = await pumpReader(
+        tester,
+        resume: const Reference('GEN', 1, 3),
+        settle: false,
+      );
+      harness.reading.setHighlight(const Reference('GEN', 1, 3), 2);
+      await tester.pump();
+
+      // The mark is laid over the reader's own colour rather than
+      // replacing it, and hands it back when it is done.
+      await tester.pump(const Duration(milliseconds: 275));
+      final marked = markOn(tester, 3);
+      expect(marked, isNotNull);
+
+      await tester.pump(const Duration(seconds: 2));
+      final own = markOn(tester, 3);
+      expect(own, isNotNull, reason: "the reader's own highlight survives");
+      expect(marked, isNot(own), reason: 'the mark was visible over it');
     });
   });
 }
