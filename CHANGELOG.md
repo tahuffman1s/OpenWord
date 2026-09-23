@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.18.0
 
 ### Added
 - **Reading plans.** The reader's toolbar has a plan button; pick a plan,
