@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Reading aloud was twice as fast as it should be on Android.** The
+  speech plugin doubles the rate it is given on its way to Android, where
+  1.0 is normal, so handing it 1.0 for normal read everything at double
+  speed. Every platform but the web takes 0.5 as normal — Apple's voices
+  by default, Android after that doubling, Windows after the plugin adds
+  0.5 — and is now given it; a test pins what each is given.
+- **"Could not read aloud" appeared part way through a chapter.** Moving
+  the voice on to another verse stops what it is saying, and the stop is
+  reported back afterwards — sometimes after the next verse has already
+  been handed over, where it read as that verse failing. A stop reported
+  before the current verse has even begun is now recognised as the one
+  before's. And a verse that does fail is said again once before reading
+  aloud gives up, so a single hiccup from the engine no longer ends it.
+- **Messages along the bottom are in the app's colours.** They were
+  Material's inverse surface, near black on a light theme and near white on
+  a dark one; they are now the theme's own secondary container.
+- **The lock-screen session starts with the app**, the way its plugin
+  expects, rather than the first time something is read. If it cannot be
+  started, *Listen* now says so once, with the reason, instead of the lock
+  screen staying blank without explanation.
+
 ## 1.20.0
 
 ### Added

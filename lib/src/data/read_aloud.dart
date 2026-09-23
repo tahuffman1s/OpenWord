@@ -41,13 +41,25 @@ abstract class SpeechEngine {
 /// has.
 class PlatformSpeechEngine implements SpeechEngine {
   PlatformSpeechEngine() {
+    _tts.setStartHandler(() => _started = true);
     _tts.setCompletionHandler(() => _finish(true));
-    _tts.setCancelHandler(() => _finish(false));
+    // Stopping the voice to move to another verse is reported back after
+    // the fact, and can arrive once the next verse has been handed over.
+    // Read as the end of that next verse, it looked like the device giving
+    // up — "could not read aloud" in the middle of a chapter. A stop heard
+    // before the current utterance has even started belongs to the one
+    // before it, and is ignored.
+    _tts.setCancelHandler(() {
+      if (_started) _finish(false);
+    });
     _tts.setErrorHandler((_) => _finish(false));
   }
 
   final FlutterTts _tts = FlutterTts();
   Completer<bool>? _pending;
+
+  /// Whether the utterance being waited on has begun to be spoken.
+  bool _started = false;
   bool _sessionReady = false;
 
   /// On iOS the voice is played through an audio session of the app's
@@ -86,14 +98,16 @@ class PlatformSpeechEngine implements SpeechEngine {
   bool get isAvailable =>
       kIsWeb || defaultTargetPlatform != TargetPlatform.linux;
 
-  /// Apple's voices take 0.5 as their normal pace and everyone else's take
-  /// 1.0, so the reader's multiple is scaled to the platform's.
-  static double get _normalRate =>
-      !kIsWeb &&
-          (defaultTargetPlatform == TargetPlatform.iOS ||
-              defaultTargetPlatform == TargetPlatform.macOS)
-      ? 0.5
-      : 1.0;
+  /// The value handed to the plugin for a pace of [multiple] times normal.
+  ///
+  /// The plugin does not mean the same thing by a rate everywhere. On the
+  /// web it goes straight to the browser, where 1.0 is normal. Everywhere
+  /// else 0.5 is normal: Apple's voices take 0.5 as their default, the
+  /// plugin doubles the value on its way to Android (whose normal is 1.0),
+  /// and on Windows it adds 0.5 to it. Handing Android 1.0 for normal, as
+  /// this once did, read everything at twice the speed.
+  static double rateFor(double multiple, {required bool web}) =>
+      (web ? 1.0 : 0.5) * multiple;
 
   @override
   Future<void> configure({
@@ -103,7 +117,7 @@ class PlatformSpeechEngine implements SpeechEngine {
   }) async {
     await _prepareSession();
     await _tts.setLanguage(language);
-    await _tts.setSpeechRate(_normalRate * rate);
+    await _tts.setSpeechRate(rateFor(rate, web: kIsWeb));
     if (voice != null) {
       final match = (await voices(language)).where((v) => v.name == voice);
       if (match.isNotEmpty) {
@@ -118,6 +132,7 @@ class PlatformSpeechEngine implements SpeechEngine {
   @override
   Future<bool> speak(String text) async {
     _finish(false);
+    _started = false;
     final pending = _pending = Completer<bool>();
     try {
       await _tts.speak(text);
@@ -218,6 +233,14 @@ class ReadAloud extends ChangeNotifier {
   /// when they change: looking a voice up is not free.
   (String, double, String?)? _applied;
   String? error;
+
+  /// Whether the verse being said is a second attempt at it.
+  bool _retrying = false;
+
+  /// How long to wait before saying a verse again after the engine did not
+  /// finish it.
+  @visibleForTesting
+  static Duration retryDelay = const Duration(milliseconds: 400);
 
   ReadAloudState get state => _state;
   bool get isActive => _state != ReadAloudState.idle;
@@ -337,12 +360,24 @@ class ReadAloud extends ChangeNotifier {
     final said = await engine.speak(utterance.text);
     if (generation != _generation) return;
     if (!said) {
+      // Once is a hiccup — an engine still waking up, a stop reported
+      // late — and the verse is simply said again. Twice running, the
+      // device really is not speaking.
+      if (!_retrying) {
+        _retrying = true;
+        await Future<void>.delayed(retryDelay);
+        if (generation != _generation) return;
+        _speakCurrent();
+        return;
+      }
+      _retrying = false;
       error =
           'Could not read aloud. The device may have no voice for this '
           'translation’s language installed.';
       stop();
       return;
     }
+    _retrying = false;
     if (_index + 1 < _queue.length) {
       _index++;
       notifyListeners();

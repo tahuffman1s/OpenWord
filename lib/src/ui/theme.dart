@@ -58,10 +58,20 @@ class AppTheme {
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
       ),
+      // In the reader's own colours. Material's default is the inverse
+      // surface — near black on a light theme, near white on a dark one —
+      // which reads as something that does not belong to the app.
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: scheme.inverseSurface,
-        contentTextStyle: TextStyle(color: scheme.onInverseSurface),
+        backgroundColor: scheme.secondaryContainer,
+        contentTextStyle: TextStyle(
+          color: scheme.onSecondaryContainer,
+          fontSize: 14,
+        ),
+        actionTextColor: scheme.primary,
+        closeIconColor: scheme.onSecondaryContainer,
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
     );
   }

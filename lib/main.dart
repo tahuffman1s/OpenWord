@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dynamic_color/dynamic_color.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -6,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import 'src/app_scope.dart';
 import 'src/data/library.dart';
 import 'src/data/marks.dart';
+import 'src/data/read_aloud_session.dart';
 import 'src/data/settings.dart';
 import 'src/data/shelf.dart';
 import 'src/data/updates.dart';
@@ -29,6 +32,9 @@ Future<void> main() async {
       updates: UpdateService(settings: settings),
     ),
   );
+  // The media session for reading aloud with the screen off, set up as the
+  // app starts, the way its plugin expects. Nothing waits on it.
+  unawaited(prepareReadAloudSession());
 }
 
 /// Finds the directory imported translations live in.

@@ -12,49 +12,51 @@ import 'read_aloud.dart';
 /// API. Windows and Linux have none here, and reading aloud works there as
 /// before, with the app open.
 class ReadAloudHandler extends BaseAudioHandler {
-  /// [describe] names the session while it plays: the translation, say.
-  ReadAloudHandler(this._voice, this._describe) {
-    _voice.addListener(_publish);
+  /// Made when the app starts, before there is anything to read; a voice
+  /// is bound to it when reading aloud begins. [describe] names the
+  /// session while it plays: the translation, say.
+  ReadAloudHandler([ReadAloud? voice, String Function()? describe])
+    : _describe = describe ?? (() => '') {
+    if (voice != null) bind(voice, _describe);
     _publish();
   }
 
-  ReadAloud _voice;
+  ReadAloud? _voice;
   String Function() _describe;
 
-  ReadAloud get voice => _voice;
+  ReadAloud? get voice => _voice;
 
-  /// Hands the session to another voice. The session lasts as long as the
-  /// app, and a reader screen built again brings a voice of its own.
+  /// Hands the session to a voice. The session lasts as long as the app,
+  /// and a reader screen built again brings a voice of its own.
   void bind(ReadAloud voice, String Function() describe) {
-    if (identical(voice, _voice)) {
-      _describe = describe;
-      return;
-    }
-    _voice.removeListener(_publish);
-    _voice = voice;
     _describe = describe;
+    if (identical(voice, _voice)) return;
+    _voice?.removeListener(_publish);
+    _voice = voice;
     voice.addListener(_publish);
     _publish();
   }
 
   /// What the lock screen shows and offers, from the state of the voice.
-  static PlaybackState stateFor(ReadAloud voice) => PlaybackState(
-    controls: voice.isActive
-        ? [
-            MediaControl.skipToPrevious,
-            voice.isPlaying ? MediaControl.pause : MediaControl.play,
-            MediaControl.skipToNext,
-            MediaControl.stop,
-          ]
-        : const [],
-    systemActions: const {MediaAction.stop},
-    // The three shown in Android's compact notification.
-    androidCompactActionIndices: voice.isActive ? const [0, 1, 2] : null,
-    processingState: voice.isActive
-        ? AudioProcessingState.ready
-        : AudioProcessingState.idle,
-    playing: voice.isPlaying,
-  );
+  static PlaybackState stateFor(ReadAloud? voice) => voice == null
+      ? PlaybackState()
+      : PlaybackState(
+          controls: voice.isActive
+              ? [
+                  MediaControl.skipToPrevious,
+                  voice.isPlaying ? MediaControl.pause : MediaControl.play,
+                  MediaControl.skipToNext,
+                  MediaControl.stop,
+                ]
+              : const [],
+          systemActions: const {MediaAction.stop},
+          // The three shown in Android's compact notification.
+          androidCompactActionIndices: voice.isActive ? const [0, 1, 2] : null,
+          processingState: voice.isActive
+              ? AudioProcessingState.ready
+              : AudioProcessingState.idle,
+          playing: voice.isPlaying,
+        );
 
   /// "Genesis 1:3", or the chapter while its name is announced.
   static MediaItem? itemFor(ReadAloud voice, String album) {
@@ -74,34 +76,38 @@ class ReadAloudHandler extends BaseAudioHandler {
   }
 
   void _publish() {
+    final voice = _voice;
     playbackState.add(stateFor(voice));
+    if (voice == null) return;
     final item = itemFor(voice, _describe());
     if (item != null) mediaItem.add(item);
   }
 
   @override
   Future<void> play() async =>
-      voice.state == ReadAloudState.paused ? voice.resume() : null;
+      voice?.state == ReadAloudState.paused ? voice!.resume() : null;
 
   @override
-  Future<void> pause() async => voice.pause();
+  Future<void> pause() async => voice?.pause();
 
   @override
   Future<void> stop() async {
-    voice.stop();
+    voice?.stop();
     await super.stop();
   }
 
   @override
-  Future<void> skipToNext() async => voice.skip(1);
+  Future<void> skipToNext() async => voice?.skip(1);
 
   @override
-  Future<void> skipToPrevious() async => voice.skip(-1);
+  Future<void> skipToPrevious() async => voice?.skip(-1);
 
   /// A headset's single button, or a tap on the notification's own play
   /// button, arrives here.
   @override
   Future<void> click([MediaButton button = MediaButton.media]) async {
+    final voice = _voice;
+    if (voice == null) return;
     switch (button) {
       case MediaButton.next:
         voice.skip(1);
@@ -114,7 +120,9 @@ class ReadAloudHandler extends BaseAudioHandler {
 
   /// Lets go of a voice that is going away.
   void release(ReadAloud voice) {
-    if (identical(voice, _voice)) voice.removeListener(_publish);
+    if (!identical(voice, _voice)) return;
+    voice.removeListener(_publish);
+    _voice = null;
   }
 }
 
@@ -125,32 +133,34 @@ bool get mediaSessionSupported =>
     defaultTargetPlatform == TargetPlatform.iOS ||
     defaultTargetPlatform == TargetPlatform.macOS;
 
-/// Starts the system's media session for [voice], once per run of the app:
-/// the session outlives any one screen, as a notification must.
+/// Starts the system's media session, once per run of the app. Called as
+/// the app starts, which is how the plugin expects to be set up, and not
+/// awaited: the first frame does not wait on it.
 ///
-/// A seam, so a test runs without a platform. Never throws: if the session
-/// cannot be had, reading aloud goes on in the app as it did before there
-/// was one.
+/// Never throws. If the session cannot be had, [readAloudSessionError]
+/// says why, and reading aloud goes on with the app open.
+Future<ReadAloudHandler?> prepareReadAloudSession() =>
+    _starting ??= _startPlatformSession();
+
+Future<ReadAloudHandler?>? _starting;
+
+/// Why the media session could not be started, when it could not.
+String? readAloudSessionError;
+
+/// Binds [voice] to the system's media session, starting it if it was not
+/// already. A seam, so a test runs without a platform.
 Future<ReadAloudHandler?> Function(ReadAloud voice, String Function() describe)
-startReadAloudSession = _startPlatformSession;
+startReadAloudSession = (voice, describe) async {
+  final session = await prepareReadAloudSession();
+  session?.bind(voice, describe);
+  return session;
+};
 
-ReadAloudHandler? _session;
-
-Future<ReadAloudHandler?> _startPlatformSession(
-  ReadAloud voice,
-  String Function() describe,
-) async {
+Future<ReadAloudHandler?> _startPlatformSession() async {
   if (!mediaSessionSupported) return null;
-  final existing = _session;
-  if (existing != null) {
-    // AudioService is started once per run; a reader screen built again
-    // hands its voice to the handler already registered.
-    existing.bind(voice, describe);
-    return existing;
-  }
   try {
-    _session = await AudioService.init(
-      builder: () => ReadAloudHandler(voice, describe),
+    return await AudioService.init(
+      builder: ReadAloudHandler.new,
       config: const AudioServiceConfig(
         androidNotificationChannelId: 'org.openword.read_aloud',
         androidNotificationChannelName: 'Reading aloud',
@@ -162,9 +172,9 @@ Future<ReadAloudHandler?> _startPlatformSession(
         androidStopForegroundOnPause: false,
         androidNotificationIcon: 'drawable/ic_read_aloud',
       ),
-    );
-    return _session;
+    ).timeout(const Duration(seconds: 20));
   } on Object catch (error) {
+    readAloudSessionError = '$error';
     debugPrint('OpenWord: no media session for reading aloud: $error');
     return null;
   }

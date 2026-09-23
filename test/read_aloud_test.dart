@@ -175,13 +175,43 @@ void main() {
       expect(speech.said, hasLength(2));
     });
 
-    test('a device that stops speaking ends it, and says so', () async {
+    test('one failed verse is said again, not given up on', () async {
+      ReadAloud.retryDelay = Duration.zero;
       voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      speech.finish(false);
+      await settle();
+      expect(voice.isPlaying, isTrue);
+      expect(voice.error, isNull);
+      expect(speech.said, hasLength(2));
+      expect(speech.said[0], speech.said[1]);
+      // And a success clears it, so a later hiccup gets its retry too.
+      speech.finish();
+      await settle();
+      speech.finish(false);
+      await settle();
+      expect(voice.isPlaying, isTrue);
+    });
+
+    test('a device that stops speaking ends it, and says so', () async {
+      ReadAloud.retryDelay = Duration.zero;
+      voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      speech.finish(false);
       await settle();
       speech.finish(false);
       await settle();
       expect(voice.state, ReadAloudState.idle);
       expect(voice.error, isNotNull);
+    });
+
+    test('normal pace is what each platform calls normal', () {
+      // The plugin doubles the rate on Android and adds 0.5 on Windows, so
+      // 0.5 is normal there as on Apple's voices; a browser takes 1.0.
+      expect(PlatformSpeechEngine.rateFor(1.0, web: false), 0.5);
+      expect(PlatformSpeechEngine.rateFor(1.0, web: true), 1.0);
+      expect(PlatformSpeechEngine.rateFor(1.5, web: false), 0.75);
+      expect(PlatformSpeechEngine.rateFor(0.75, web: true), 0.75);
     });
 
     test('the divine name is said as a word', () {
@@ -319,6 +349,23 @@ void main() {
       await tester.tap(find.byTooltip('Stop reading aloud'));
       await tester.pumpAndSettle();
       expect(find.byTooltip('Pause'), findsNothing);
+    });
+
+    testWidgets('a session that cannot start says why, once', (tester) async {
+      startReadAloudSession = (voice, describe) async {
+        readAloudSessionError = 'no service';
+        return null;
+      };
+      addTearDown(() => readAloudSessionError = null);
+      await pumpReader(tester);
+      await tester.tap(find.text('LISTEN'));
+      await tester.pump();
+      await tester.pump();
+      expect(
+        find.textContaining('Lock-screen controls could not start'),
+        findsOneWidget,
+      );
+      expect(find.textContaining('no service'), findsOneWidget);
     });
 
     testWidgets('listening hands the voice to the system', (tester) async {

@@ -167,9 +167,27 @@ class _ReaderScreenState extends State<ReaderScreen> {
     startReadAloudSession(_voice, () => _bible.translation.name).then((
       session,
     ) {
-      if (mounted) _session = session;
+      if (!mounted) return;
+      _session = session;
+      final error = readAloudSessionError;
+      if (session == null && error != null && !_toldAboutSession) {
+        // Said once, so that a lock screen that stays blank has a reason
+        // someone can pass on, rather than silence.
+        _toldAboutSession = true;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Lock-screen controls could not start, so reading aloud '
+              'stops when the screen does. ($error)',
+            ),
+            duration: const Duration(seconds: 10),
+          ),
+        );
+      }
     });
   }
+
+  bool _toldAboutSession = false;
 
   /// The system's media session, once reading aloud has started it.
   ReadAloudHandler? _session;
