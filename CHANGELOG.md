@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.20.0
 
 ### Added
 - **Read aloud.** *Listen*, beside the chapter's name, reads the chapter in
