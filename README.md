@@ -95,9 +95,30 @@ licensed USFX translation takes two steps:
 dart run tool/build_assets.dart <directory-with-usfx-files>
 ```
 
-`tool/build_assets.dart` expects `<translation id>.usfx.xml` in that directory
-and writes `assets/bible/<id>.bib`, checking that what it wrote reads back —
-both the header and the same verse count behind it.
+`tool/build_assets.dart` writes `assets/bible/<id>.bib`, checking that what it
+wrote reads back — both the header and the same verse count behind it. It
+takes the USFX in whatever shape its publisher hands it over: eBible.org's
+`eng-web_usfx.zip`, the `eng-web_usfx.xml` inside it, or a renamed
+`eng-web.usfx.xml` all work, so there is nothing to unpack or rename first.
+
+### Rebuilding the three that ship
+
+The typography the reader can draw — heading levels, the divine name in
+small capitals, tables, lists, acrostic letters, speakers, printed verse
+labels, omitted verses — is read out of the USFX at build time, so a
+translation only gains it when it is rebuilt. Fetch the sources and run the
+tool:
+
+```bash
+mkdir -p /tmp/usfx && cd /tmp/usfx
+curl -O https://ebible.org/Scriptures/eng-web_usfx.zip
+curl -O https://ebible.org/Scriptures/engwebbe_usfx.zip   # rename to eng-gb-webbe_usfx.zip
+# the Berean Standard Bible comes from https://berean.bible/downloads.htm
+cd /path/to/OpenWord && dart run tool/build_assets.dart /tmp/usfx
+```
+
+Then `dart run tool/bib_lint.dart assets/bible/*.bib` before committing the
+result.
 
 ## Importing a translation: EPUB and `.bib`
 
