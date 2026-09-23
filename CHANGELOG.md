@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.20.2
 
 ### Fixed
 - **The lock-screen controls never appeared on Android.** Release builds
