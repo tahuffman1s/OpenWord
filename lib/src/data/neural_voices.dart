@@ -34,6 +34,7 @@ class NeuralModel {
     required this.blurb,
     required this.family,
     required this.archive,
+    required this.modelFile,
     required this.bytes,
     required this.sha256,
     required this.speakers,
@@ -48,6 +49,9 @@ class NeuralModel {
   /// The name of the model's archive among sherpa-onnx's releases, and of
   /// the directory it unpacks to.
   final String archive;
+
+  /// The network itself, among the files the archive unpacks.
+  final String modelFile;
 
   /// The size of the download.
   final int bytes;
@@ -68,14 +72,20 @@ class NeuralModel {
 
   /// KittenTTS nano 0.8 (Apache-2.0): small and quick, and still far more
   /// natural than most voices a device comes with.
+  ///
+  /// At full precision. The 8-bit edition is half the download, but now
+  /// and then garbles a sound — KittenML itself warns of it — and on the
+  /// processors tried it is slower, not quicker: turning its numbers back
+  /// and forth costs more than it saves.
   static const kitten = NeuralModel(
     id: 'kitten',
     title: 'Kitten',
     blurb: 'Light and quick, for any phone',
     family: NeuralFamily.kitten,
-    archive: 'kitten-nano-en-v0_8-int8',
-    bytes: 31220690,
-    sha256: '6fa5be852612ce761094ba74ee6123b4fc4acfefa79bf64dc63acae4a83af2fd',
+    archive: 'kitten-nano-en-v0_8-fp32',
+    modelFile: 'model.fp32.onnx',
+    bytes: 63815222,
+    sha256: '16092117bfe591ddcd58d078e1454603b8e1caea46f85653b2c2efae76bd883e',
     speakers: [
       NeuralSpeaker(1, 'Bella', 'en-US'),
       NeuralSpeaker(0, 'Jasper', 'en-US'),
@@ -97,6 +107,7 @@ class NeuralModel {
     blurb: 'The most natural, for recent phones',
     family: NeuralFamily.kokoro,
     archive: 'kokoro-int8-en-v0_19',
+    modelFile: 'model.int8.onnx',
     bytes: 103248205,
     sha256: 'c9f0dd393615805b0bab050c340834d5e684e732aec91c0e860cd30e982c08bd',
     speakers: [

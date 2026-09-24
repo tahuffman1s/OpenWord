@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart'
     show FilledButton, Scaffold, ScaffoldMessenger;
@@ -7,6 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:openword/src/data/neural_speech.dart';
 import 'package:openword/src/data/neural_voices.dart';
+import 'package:openword/src/data/neural_voices_io.dart' show tidyModels;
 import 'package:openword/src/data/read_aloud.dart';
 import 'package:openword/src/data/read_aloud_session.dart';
 import 'package:openword/src/model/bible.dart';
@@ -641,6 +644,44 @@ void main() {
       expect(pieces.map((p) => p.$2).join(' '), text);
       expect(pieces.any((p) => p.$2.endsWith('empty,')), isTrue);
     });
+
+    test('a piece that would clip is turned down, not cut off', () {
+      final quiet = Float32List.fromList([0.1, -0.5, 0.9]);
+      expect(identical(Synthesiser.limited(quiet), quiet), isTrue);
+      final loud = Synthesiser.limited(Float32List.fromList([0.5, -1.4, 1.9]));
+      expect(
+        loud.reduce((a, b) => a.abs() > b.abs() ? a : b),
+        closeTo(0.95, 1e-6),
+      );
+      // In proportion: the shape of the sound is kept.
+      expect(loud[0] / loud[2], closeTo(0.5 / 1.9, 1e-6));
+    });
+
+    test(
+      'models no longer offered, and broken downloads, are tidied',
+      () async {
+        final root = Directory.systemTemp.createTempSync('voices');
+        addTearDown(() => root.deleteSync(recursive: true));
+        Directory('${root.path}/kitten-nano-en-v0_8-int8').createSync();
+        Directory('${root.path}/${NeuralModel.kitten.archive}').createSync();
+        Directory('${root.path}/${NeuralModel.kokoro.archive}').createSync();
+        File('${root.path}/kokoro-int8-en-v0_19.tar.bz2').writeAsStringSync('');
+        await tidyModels(root, downloading: true);
+        // A download under way is left alone.
+        expect(
+          File('${root.path}/kokoro-int8-en-v0_19.tar.bz2').existsSync(),
+          isTrue,
+        );
+        await tidyModels(root, downloading: false);
+        expect(
+          root
+              .listSync()
+              .map((e) => e.uri.pathSegments.lastWhere((s) => s.isNotEmpty))
+              .toSet(),
+          {NeuralModel.kitten.archive, NeuralModel.kokoro.archive},
+        );
+      },
+    );
 
     test('the first piece is short, so the voice starts at once', () {
       final text = List.filled(

@@ -70,7 +70,7 @@ no network entitlement.
   verse by verse. Not on Linux, which the speech plugin does not support.
 - **Natural voices of its own.** Besides the device's voices, the voice
   sheet offers two open neural voices that OpenWord runs on the device with
-  [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx): Kitten (31 MB, quick
+  [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx): Kitten (64 MB, quick
   on any phone) and Kokoro (103 MB, the most natural, for recent phones).
   Each is downloaded once, when asked for, and then reads with no
   connection. English only; not on the web or Linux.

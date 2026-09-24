@@ -3,6 +3,16 @@
 ## Unreleased
 
 ### Fixed
+- **Kitten now and then made a garbled sound.** It was the 8-bit edition
+  of KittenTTS nano, which KittenML itself warns about. Kitten is now the
+  full-precision edition: a 64 MB download rather than 31 MB, clearer, and
+  about three times quicker to make speech on the processors tried, since
+  the 8-bit edition spends more converting its numbers than it saves.
+  Having downloaded Kitten before, download it again from the voice sheet;
+  the old files are deleted when the app opens.
+- **A crackle on the loudest syllables.** A voice's output can go past full
+  scale, and the loudest samples were cut off flat as they were written
+  out. A piece that would be is now made a little quieter as a whole.
 - **OpenWord's own voices took a long time to start, and paused part way.**
   Four things added up. The voice's model was loaded only when *Listen*
   was tapped, and a model's first run is far slower than any after it —

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
@@ -382,6 +383,7 @@ class Synthesiser {
       replies.sendPort,
       model.family.name,
       directory,
+      model.modelFile,
       threads,
     ), debugName: 'voice');
     final first = Completer<Object?>();
@@ -459,9 +461,10 @@ class Synthesiser {
   static sherpa.OfflineTtsModelConfig configFor(
     String family,
     String directory,
+    String modelFile,
     int threads,
   ) {
-    final model = '$directory/model.int8.onnx';
+    final model = '$directory/$modelFile';
     final voices = '$directory/voices.bin';
     final tokens = '$directory/tokens.txt';
     final data = '$directory/espeak-ng-data';
@@ -489,13 +492,32 @@ class Synthesiser {
     };
   }
 
-  static void _serve((SendPort, String, String, int) setup) {
-    final (reply, family, directory, threads) = setup;
+  /// [samples] turned down, if need be, so that none is louder than
+  /// [ceiling].
+  ///
+  /// A model's output can go past full scale, and written out as 16-bit
+  /// samples the loudest are cut off flat: heard as a crackle. Where a
+  /// piece would be, the whole piece is made a little quieter instead.
+  static Float32List limited(Float32List samples, {double ceiling = 0.95}) {
+    var peak = 0.0;
+    for (final sample in samples) {
+      final level = sample.abs();
+      if (level > peak) peak = level;
+    }
+    if (peak <= ceiling) return samples;
+    final gain = ceiling / peak;
+    return Float32List.fromList([for (final sample in samples) sample * gain]);
+  }
+
+  static void _serve((SendPort, String, String, String, int) setup) {
+    final (reply, family, directory, modelFile, threads) = setup;
     final sherpa.OfflineTts tts;
     try {
       sherpa.initBindings();
       tts = sherpa.OfflineTts(
-        sherpa.OfflineTtsConfig(model: configFor(family, directory, threads)),
+        sherpa.OfflineTtsConfig(
+          model: configFor(family, directory, modelFile, threads),
+        ),
       );
     } on Object catch (error) {
       reply.send('$error');
@@ -523,14 +545,15 @@ class Synthesiser {
         final clock = Stopwatch()..start();
         try {
           final audio = tts.generate(text: text, sid: speaker, speed: speed);
-          if (audio.samples.isNotEmpty &&
+          final samples = limited(audio.samples);
+          if (samples.isNotEmpty &&
               sherpa.writeWave(
                 filename: path,
-                samples: audio.samples,
+                samples: samples,
                 sampleRate: audio.sampleRate,
               )) {
             made = path;
-            lasts = audio.samples.length / audio.sampleRate;
+            lasts = samples.length / audio.sampleRate;
           }
         } on Object {
           made = null;

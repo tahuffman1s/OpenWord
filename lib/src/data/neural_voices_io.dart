@@ -55,12 +55,13 @@ class DeviceNeuralVoices extends NeuralVoices {
 
   Future<void> _scan() async {
     try {
-      await _directory();
+      final root = await _directory();
       for (final model in NeuralModel.catalog) {
         if (File('${_modelPath(model)}/$_marker').existsSync()) {
           _installed.add(model.id);
         }
       }
+      await tidyModels(root, downloading: _progress.isNotEmpty);
     } on Object {
       // No support directory: nothing is installed, and a download will
       // say why it cannot be kept.
@@ -194,6 +195,25 @@ class DeviceNeuralVoices extends NeuralVoices {
 
   @override
   NeuralModel? get fallingBehind => _fallingBehind;
+}
+
+/// Deletes from [root] what no model here uses: a model this version no
+/// longer offers — the 8-bit Kitten that 1.21.0 downloaded, say — and,
+/// unless one is [downloading], a download or unpacking cut short.
+Future<void> tidyModels(Directory root, {required bool downloading}) async {
+  final wanted = {for (final model in NeuralModel.catalog) model.archive};
+  await for (final entry in root.list()) {
+    final name = entry.uri.pathSegments.lastWhere((s) => s.isNotEmpty);
+    final unused = entry is Directory
+        ? !wanted.contains(name)
+        : !downloading && (name.endsWith('.tar.bz2') || name.endsWith('.tar'));
+    if (!unused) continue;
+    try {
+      await entry.delete(recursive: true);
+    } on Object {
+      // Tried again the next time the app opens.
+    }
+  }
 }
 
 /// Unpacks a model's `.tar.bz2` [archive] into [target], where it makes
