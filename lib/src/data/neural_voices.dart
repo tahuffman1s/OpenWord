@@ -59,16 +59,20 @@ class NeuralModel {
     title: 'Kitten',
     archive: 'kitten-nano-en-v0_8-fp32',
     modelFile: 'model.fp32.onnx',
-    // The priors are the model's own, from its metadata.
+    // Clearest first, the first being the voice heard until another is
+    // chosen: ranked by UTMOS, a predictor of how natural listeners find
+    // speech, over Genesis 1 and John 1 read as the app reads them (Bruno
+    // 4.27, Luna and Jasper 4.24, Bella and Hugo 4.17, Leo 4.12, Rosie
+    // 4.03). Kiki, the eighth, scored 3.46 and is not offered. The priors
+    // are the model's own, from its metadata.
     speakers: [
-      NeuralSpeaker(1, 'Bella', 'en-US', prior: 0.8),
-      NeuralSpeaker(0, 'Jasper', 'en-US', prior: 0.8),
-      NeuralSpeaker(3, 'Luna', 'en-US', prior: 0.8),
       NeuralSpeaker(2, 'Bruno', 'en-US', prior: 0.8),
-      NeuralSpeaker(5, 'Rosie', 'en-US', prior: 0.8),
+      NeuralSpeaker(3, 'Luna', 'en-US', prior: 0.8),
+      NeuralSpeaker(0, 'Jasper', 'en-US', prior: 0.8),
+      NeuralSpeaker(1, 'Bella', 'en-US', prior: 0.8),
       NeuralSpeaker(4, 'Hugo', 'en-US', prior: 0.9),
-      NeuralSpeaker(7, 'Kiki', 'en-US', prior: 0.8),
       NeuralSpeaker(6, 'Leo', 'en-US', prior: 0.8),
+      NeuralSpeaker(5, 'Rosie', 'en-US', prior: 0.8),
     ],
   );
 

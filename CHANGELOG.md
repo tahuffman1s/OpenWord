@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+### Changed
+- **The clearest voice first.** Kitten's voices were scored with UTMOS, a
+  model that predicts how natural listeners find speech, over Genesis 1
+  and John 1 read as the app reads them. They now appear clearest first,
+  and the first — Bruno, 4.27 of 5 — is the one heard until another is
+  chosen; Luna (4.24) is the clearest of the women's voices. Kiki, which
+  scored 3.46, with one piece at 2.58, is no longer offered; a choice of
+  it is heard as Bruno. Every other choice is kept. The same scoring
+  found 1× — the pace the voice was trained at, since 1.23.0 — better
+  than going faster or slower, and Kitten's larger models, micro and
+  mini, and Kokoro no clearer than the one the app uses, only slower.
+
 ### Fixed
 - **Gibberish around quotations** — found by ear, not by 1.23.0's
   recogniser, which does not write down a noise that is not a word. The

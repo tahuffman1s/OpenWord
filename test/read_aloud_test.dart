@@ -533,8 +533,23 @@ void main() {
       expect(speech.rates, hasLength(1));
     });
 
+    test('the clearest voice is heard first, and Kiki not at all', () {
+      expect(NeuralModel.chosen(null).$2.name, 'Bruno');
+      expect(NeuralModel.kitten.voices.first.title, 'Bruno');
+      expect(
+        NeuralModel.kitten.speakers.map((s) => s.name),
+        isNot(contains('Kiki')),
+      );
+      // A choice of Kiki kept from before is heard as the first.
+      expect(NeuralModel.chosen('openword:kitten:7').$2.name, 'Bruno');
+      // Every other choice is kept.
+      expect(NeuralModel.chosen('openword:kitten:1').$2.name, 'Bella');
+    });
+
     test('a voice is kept by a name that says whose it is', () {
-      final leo = NeuralModel.kitten.speakers.last;
+      final leo = NeuralModel.kitten.speakers.firstWhere(
+        (s) => s.name == 'Leo',
+      );
       final name = NeuralModel.kitten.voiceName(leo);
       expect(NeuralModel.parse(name), (NeuralModel.kitten, leo));
       expect(NeuralModel.parse('openword:kitten:99'), isNull);
