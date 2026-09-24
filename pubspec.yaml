@@ -60,6 +60,8 @@ flutter:
     - assets/maps/
     - assets/refs/
     - assets/strongs/
+    # The licences of what the voice is made of, shown under Licences.
+    - assets/licences/
     # The voice reading aloud is heard in: KittenTTS, as tool/fetch_voice.dart
     # fetches and trims it (git ignores the file). Not on the web, which
     # cannot run it.

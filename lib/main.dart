@@ -12,11 +12,13 @@ import 'src/data/read_aloud_session.dart';
 import 'src/data/settings.dart';
 import 'src/data/shelf.dart';
 import 'src/data/updates.dart';
+import 'src/data/voice_licences.dart';
 import 'src/ui/reader_screen.dart';
 import 'src/ui/theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerVoiceLicences();
   final settings = await Settings.load();
   final reading = await ReadingStore.load();
   final shelf = await _openShelf();

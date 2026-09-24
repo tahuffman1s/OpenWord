@@ -15,6 +15,7 @@ import '../data/originals.dart';
 import '../data/settings.dart';
 import '../data/translations.dart';
 import '../data/updates.dart';
+import '../data/voice_licences.dart';
 import '../model/bib_file.dart';
 import '../model/bible.dart';
 import 'import_sheet.dart';
@@ -396,6 +397,24 @@ class SettingsScreen extends StatelessWidget {
                 title: Text('Literata, Noto Serif, Noto Serif Hebrew'),
                 subtitle: Text('SIL Open Font License 1.1'),
                 isThreeLine: true,
+              ),
+              const ListTile(
+                dense: true,
+                title: Text('Reading aloud'),
+                subtitle: Text(voiceAttribution),
+                isThreeLine: true,
+              ),
+              // Every licence in full: the packages' own, which Flutter
+              // gathers, and the voice's, which registerVoiceLicences adds.
+              ListTile(
+                leading: const Icon(Icons.gavel_rounded),
+                title: const Text('Licences'),
+                subtitle: const Text('The full text of every licence'),
+                onTap: () => showLicensePage(
+                  context: context,
+                  applicationName: 'OpenWord',
+                  applicationVersion: appVersion,
+                ),
               ),
             ],
           );

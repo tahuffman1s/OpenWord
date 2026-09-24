@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+### Added
+- **The licences, in the app.** Settings credits the voice — KittenTTS,
+  Apache-2.0; sherpa-onnx and ONNX Runtime; and eSpeak NG, GPL-3.0, with a
+  link to the source of the version built in — and a new *Licences* entry
+  shows the full text of every licence, the voice's among them. eSpeak NG
+  is compiled into the library the voice runs on, so the app as built is
+  distributed under the GPL-3.0 as well as the MIT licence of its code.
+
 ### Changed
 - **One voice, built in.** Reading aloud is now always in KittenTTS, the
   open neural voice, which ships inside the app: nothing to download, and

@@ -858,7 +858,10 @@ and navigation instant.
   of OpenWord carries that library, so its binaries are distributed under
   the GPL's terms as well as the MIT licence of the code here. The voice is
   [KittenTTS](https://github.com/KittenML/KittenTTS) nano 0.8, Apache-2.0,
-  bundled with eSpeak NG's English pronunciation data (GPL-3.0).
+  bundled with eSpeak NG's English pronunciation data (GPL-3.0). Settings
+  credits all of these, links the source of the eSpeak NG built in, and
+  shows every licence in full under *Licences*; the texts are in
+  `assets/licences/`.
 - Bundled typeface: [Literata](https://fonts.google.com/specimen/Literata),
   SIL Open Font License 1.1 — see `assets/fonts/Literata-OFL.txt`. It is
   subset to Latin, Greek and the punctuation the text uses.
