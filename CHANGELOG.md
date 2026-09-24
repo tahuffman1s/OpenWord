@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.20.4
 
 ### Fixed
 - **Resuming no longer starts the verse or passage again on phones whose
