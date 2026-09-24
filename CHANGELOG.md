@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.21.0
 
 ### Added
 - **Natural voices built into OpenWord.** The voice sheet now offers two
