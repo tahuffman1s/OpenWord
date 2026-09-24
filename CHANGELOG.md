@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.20.3
 
 ### Changed
 - **Resuming takes up the word it stopped at.** Pausing used to remember
