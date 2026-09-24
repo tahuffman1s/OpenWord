@@ -93,8 +93,8 @@ class Settings extends ChangeNotifier {
   double get speechRate => _prefs.getDouble(_kSpeechRate) ?? 1.0;
   set speechRate(double value) => _write(_kSpeechRate, value);
 
-  /// The voice chosen for reading aloud, by the name the platform gives
-  /// it, or null for the platform's own choice for the language.
+  /// The voice chosen for reading aloud, by the name it is kept by, or
+  /// null for the first.
   String? get speechVoice => _prefs.getString(_kSpeechVoice);
   set speechVoice(String? value) {
     if (value == null) {

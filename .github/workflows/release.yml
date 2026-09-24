@@ -52,6 +52,13 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      # The voice is fetched rather than kept in git; see
+      # tool/fetch_voice.dart. Cached until that script changes.
+      - uses: actions/cache@v4
+        with:
+          path: assets/voice/kitten.tar.gz
+          key: voice-${{ hashFiles('tool/fetch_voice.dart') }}
+      - run: dart run tool/fetch_voice.dart
 
       # Android will only replace an installed app with one signed by the
       # same key. The debug keystore is generated afresh on every runner, so
@@ -139,6 +146,13 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      # The voice is fetched rather than kept in git; see
+      # tool/fetch_voice.dart. Cached until that script changes.
+      - uses: actions/cache@v4
+        with:
+          path: assets/voice/kitten.tar.gz
+          key: voice-${{ hashFiles('tool/fetch_voice.dart') }}
+      - run: dart run tool/fetch_voice.dart
       - run: flutter build linux --release
       - run: |
           mkdir -p dist
@@ -161,6 +175,13 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      # The voice is fetched rather than kept in git; see
+      # tool/fetch_voice.dart. Cached until that script changes.
+      - uses: actions/cache@v4
+        with:
+          path: assets/voice/kitten.tar.gz
+          key: voice-${{ hashFiles('tool/fetch_voice.dart') }}
+      - run: dart run tool/fetch_voice.dart
       - run: flutter build windows --release
       - shell: bash
         run: |

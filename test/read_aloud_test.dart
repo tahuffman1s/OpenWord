@@ -4,7 +4,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart'
-    show FilledButton, Scaffold, ScaffoldMessenger;
+    show Icons, ListTile, Scaffold, ScaffoldMessenger;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:openword/src/data/neural_speech.dart';
@@ -99,51 +99,25 @@ class FakeSpeech implements SpeechEngine {
   @override
   Future<List<SpeechVoice>> voices(String language) async => const [
     SpeechVoice(name: 'Serena', locale: 'en-GB'),
+    SpeechVoice(name: 'daniel', title: 'Daniel', locale: 'en-GB'),
   ];
 }
 
-/// OpenWord's own voices, without the downloading: each model installs
-/// when asked, and speaks with a silent engine.
+/// The voice, without the unpacking: it speaks with a silent engine.
 class FakeNeuralVoices extends NeuralVoices {
-  final Set<NeuralModel> installed = {};
-
-  NeuralModel? slow;
-
-  @override
-  NeuralModel? get fallingBehind => slow;
-
   final FakeSpeech speech = FakeSpeech(pauses: true);
   final List<String?> configured = [];
+
+  bool slow = false;
+
+  @override
+  bool get fallingBehind => slow;
 
   @override
   bool get isSupported => true;
 
   @override
   Future<void> get ready => Future.value();
-
-  @override
-  bool isInstalled(NeuralModel model) => installed.contains(model);
-
-  @override
-  double? progress(NeuralModel model) => null;
-
-  @override
-  String? error(NeuralModel model) => null;
-
-  @override
-  Future<void> install(NeuralModel model) async {
-    installed.add(model);
-    notifyListeners();
-  }
-
-  @override
-  void cancel(NeuralModel model) {}
-
-  @override
-  Future<void> remove(NeuralModel model) async {
-    installed.remove(model);
-    notifyListeners();
-  }
 
   @override
   SpeechEngine engine() => _Recording(speech, configured);
@@ -530,77 +504,6 @@ void main() {
       expect(voice.error, isNotNull);
     });
 
-    test('voices are ranked most natural first, online ones marked', () {
-      final ranked = SpeechVoice.rank([
-        {'name': 'plain', 'locale': 'en-US', 'quality': 'normal'},
-        {
-          'name': 'cloud',
-          'locale': 'en-US',
-          'quality': 'very high',
-          'network_required': '1',
-        },
-        {
-          'name': 'missing',
-          'locale': 'en-US',
-          'quality': 'very high',
-          'features': 'embeddedTts\tnotInstalled',
-        },
-        {
-          'name': 'good-us',
-          'locale': 'en-US',
-          'quality': 'very high',
-          'network_required': '0',
-        },
-        {'name': 'good-gb', 'locale': 'en-GB', 'quality': 'very high'},
-        {'name': 'Ava (Premium)', 'locale': 'en-US', 'quality': 'premium'},
-        {'name': 'Daniel', 'locale': 'en-GB', 'quality': 'enhanced'},
-        {'name': 'Amélie', 'locale': 'fr-CA', 'quality': 'premium'},
-      ], 'en-GB');
-      expect(ranked.map((v) => v.name), [
-        // Best quality first; the translation's own region breaks a tie,
-        // then a voice on the device before one online.
-        'good-gb', 'Ava (Premium)', 'good-us', 'cloud', 'Daniel', 'plain',
-      ]);
-      expect(ranked.firstWhere((v) => v.name == 'cloud').online, isTrue);
-      expect(ranked.first.online, isFalse);
-      expect(ranked.first.qualityLabel, 'Natural');
-      expect(ranked[4].qualityLabel, 'Enhanced');
-      expect(ranked.last.qualityLabel, isNull);
-    });
-
-    test('the chosen voice decides which engine speaks', () async {
-      final platform = FakeSpeech();
-      final neural = FakeNeuralVoices();
-      final engines = SpeechEngines(platform, neural);
-      final bella = NeuralModel.kitten.voiceName(
-        NeuralModel.kitten.speakers.first,
-      );
-
-      // Not downloaded: the platform's own choice, rather than a name it
-      // does not know.
-      await engines.configure(language: 'en', rate: 1, voice: bella);
-      expect(neural.configured, isEmpty);
-      engines.speak('Words');
-      expect(platform.said, ['Words']);
-      expect(engines.canPause, isFalse);
-
-      await neural.install(NeuralModel.kitten);
-      await engines.configure(language: 'en', rate: 1, voice: bella);
-      expect(neural.configured, [bella]);
-      engines.speak('More words');
-      expect(neural.speech.said, ['More words']);
-      expect(engines.canPause, isTrue);
-      // The platform was stopped as the other took over.
-      expect(platform.stops, 1);
-
-      final voices = await engines.voices('en-US');
-      expect(voices.first.title, 'Bella · Kitten');
-      expect(voices.first.qualityLabel, 'Natural');
-      expect(voices.last.name, 'Serena');
-      // English only.
-      expect((await engines.voices('fr')).where((v) => v.builtIn), isEmpty);
-    });
-
     test('a voice made ready ahead is not made ready again', () async {
       final loading = speech.configuring = Completer<void>();
       voice.configure(language: 'en', rate: 1, voice: 'Serena');
@@ -618,13 +521,21 @@ void main() {
       expect(speech.rates, hasLength(1));
     });
 
-    test('a built-in voice is kept by a name that says whose it is', () {
-      final lewis = NeuralModel.kokoro.speakers.last;
-      final name = NeuralModel.kokoro.voiceName(lewis);
-      expect(NeuralModel.parse(name), (NeuralModel.kokoro, lewis));
+    test('a voice is kept by a name that says whose it is', () {
+      final leo = NeuralModel.kitten.speakers.last;
+      final name = NeuralModel.kitten.voiceName(leo);
+      expect(NeuralModel.parse(name), (NeuralModel.kitten, leo));
+      expect(NeuralModel.parse('openword:kitten:99'), isNull);
+      // Kokoro, and the device's voices, that 1.21 read with.
+      expect(NeuralModel.parse('openword:kokoro:1'), isNull);
       expect(NeuralModel.parse('Samantha'), isNull);
-      expect(NeuralModel.parse('openword:kokoro:99'), isNull);
       expect(NeuralModel.parse(null), isNull);
+      // Those, or none, mean the first voice.
+      expect(NeuralModel.chosen('Samantha'), (
+        NeuralModel.kitten,
+        NeuralModel.kitten.speakers.first,
+      ));
+      expect(NeuralModel.chosen(name).$2, leo);
     });
 
     test('text is voiced a sentence at a time, long ones cut again', () {
@@ -657,31 +568,31 @@ void main() {
       expect(loud[0] / loud[2], closeTo(0.5 / 1.9, 1e-6));
     });
 
-    test(
-      'models no longer offered, and broken downloads, are tidied',
-      () async {
-        final root = Directory.systemTemp.createTempSync('voices');
-        addTearDown(() => root.deleteSync(recursive: true));
-        Directory('${root.path}/kitten-nano-en-v0_8-int8').createSync();
-        Directory('${root.path}/${NeuralModel.kitten.archive}').createSync();
-        Directory('${root.path}/${NeuralModel.kokoro.archive}').createSync();
-        File('${root.path}/kokoro-int8-en-v0_19.tar.bz2').writeAsStringSync('');
-        await tidyModels(root, downloading: true);
-        // A download under way is left alone.
-        expect(
-          File('${root.path}/kokoro-int8-en-v0_19.tar.bz2').existsSync(),
-          isTrue,
-        );
-        await tidyModels(root, downloading: false);
-        expect(
-          root
-              .listSync()
-              .map((e) => e.uri.pathSegments.lastWhere((s) => s.isNotEmpty))
-              .toSet(),
-          {NeuralModel.kitten.archive, NeuralModel.kokoro.archive},
-        );
-      },
-    );
+    test('models no longer used, and broken unpacking, are tidied', () async {
+      final root = Directory.systemTemp.createTempSync('voices');
+      addTearDown(() => root.deleteSync(recursive: true));
+      Directory('${root.path}/kitten-nano-en-v0_8-int8').createSync();
+      Directory('${root.path}/${NeuralModel.kitten.archive}').createSync();
+      Directory('${root.path}/kokoro-int8-en-v0_19').createSync();
+      File('${root.path}/kokoro-int8-en-v0_19.tar.bz2').writeAsStringSync('');
+      File('${root.path}/kitten.part.tar').writeAsStringSync('');
+      await tidyModels(root);
+      expect(
+        root
+            .listSync()
+            .map((e) => e.uri.pathSegments.lastWhere((s) => s.isNotEmpty))
+            .toSet(),
+        {NeuralModel.kitten.archive},
+      );
+    });
+
+    test('a piece is not cut straight after a little word', () {
+      final pieces = NeuralSpeechEngine.pieces(
+        'In the beginning God created the heavens and the earth.',
+      );
+      expect(pieces.first.$2, 'In the beginning God created');
+      expect(pieces[1].$2, 'the heavens and the earth.');
+    });
 
     test('the first piece is short, so the voice starts at once', () {
       final text = List.filled(
@@ -698,15 +609,6 @@ void main() {
       final middle = lengths.sublist(2, lengths.length - 1);
       expect(middle.every((n) => n > 80 && n <= 160), isTrue);
       expect(pieces.map((p) => p.$2).join(' '), text);
-    });
-
-    test('normal pace is what each platform calls normal', () {
-      // The plugin doubles the rate on Android and adds 0.5 on Windows, so
-      // 0.5 is normal there as on Apple's voices; a browser takes 1.0.
-      expect(PlatformSpeechEngine.rateFor(1.0, web: false), 0.5);
-      expect(PlatformSpeechEngine.rateFor(1.0, web: true), 1.0);
-      expect(PlatformSpeechEngine.rateFor(1.5, web: false), 0.75);
-      expect(PlatformSpeechEngine.rateFor(0.75, web: true), 0.75);
     });
 
     test('the divine name is said as a word', () {
@@ -837,7 +739,8 @@ void main() {
       };
     });
 
-    tearDown(() => createSpeechEngine = PlatformSpeechEngine.new);
+    final original = createSpeechEngine;
+    tearDown(() => createSpeechEngine = original);
 
     testWidgets('Listen reads the chapter, and the bar follows it', (
       tester,
@@ -913,64 +816,24 @@ void main() {
       expect(speech.said.last, startsWith('A paragraph set flush'));
     });
 
-    testWidgets('a natural voice is downloaded from the sheet, and chosen', (
+    testWidgets('a voice too slow for the device says so, once', (
       tester,
     ) async {
       final neural = FakeNeuralVoices();
       final previous = neuralVoices;
       neuralVoices = neural;
       addTearDown(() => neuralVoices = previous);
-      createSpeechEngine = () => SpeechEngines(speech, neural);
-      final harness = await pumpReader(tester);
-      await tester.tap(find.text('LISTEN'));
-      await tester.pump();
-      await tester.tap(find.byTooltip('Speed and voice'));
-      await tester.pumpAndSettle();
-      expect(find.text('Natural voices for OpenWord'), findsOneWidget);
-      expect(find.text('Kokoro'), findsOneWidget);
-
-      final download = find.widgetWithText(FilledButton, 'Download').first;
-      await tester.ensureVisible(download);
-      await tester.tap(download);
-      await tester.pumpAndSettle();
-      expect(neural.isInstalled(NeuralModel.kitten), isTrue);
-      expect(harness.settings.speechVoice, 'openword:kitten:1');
-      expect(find.text('Bella · Kitten'), findsOneWidget);
-
-      // Removed, the voice goes back to the device's own.
-      final remove = find.byTooltip('Remove Kitten');
-      await tester.ensureVisible(remove);
-      await tester.tap(remove);
-      await tester.pumpAndSettle();
-      expect(harness.settings.speechVoice, isNull);
-      expect(find.text('Bella · Kitten'), findsNothing);
-    });
-
-    testWidgets('a voice too slow for the device says so, once', (
-      tester,
-    ) async {
-      final neural = FakeNeuralVoices()..installed.add(NeuralModel.kokoro);
-      final previous = neuralVoices;
-      neuralVoices = neural;
-      addTearDown(() => neuralVoices = previous);
-      await pumpReader(
-        tester,
-        prefs: {
-          'speechVoice': NeuralModel.kokoro.voiceName(
-            NeuralModel.kokoro.speakers.first,
-          ),
-        },
-      );
-      neural.slow = NeuralModel.kokoro;
+      await pumpReader(tester);
+      neural.slow = true;
       neural.notifyListeners();
       await tester.pump();
-      expect(find.textContaining('Kitten is quicker'), findsOneWidget);
+      expect(find.textContaining('pauses between sentences'), findsOneWidget);
       ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first))
           .removeCurrentSnackBar();
       await tester.pumpAndSettle();
       neural.notifyListeners();
       await tester.pump();
-      expect(find.textContaining('Kitten is quicker'), findsNothing);
+      expect(find.textContaining('pauses between sentences'), findsNothing);
     });
 
     testWidgets('a session that cannot start says why, once', (tester) async {
@@ -1062,15 +925,18 @@ void main() {
       await tester.tap(find.text('1.5×'));
       await tester.pumpAndSettle();
       expect(harness.settings.speechRate, 1.5);
-      // The automatic choice names the voice it would use; the voice's
-      // own row is the second.
-      expect(
-        find.text('The most natural voice on this device'),
-        findsOneWidget,
+      // With none chosen, the first is the one heard.
+      Finder radio(String voice) => find.descendant(
+        of: find.widgetWithText(ListTile, voice),
+        matching: find.byIcon(Icons.radio_button_checked_rounded),
       );
-      await tester.tap(find.text('Serena').last);
+      expect(radio('Serena'), findsOneWidget);
+      // Voices go by their names, not what they are kept as.
+      await tester.tap(find.text('Daniel'));
       await tester.pumpAndSettle();
-      expect(harness.settings.speechVoice, 'Serena');
+      expect(harness.settings.speechVoice, 'daniel');
+      expect(radio('Daniel'), findsOneWidget);
+      expect(radio('Serena'), findsNothing);
     });
 
     testWidgets('where the device cannot speak, nothing offers to', (

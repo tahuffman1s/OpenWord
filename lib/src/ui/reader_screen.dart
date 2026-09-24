@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:math' as math;
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart' show ShareParams;
@@ -154,46 +153,36 @@ class _ReaderScreenState extends State<ReaderScreen> {
     }
   }
 
-  void _configureVoice() {
-    // One of OpenWord's own voices has a model to load, and it is loaded
-    // now rather than when Listen is tapped, so that it speaks at once.
-    final own = NeuralModel.parse(_settings.speechVoice) != null;
-    final voice = own && _canListen ? _voice : _readAloud;
+  /// Hands the voice its settings, and gets it ready to speak — its model
+  /// unpacked and loaded — so that Listen is heard at once. [load] leaves
+  /// the model unloaded where the voice has not been made yet.
+  void _configureVoice({bool load = true}) {
+    final voice = load && _canListen ? _voice : _readAloud;
     voice?.configure(
       language: _bible.translation.language,
       rate: _settings.speechRate,
       voice: _settings.speechVoice,
     );
-    if (own) voice?.prepare();
+    if (load) voice?.prepare();
   }
 
-  /// Said once, when the voice chosen turns out to be too slow for this
-  /// device to keep up with, which is heard only as pauses.
-  NeuralModel? _toldTooSlow;
+  /// Said once, when this device turns out to make speech more slowly
+  /// than it is heard, which is heard only as pauses.
+  bool _toldTooSlow = false;
   NeuralVoices? _neural;
 
   void _onNeuralVoices() {
-    final slow = _neural?.fallingBehind;
-    if (!mounted ||
-        slow == null ||
-        slow == _toldTooSlow ||
-        NeuralModel.parse(_settings.speechVoice)?.$1 != slow) {
+    if (!mounted || _toldTooSlow || !(_neural?.fallingBehind ?? false)) {
       return;
     }
-    _toldTooSlow = slow;
+    _toldTooSlow = true;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
+      const SnackBar(
         content: Text(
-          slow == NeuralModel.kitten
-              ? 'This device makes ${slow.title}’s speech more slowly than '
-                    'it is heard, so it pauses between sentences. The '
-                    'device’s own voices do not.'
-              : 'This device makes ${slow.title}’s speech more slowly than '
-                    'it is heard, so it pauses between sentences. Kitten '
-                    'is quicker.',
+          'This device makes speech more slowly than it is heard, so '
+          'reading aloud pauses between sentences.',
         ),
-        duration: const Duration(seconds: 10),
-        action: SnackBarAction(label: 'Voices', onPressed: _openVoiceSettings),
+        duration: Duration(seconds: 10),
       ),
     );
   }
@@ -300,7 +289,6 @@ class _ReaderScreenState extends State<ReaderScreen> {
       builder: (_) => _VoiceSheet(
         settings: _settings,
         engine: _voice.engine,
-        neural: neuralVoices,
         language: _bible.translation.language,
       ),
     );
@@ -426,8 +414,11 @@ class _ReaderScreenState extends State<ReaderScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_pages.hasClients) _pages.jumpToPage(_page);
         _syncComparison();
-        // A voice of OpenWord's own starts loading as the app opens.
-        if (mounted && NeuralModel.parse(_settings.speechVoice) != null) {
+        // Someone who has listened before will likely listen again: the
+        // voice starts loading as the app opens, rather than on Listen.
+        if (mounted &&
+            (_settings.speechVoice != null ||
+                _reading.listeningPlace != null)) {
           _configureVoice();
         }
       });
@@ -446,7 +437,8 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _onSettingsChanged() {
-    _configureVoice();
+    // Any setting at all: the model is loaded only for listening.
+    _configureVoice(load: false);
     final current = _index.isEmpty ? null : _index[_page];
     setState(_rebuildIndex);
     if (current != null) {
@@ -2472,13 +2464,11 @@ class _VoiceSheet extends StatefulWidget {
   const _VoiceSheet({
     required this.settings,
     required this.engine,
-    required this.neural,
     required this.language,
   });
 
   final Settings settings;
   final SpeechEngine engine;
-  final NeuralVoices neural;
   final String language;
 
   static const List<double> rates = [0.75, 1.0, 1.25, 1.5, 2.0];
@@ -2488,69 +2478,16 @@ class _VoiceSheet extends StatefulWidget {
 }
 
 class _VoiceSheetState extends State<_VoiceSheet> {
-  late Future<List<SpeechVoice>> _voices = _listVoices();
-
-  Future<List<SpeechVoice>> _listVoices() => widget.engine
+  late final Future<List<SpeechVoice>> _voices = widget.engine
       .voices(widget.language)
       .catchError((Object _) => const <SpeechVoice>[]);
-
-  /// Which models were installed when the voices were last listed.
-  String _installed = '';
-
-  String _installedNow() => [
-    for (final model in NeuralModel.catalog)
-      if (widget.neural.isInstalled(model)) model.id,
-  ].join(',');
-
-  bool get _offersOwnVoices =>
-      widget.neural.isSupported && NeuralModel.speaks(widget.language);
-
-  @override
-  void initState() {
-    super.initState();
-    _installed = _installedNow();
-    widget.neural.addListener(_onModels);
-  }
-
-  @override
-  void dispose() {
-    widget.neural.removeListener(_onModels);
-    super.dispose();
-  }
-
-  /// A model downloaded or removed changes the voices to choose from.
-  void _onModels() {
-    final installed = _installedNow();
-    if (installed == _installed) return;
-    setState(() {
-      _installed = installed;
-      _voices = _listVoices();
-    });
-  }
-
-  Future<void> _download(NeuralModel model) async {
-    await widget.neural.install(model);
-    // Downloaded to be heard: its first voice is chosen, unless one of
-    // OpenWord's own already was.
-    if (widget.neural.isInstalled(model) &&
-        NeuralModel.parse(widget.settings.speechVoice) == null) {
-      widget.settings.speechVoice = model.voiceName(model.speakers.first);
-    }
-  }
-
-  Future<void> _remove(NeuralModel model) async {
-    if (NeuralModel.parse(widget.settings.speechVoice)?.$1 == model) {
-      widget.settings.speechVoice = null;
-    }
-    await widget.neural.remove(model);
-  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final settings = widget.settings;
     return AnimatedBuilder(
-      animation: Listenable.merge([settings, widget.neural]),
+      animation: settings,
       builder: (context, _) => SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
@@ -2577,192 +2514,49 @@ class _VoiceSheetState extends State<_VoiceSheet> {
               FutureBuilder<List<SpeechVoice>>(
                 future: _voices,
                 builder: (context, snapshot) {
-                  final voices = snapshot.data ?? const <SpeechVoice>[];
                   if (snapshot.connectionState != ConnectionState.done) {
                     return const Padding(
                       padding: EdgeInsets.all(16),
                       child: LinearProgressIndicator(),
                     );
                   }
-                  return ConstrainedBox(
-                    constraints: const BoxConstraints(maxHeight: 280),
-                    child: ListView(
-                      shrinkWrap: true,
-                      children: [
-                        _voiceTile(
-                          null,
-                          'The most natural voice on this device',
-                          voices
-                              .where((v) => !v.online && !v.builtIn)
-                              .firstOrNull
-                              ?.name,
+                  final voices = snapshot.data ?? const <SpeechVoice>[];
+                  // A voice kept from an earlier version, or none: the
+                  // first is the one heard.
+                  final chosen =
+                      voices.any((v) => v.name == settings.speechVoice)
+                      ? settings.speechVoice
+                      : voices.firstOrNull?.name;
+                  return Column(
+                    children: [
+                      for (final voice in voices)
+                        ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: Icon(
+                            voice.name == chosen
+                                ? Icons.radio_button_checked_rounded
+                                : Icons.radio_button_unchecked_rounded,
+                          ),
+                          title: Text(voice.title ?? voice.name),
+                          subtitle: Text(voice.locale),
+                          onTap: () => settings.speechVoice = voice.name,
                         ),
-                        for (final voice in voices)
-                          _voiceTile(
-                            voice.name,
-                            voice.title ?? voice.name,
-                            [
-                              voice.qualityLabel,
-                              if (voice.builtIn) 'OpenWord',
-                              if (voice.online) 'Online',
-                              voice.locale,
-                            ].whereType<String>().join(' · '),
-                          ),
-                        if (voices.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(8),
-                            child: Text(
-                              'This device offers no other voices for this '
-                              'translation’s language.',
-                              style: theme.textTheme.bodySmall,
-                            ),
-                          ),
-                        if (voices.any((v) => v.online))
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
-                            child: Text(
-                              'Online voices send the words to their '
-                              'provider to be spoken, and need a connection. '
-                              'Every other voice speaks on this device.',
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                        if (!voices.any((v) => v.quality >= 3 && !v.online) &&
-                            !_offersOwnVoices)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
-                            child: Text(
-                              _betterVoicesHint,
-                              style: theme.textTheme.bodySmall?.copyWith(
-                                color: theme.colorScheme.onSurfaceVariant,
-                              ),
-                            ),
-                          ),
-                      ],
-                    ),
+                    ],
                   );
                 },
               ),
-              if (_offersOwnVoices) ..._ownVoices(theme),
+              const SizedBox(height: 8),
+              Text(
+                'Read by KittenTTS (Apache-2.0), on this device with '
+                'sherpa-onnx. Nothing leaves it.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurfaceVariant,
+                ),
+              ),
             ],
           ),
         ),
       ),
-    );
-  }
-
-  /// OpenWord's own voices: open neural models, each downloaded once and
-  /// then run on the device.
-  List<Widget> _ownVoices(ThemeData theme) {
-    final neural = widget.neural;
-    final muted = theme.textTheme.bodySmall?.copyWith(
-      color: theme.colorScheme.onSurfaceVariant,
-    );
-    return [
-      const SizedBox(height: 20),
-      Text('Natural voices for OpenWord', style: theme.textTheme.titleMedium),
-      const SizedBox(height: 4),
-      Text(
-        'Open neural voices that run on this device. Each is downloaded '
-        'once, from GitHub, and from then on reads with no connection.',
-        style: muted,
-      ),
-      for (final model in NeuralModel.catalog)
-        Builder(
-          builder: (context) {
-            final progress = neural.progress(model);
-            final error = neural.error(model);
-            final installed = neural.isInstalled(model);
-            return ListTile(
-              contentPadding: EdgeInsets.zero,
-              leading: const Icon(Icons.record_voice_over_rounded),
-              title: Text(model.title),
-              subtitle: progress != null
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const SizedBox(height: 6),
-                        LinearProgressIndicator(
-                          value: progress < 1 ? progress : null,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          progress < 1
-                              ? 'Downloading · ${(progress * 100).round()}%'
-                              : 'Unpacking…',
-                        ),
-                      ],
-                    )
-                  : Text(
-                      [
-                        installed
-                            ? '${model.speakers.length} voices'
-                            : '${model.size} download',
-                        model.blurb,
-                        ?error,
-                      ].join(' · '),
-                      style: error == null
-                          ? null
-                          : TextStyle(color: theme.colorScheme.error),
-                    ),
-              trailing: progress != null
-                  ? IconButton(
-                      tooltip: 'Stop downloading',
-                      onPressed: progress < 1
-                          ? () => neural.cancel(model)
-                          : null,
-                      icon: const Icon(Icons.close_rounded),
-                    )
-                  : installed
-                  ? IconButton(
-                      tooltip: 'Remove ${model.title}',
-                      onPressed: () => _remove(model),
-                      icon: const Icon(Icons.delete_outline_rounded),
-                    )
-                  : FilledButton.tonal(
-                      onPressed: () => _download(model),
-                      child: const Text('Download'),
-                    ),
-            );
-          },
-        ),
-      Text(
-        'KittenTTS and Kokoro, both Apache-2.0, run with sherpa-onnx.',
-        style: muted,
-      ),
-    ];
-  }
-
-  /// Where a more natural voice comes from. The system's own voices are
-  /// all an app can use, and the best of them are a download away.
-  static String get _betterVoicesHint => switch (defaultTargetPlatform) {
-    TargetPlatform.iOS || TargetPlatform.macOS =>
-      'For a more natural voice, download an Enhanced or Premium one: '
-          'Settings → Accessibility → Spoken Content → Voices → English. '
-          'It then appears here.',
-    TargetPlatform.android =>
-      'For a more natural voice, install one: Settings → System → '
-          'Languages → Text-to-speech output → the engine’s settings → '
-          'Install voice data. It then appears here.',
-    _ =>
-      'The voices here are the ones this device has installed; installing '
-          'a better one in its settings adds it to this list.',
-  };
-
-  Widget _voiceTile(String? name, String title, String? locale) {
-    final selected = widget.settings.speechVoice == name;
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Icon(
-        selected
-            ? Icons.radio_button_checked_rounded
-            : Icons.radio_button_unchecked_rounded,
-      ),
-      title: Text(title),
-      subtitle: locale == null ? null : Text(locale),
-      onTap: () => widget.settings.speechVoice = name,
     );
   }
 }

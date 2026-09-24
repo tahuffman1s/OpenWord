@@ -1,22 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
-import 'package:flutter_tts/flutter_tts.dart';
 
 import '../model/bible.dart';
 import 'neural_voices.dart';
 
-/// A voice the platform offers.
+/// One of the voices reading aloud can be heard in.
 @immutable
 class SpeechVoice {
-  const SpeechVoice({
-    required this.name,
-    required this.locale,
-    this.title,
-    this.quality = 0,
-    this.online = false,
-    this.builtIn = false,
-  });
+  const SpeechVoice({required this.name, required this.locale, this.title});
 
   /// What the voice is chosen by, and kept in settings as.
   final String name;
@@ -24,74 +16,10 @@ class SpeechVoice {
 
   /// What to call it, where that is not its name.
   final String? title;
-
-  /// Whether it is one of OpenWord's own, downloaded into the app, rather
-  /// than one of the platform's.
-  final bool builtIn;
-
-  /// Whether the voice needs the internet: it sends the words to its
-  /// provider to be spoken, where every other voice speaks on the device.
-  final bool online;
-
-  /// How natural the platform says the voice is, higher better: Apple's
-  /// premium and enhanced voices, Android's "very high" and "high"; and
-  /// above them all, OpenWord's own neural voices.
-  final int quality;
-
-  /// What the voice sheet calls it, where it is better than ordinary.
-  String? get qualityLabel => quality >= 3
-      ? 'Natural'
-      : quality == 2
-      ? 'Enhanced'
-      : null;
-
-  /// The voices a platform lists that can read [language], best first.
-  ///
-  /// Voices listed but not downloaded are left out. The most natural come
-  /// first, and among equals the translation's own region, so a British
-  /// edition is heard in a British voice when one is as good; then a voice
-  /// on the device before one that needs the internet.
-  static List<SpeechVoice> rank(List<Object?> raw, String language) {
-    final prefix = language.split(RegExp('[-_]')).first.toLowerCase();
-    final exact = language.toLowerCase().replaceAll('_', '-');
-    final result = <SpeechVoice>[];
-    for (final entry in raw) {
-      if (entry is! Map) continue;
-      final name = entry['name']?.toString();
-      final locale = entry['locale']?.toString() ?? '';
-      if (name == null) continue;
-      if (!locale.toLowerCase().startsWith(prefix)) continue;
-      if ((entry['features']?.toString() ?? '').contains('notInstalled')) {
-        continue;
-      }
-      result.add(
-        SpeechVoice(
-          name: name,
-          locale: locale,
-          online: entry['network_required']?.toString() == '1',
-          quality: switch (entry['quality']?.toString()) {
-            'premium' || 'very high' => 3,
-            'enhanced' || 'high' => 2,
-            'default' || 'normal' => 1,
-            _ => 0,
-          },
-        ),
-      );
-    }
-    bool own(SpeechVoice v) =>
-        v.locale.toLowerCase().replaceAll('_', '-') == exact;
-    result.sort((a, b) {
-      if (a.quality != b.quality) return b.quality - a.quality;
-      if (own(a) != own(b)) return own(a) ? -1 : 1;
-      if (a.online != b.online) return a.online ? 1 : -1;
-      return a.name.compareTo(b.name);
-    });
-    return result;
-  }
 }
 
-/// What reading aloud needs from the platform's text-to-speech. A seam, so
-/// a test can drive playback without a device that talks.
+/// What reading aloud needs from whatever speaks. A seam, so a test can
+/// drive playback without a device that talks.
 abstract class SpeechEngine {
   /// Whether this platform can speak at all.
   bool get isAvailable;
@@ -127,242 +55,46 @@ abstract class SpeechEngine {
   Future<void> resume();
 }
 
-/// The platform's own text-to-speech, through flutter_tts. Nothing leaves
-/// the device: every platform it supports speaks with voices it already
-/// has.
-class PlatformSpeechEngine implements SpeechEngine {
-  PlatformSpeechEngine() {
-    _tts.setStartHandler(() {
-      _started = true;
-      _onStart?.call();
-    });
-    _tts.setCompletionHandler(() => _finish(true));
-    // Stopping the voice to move to another verse is reported back after
-    // the fact, and can arrive once the next verse has been handed over.
-    // Read as the end of that next verse, it looked like the device giving
-    // up — "could not read aloud" in the middle of a chapter. A stop heard
-    // before the current utterance has even started belongs to the one
-    // before it, and is ignored.
-    _tts.setCancelHandler(() {
-      if (_started) _finish(false);
-    });
-    _tts.setErrorHandler((_) => _finish(false));
-    _tts.setProgressHandler((text, start, end, word) {
-      // Only for what is being said now: a word reported late from an
-      // utterance already stopped is not this one's.
-      if (text == _speaking) _onProgress?.call(start);
-    });
-  }
-
-  String? _speaking;
-  void Function(int offset)? _onProgress;
-  void Function()? _onStart;
-
-  final FlutterTts _tts = FlutterTts();
-  Completer<bool>? _pending;
-
-  /// Whether the utterance being waited on has begun to be spoken.
-  bool _started = false;
-  bool _sessionReady = false;
-
-  /// On iOS the voice is played through an audio session of the app's
-  /// own. It has to be a playback session, which the silent switch and the
-  /// lock screen do not mute, and it has to stay open between verses: the
-  /// plugin closes it after every utterance by default, and an app with no
-  /// audio session open is suspended in the background between one verse
-  /// and the next.
-  Future<void> _prepareSession() async {
-    if (_sessionReady) return;
-    _sessionReady = true;
-    if (kIsWeb || defaultTargetPlatform != TargetPlatform.iOS) return;
-    await _tts.setSharedInstance(true);
-    await _tts.autoStopSharedSession(false);
-    await _tts.setIosAudioCategory(
-      IosTextToSpeechAudioCategory.playback,
-      const [
-        IosTextToSpeechAudioCategoryOptions.allowBluetooth,
-        IosTextToSpeechAudioCategoryOptions.allowBluetoothA2DP,
-        IosTextToSpeechAudioCategoryOptions.allowAirPlay,
-      ],
-      IosTextToSpeechAudioMode.spokenAudio,
-    );
-  }
-
-  void _finish(bool spokenToTheEnd) {
-    final pending = _pending;
-    _pending = null;
-    if (pending != null && !pending.isCompleted) {
-      pending.complete(spokenToTheEnd);
-    }
-  }
-
-  /// Linux has no plugin, so there is nothing to speak with.
+/// Where there is nothing to speak with — the web, which has no
+/// filesystem to keep the voice on — and nothing offers to.
+class NoSpeechEngine implements SpeechEngine {
   @override
-  bool get isAvailable =>
-      kIsWeb || defaultTargetPlatform != TargetPlatform.linux;
+  bool get isAvailable => false;
 
-  /// The value handed to the plugin for a pace of [multiple] times normal.
-  ///
-  /// The plugin does not mean the same thing by a rate everywhere. On the
-  /// web it goes straight to the browser, where 1.0 is normal. Everywhere
-  /// else 0.5 is normal: Apple's voices take 0.5 as their default, the
-  /// plugin doubles the value on its way to Android (whose normal is 1.0),
-  /// and on Windows it adds 0.5 to it. Handing Android 1.0 for normal, as
-  /// this once did, read everything at twice the speed.
-  static double rateFor(double multiple, {required bool web}) =>
-      (web ? 1.0 : 0.5) * multiple;
+  @override
+  bool get canPause => false;
 
   @override
   Future<void> configure({
     required String language,
     required double rate,
     String? voice,
-  }) async {
-    await _prepareSession();
-    await _tts.setLanguage(language);
-    await _tts.setSpeechRate(rateFor(rate, web: kIsWeb));
-    // With no voice chosen, the most natural one on the device rather than
-    // the platform's default, which is often its plainest. An online voice
-    // is used only when someone has chosen it: it sends the words away.
-    final available = await voices(language);
-    final match = voice == null
-        ? available.where((v) => !v.online).take(1)
-        : available.where((v) => v.name == voice);
-    if (match.isNotEmpty) {
-      await _tts.setVoice({
-        'name': match.first.name,
-        'locale': match.first.locale,
-      });
-    }
-  }
+  }) async {}
 
   @override
   Future<bool> speak(
     String text, {
     void Function(int offset)? onProgress,
     void Function()? onStart,
-  }) async {
-    _finish(false);
-    _started = false;
-    _speaking = text;
-    _onProgress = onProgress;
-    _onStart = onStart;
-    final pending = _pending = Completer<bool>();
-    try {
-      await _tts.speak(text);
-    } on Object {
-      _finish(false);
-    }
-    return pending.future;
-  }
+  }) async => false;
 
   @override
-  Future<void> stop() async {
-    _finish(false);
-    await _tts.stop();
-  }
-
-  @override
-  Future<List<SpeechVoice>> voices(String language) async {
-    final raw = await _tts.getVoices;
-    return raw is List ? SpeechVoice.rank(raw, language) : const [];
-  }
-
-  /// Android's pause is a stop that remembers the word, no better than
-  /// what [ReadAloud] does itself, and Apple's cannot be relied on to come
-  /// back after the audio session has been interrupted.
-  @override
-  bool get canPause => false;
+  Future<void> stop() async {}
 
   @override
   Future<void> pause() async {}
 
   @override
   Future<void> resume() async {}
+
+  @override
+  Future<List<SpeechVoice>> voices(String language) async => const [];
 }
 
-/// The platform's voices and OpenWord's own as one engine. Which of them
-/// speaks is decided by the voice chosen.
-class SpeechEngines implements SpeechEngine {
-  SpeechEngines(this.platform, this.neural);
-
-  final SpeechEngine platform;
-  final NeuralVoices neural;
-  SpeechEngine? _own;
-  late SpeechEngine _active = platform;
-
-  @override
-  bool get isAvailable => platform.isAvailable;
-
-  @override
-  bool get canPause => _active.canPause;
-
-  @override
-  Future<void> configure({
-    required String language,
-    required double rate,
-    String? voice,
-  }) async {
-    final chosen = NeuralModel.parse(voice);
-    if (chosen != null && neural.isSupported) {
-      await neural.ready;
-      if (neural.isInstalled(chosen.$1)) {
-        final own = _own ??= neural.engine();
-        try {
-          await _switchTo(own);
-          await own.configure(language: language, rate: rate, voice: voice);
-          return;
-        } on Object catch (error) {
-          // A model that will not load: the platform's voice rather than
-          // silence.
-          debugPrint('OpenWord: the voice could not be loaded: $error');
-        }
-      }
-    }
-    await _switchTo(platform);
-    await platform.configure(
-      language: language,
-      rate: rate,
-      voice: chosen == null ? voice : null,
-    );
-  }
-
-  Future<void> _switchTo(SpeechEngine engine) async {
-    if (identical(engine, _active)) return;
-    await _active.stop();
-    _active = engine;
-  }
-
-  @override
-  Future<bool> speak(
-    String text, {
-    void Function(int offset)? onProgress,
-    void Function()? onStart,
-  }) => _active.speak(text, onProgress: onProgress, onStart: onStart);
-
-  @override
-  Future<void> stop() => _active.stop();
-
-  @override
-  Future<void> pause() => _active.pause();
-
-  @override
-  Future<void> resume() => _active.resume();
-
-  @override
-  Future<List<SpeechVoice>> voices(String language) async {
-    if (neural.isSupported) await neural.ready;
-    return [
-      if (neural.isSupported) ...neural.voicesFor(language),
-      ...await platform.voices(language),
-    ];
-  }
-}
-
-/// Makes the engine the reader speaks with. A test puts a silent one in
-/// its place.
+/// Makes the engine the reader speaks with: OpenWord's own voice, where
+/// it can run. A test puts a silent one in its place.
 SpeechEngine Function() createSpeechEngine = () =>
-    SpeechEngines(PlatformSpeechEngine(), neuralVoices);
+    neuralVoices.isSupported ? neuralVoices.engine() : NoSpeechEngine();
 
 enum ReadAloudState { idle, playing, paused }
 

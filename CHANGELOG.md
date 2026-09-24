@@ -2,32 +2,37 @@
 
 ## Unreleased
 
+### Changed
+- **One voice, built in.** Reading aloud is now always in KittenTTS, the
+  open neural voice, which ships inside the app: nothing to download, and
+  *Listen* works straight after installing, with no connection. Its eight
+  speakers are chosen in the voice sheet. Kokoro and the device's own
+  voices are gone, and with them the flutter_tts plugin; a voice chosen from
+  either before is read as Kitten's first. The files 1.21.0 downloaded are
+  deleted. The download is about 55 MB larger for it.
+- **Kitten is at full precision.** The 8-bit edition 1.21.0 offered now and
+  then made a garbled sound — KittenML itself warns of it — and was, on the
+  processors tried, three times slower to make speech than the full one.
+- **Reading aloud on Linux**, which it never did before, since the voice no
+  longer comes from a plugin Linux lacks. **Not on the web** any longer: a
+  browser cannot run the voice.
+
 ### Fixed
-- **Kitten now and then made a garbled sound.** It was the 8-bit edition
-  of KittenTTS nano, which KittenML itself warns about. Kitten is now the
-  full-precision edition: a 64 MB download rather than 31 MB, clearer, and
-  about three times quicker to make speech on the processors tried, since
-  the 8-bit edition spends more converting its numbers than it saves.
-  Having downloaded Kitten before, download it again from the voice sheet;
-  the old files are deleted when the app opens.
-- **A crackle on the loudest syllables.** A voice's output can go past full
-  scale, and the loudest samples were cut off flat as they were written
+- **OpenWord's voice took a long time to start, and paused part way.**
+  Its model was loaded only when *Listen* was tapped, and a model's first
+  run is far slower than any after it; it is now loaded, and run once, in
+  the background as the app opens for anyone who has listened before.
+  Nothing was heard until the first piece had been made whole, and that
+  could be a long sentence; the first piece is now forty characters at
+  most, cut where the words allow, and each after it may be twice as long,
+  so the voice starts almost at once and keeps ahead. Reading was handed
+  over a passage at a time, each starting from nothing, which was a
+  silence every minute or so; the voice now has the rest of the chapter at
+  once, and three pieces are made ahead instead of one. Where a device
+  still cannot keep up, the reader says so once.
+- **A crackle on the loudest syllables.** The voice's output can go past
+  full scale, and the loudest samples were cut off flat as they were written
   out. A piece that would be is now made a little quieter as a whole.
-- **OpenWord's own voices took a long time to start, and paused part way.**
-  Four things added up. The voice's model was loaded only when *Listen*
-  was tapped, and a model's first run is far slower than any after it —
-  twelve seconds for Kokoro on a desktop processor, more on a phone. It is
-  now loaded, and run once, in the background as the app opens with one of
-  these voices chosen, or as soon as one is chosen. Nothing was heard until
-  the first piece had been made whole, and that could be a long sentence; the
-  first piece is now forty characters at most, and each after it may be
-  twice as long as the one before, so the voice starts almost at once and
-  keeps ahead. Reading was handed over a passage at a time, and each new
-  passage started making speech from nothing, which was a silence every
-  minute or so; these voices are now given the rest of the chapter at once.
-  And only one piece was made ahead of what was heard, so one slow sentence
-  left a gap; three are now. Where a voice still cannot keep up on a device,
-  the reader says so once, and points to a quicker one.
 
 ## 1.21.0
 

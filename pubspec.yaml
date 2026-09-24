@@ -38,12 +38,11 @@ dependencies:
   # Where imported translations are kept — the app's own documents directory.
   path_provider: ^2.1.6
   share_plus: ^13.3.0
-  flutter_tts: ^4.2.5
   audio_service: ^0.18.19
-  # OpenWord's own voices: open neural text-to-speech models, run on the
-  # device. The models are downloaded when asked for, never bundled.
+  # Reading aloud: an open neural text-to-speech model, bundled and run on
+  # the device.
   sherpa_onnx: ^1.13.8
-  # Plays what those voices make.
+  # Plays what it says.
   audioplayers: ^6.8.1
 
 dev_dependencies:
@@ -61,6 +60,11 @@ flutter:
     - assets/maps/
     - assets/refs/
     - assets/strongs/
+    # The voice reading aloud is heard in: KittenTTS, as tool/fetch_voice.dart
+    # fetches and trims it (git ignores the file). Not on the web, which
+    # cannot run it.
+    - path: assets/voice/kitten.tar.gz
+      platforms: [android, ios, linux, macos, windows]
 
   # Literata (SIL Open Font License 1.1) is bundled so the reading typeface is
   # identical on every platform, including the web build where the generic

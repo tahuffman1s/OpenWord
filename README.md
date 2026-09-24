@@ -57,8 +57,8 @@ no network entitlement.
   Treasury of Scripture Knowledge, grouped under the phrase that prompted
   each one and carrying the words they point at, so the list reads without
   leaving it. Tap one to go there. Bundled, like everything else.
-- **Read aloud.** *Listen* beside the chapter's name reads it in the
-  device's own voice — nothing leaves the device — a verse at a time, with
+- **Read aloud.** *Listen* beside the chapter's name reads it in a
+  natural voice that runs on the device — nothing leaves it — with
   the verse being read tinted and kept in view and the page turning as it
   goes on. A verse's sheet offers *Listen from here*. The bar along the
   bottom pauses, steps a verse back or on, and sets the speed and the voice.
@@ -67,13 +67,10 @@ no network entitlement.
   been closed. Started from a reading plan it reads the rest of that day and
   stops, and a plan chapter heard to its end is ticked off. It goes on with
   the screen off: the lock screen, a headset and a car pause it and step it
-  verse by verse. Not on Linux, which the speech plugin does not support.
-- **Natural voices of its own.** Besides the device's voices, the voice
-  sheet offers two open neural voices that OpenWord runs on the device with
-  [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx): Kitten (64 MB, quick
-  on any phone) and Kokoro (103 MB, the most natural, for recent phones).
-  Each is downloaded once, when asked for, and then reads with no
-  connection. English only; not on the web or Linux.
+  verse by verse. The voice is [KittenTTS](https://github.com/KittenML/KittenTTS),
+  an open neural model with eight speakers, bundled with the app and run
+  with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); it speaks
+  English. Not on the web, which cannot run it.
 - **Select several verses and share them.** Hold a verse, then tap others
   to add them; a bar along the bottom cites the selection the way a printed
   Bible would — *John 3:16–18, 20* — and copies it, shares it, highlights it
@@ -649,15 +646,10 @@ Releases are published on GitHub, and the app can find them itself.
 
 This is why the Android build now asks for `INTERNET` and
 `REQUEST_INSTALL_PACKAGES`, and the macOS build carries the outgoing-network
-entitlement. The one other thing that touches a network is downloading one of
-OpenWord's own voices, and only when the reader taps *Download* in the voice
-sheet: the model's archive comes from
-[sherpa-onnx's releases](https://github.com/k2-fsa/sherpa-onnx/releases/tag/tts-models)
-on GitHub, is checked against the SHA-256 in `lib/src/data/neural_voices.dart`,
-and is unpacked into the app's support directory. Nothing is sent: the voice
-speaks on the device from then on. The Scripture, the introductions and the
-maps are all bundled, and importing a translation reads the file the system
-picker hands over without sending it anywhere.
+entitlement. Nothing else here touches a network: the Scripture, the
+introductions, the maps and the voice are all bundled, and importing a
+translation reads the file the system picker hands over without sending it
+anywhere.
 
 ## Building
 
@@ -675,10 +667,20 @@ flutter build windows --release   # Windows
 flutter build web --release       # web
 ```
 
+The voice is not kept in git — it is fifty-odd megabytes — so fetch it
+before building or testing anything but the web:
+
+```bash
+dart run tool/fetch_voice.dart    # writes assets/voice/kitten.tar.gz
+```
+
+It downloads KittenTTS as sherpa-onnx packages it, checks its SHA-256, and
+keeps only what English needs. CI does the same.
+
 The Linux build needs GTK and GStreamer's development packages — on Debian
 and Ubuntu, `libgtk-3-dev libgstreamer1.0-dev
-libgstreamer-plugins-base1.0-dev` — since the audio player the built-in
-voices play through is linked on every desktop.
+libgstreamer-plugins-base1.0-dev` — for the audio player the voice plays
+through.
 
 Tagged builds for Android, Linux, Windows and the web are attached to each
 [release](https://github.com/tahuffman1s/OpenWord/releases); see
@@ -854,11 +856,9 @@ and navigation instant.
   [eSpeak NG](https://github.com/espeak-ng/espeak-ng) compiled in, to turn
   text into the sounds the voices speak, and eSpeak NG is GPL-3.0: a build
   of OpenWord carries that library, so its binaries are distributed under
-  the GPL's terms as well as the MIT licence of the code here. The voices
-  themselves are downloaded rather than bundled —
-  [KittenTTS](https://github.com/KittenML/KittenTTS) nano 0.8 and
-  [Kokoro 82M](https://huggingface.co/hexgrad/Kokoro-82M), both Apache-2.0,
-  each with eSpeak NG's pronunciation data (GPL-3.0) beside it.
+  the GPL's terms as well as the MIT licence of the code here. The voice is
+  [KittenTTS](https://github.com/KittenML/KittenTTS) nano 0.8, Apache-2.0,
+  bundled with eSpeak NG's English pronunciation data (GPL-3.0).
 - Bundled typeface: [Literata](https://fonts.google.com/specimen/Literata),
   SIL Open Font License 1.1 — see `assets/fonts/Literata-OFL.txt`. It is
   subset to Latin, Greek and the punctuation the text uses.

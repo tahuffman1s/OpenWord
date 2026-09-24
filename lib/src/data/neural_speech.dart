@@ -22,9 +22,16 @@ import 'read_aloud.dart';
 /// Unlike the platform's voices it can truly pause: the audio simply
 /// stops where it is and goes on from there, mid-word.
 class NeuralSpeechEngine implements SpeechEngine {
-  NeuralSpeechEngine({required this.modelDirectory, this.onFallingBehind});
+  NeuralSpeechEngine({
+    required this.ready,
+    required this.modelDirectory,
+    this.onFallingBehind,
+  });
 
-  /// Where a downloaded model was unpacked.
+  /// Settles once the model is unpacked where [modelDirectory] says.
+  final Future<void> Function() ready;
+
+  /// Where the model was unpacked.
   final String Function(NeuralModel model) modelDirectory;
 
   /// Told, once for each model, when this device makes its speech more
@@ -37,7 +44,9 @@ class NeuralSpeechEngine implements SpeechEngine {
   int _speaker = 0;
   double _speed = 1.0;
 
-  final List<AudioPlayer> _players = [AudioPlayer(), AudioPlayer()];
+  /// Made when first wanted: an engine is made for every reader screen,
+  /// and most are never asked to speak.
+  late final List<AudioPlayer> _players = [AudioPlayer(), AudioPlayer()];
   bool _playersReady = false;
   Directory? _clips;
   _Reading? _reading;
@@ -69,11 +78,10 @@ class NeuralSpeechEngine implements SpeechEngine {
     required double rate,
     String? voice,
   }) async {
-    final chosen = NeuralModel.parse(voice);
-    if (chosen == null) throw ArgumentError.value(voice, 'voice');
-    final (model, speaker) = chosen;
+    final (model, speaker) = NeuralModel.chosen(voice);
     _speaker = speaker.id;
     _speed = rate;
+    await ready();
     await _preparePlayers();
     if (model != _model || _synth == null) {
       await stop();
@@ -149,6 +157,7 @@ class NeuralSpeechEngine implements SpeechEngine {
   Future<void> stop() async {
     _reading?.cancel();
     _reading = null;
+    if (!_playersReady) return;
     for (final player in _players) {
       try {
         await player.stop();
@@ -164,10 +173,9 @@ class NeuralSpeechEngine implements SpeechEngine {
   @override
   Future<void> resume() async => _reading?.resume();
 
-  /// The voices of the models that are installed come from
-  /// [NeuralVoices]; this engine has none of its own to list.
   @override
-  Future<List<SpeechVoice>> voices(String language) async => const [];
+  Future<List<SpeechVoice>> voices(String language) async =>
+      NeuralModel.kitten.voices;
 
   /// Where [text] is cut to be voiced a piece at a time, as the offset of
   /// each piece and its words.
@@ -200,7 +208,21 @@ class NeuralSpeechEngine implements SpeechEngine {
         final size = limit();
         final window = text.substring(start, start + size);
         var at = math.max(window.lastIndexOf(', '), window.lastIndexOf('; '));
-        at = at > size ~/ 3 ? at + 1 : window.lastIndexOf(' ');
+        if (at > size ~/ 3) {
+          at++;
+        } else {
+          // At a space, but not straight after a little word that leans on
+          // the next: "God created | the heavens", not "created the |".
+          at = window.lastIndexOf(' ');
+          var earlier = at;
+          while (earlier > size ~/ 3) {
+            final before = window.lastIndexOf(' ', earlier - 1);
+            final word = window.substring(before + 1, earlier).toLowerCase();
+            if (!_leaning.contains(word)) break;
+            earlier = before;
+          }
+          if (earlier > size ~/ 3) at = earlier;
+        }
         if (at <= 0) at = size;
         add(start, start + at);
         start += at;
@@ -218,6 +240,38 @@ class NeuralSpeechEngine implements SpeechEngine {
   }
 
   static final RegExp _sentenceEnd = RegExp('[.;:!?][”’"\')]*\\s+');
+
+  static const Set<String> _leaning = {
+    'a',
+    'an',
+    'and',
+    'as',
+    'at',
+    'but',
+    'by',
+    'for',
+    'from',
+    'his',
+    'her',
+    'in',
+    'into',
+    'its',
+    'my',
+    'nor',
+    'o',
+    'of',
+    'on',
+    'or',
+    'our',
+    'that',
+    'the',
+    'their',
+    'thy',
+    'to',
+    'upon',
+    'with',
+    'your',
+  };
 }
 
 /// One passage being voiced: made, played, paused, or given up.
@@ -381,7 +435,6 @@ class Synthesiser {
     final threads = math.min(4, math.max(1, Platform.numberOfProcessors - 1));
     final isolate = await Isolate.spawn(_serve, (
       replies.sendPort,
-      model.family.name,
       directory,
       model.modelFile,
       threads,
@@ -459,38 +512,19 @@ class Synthesiser {
   }
 
   static sherpa.OfflineTtsModelConfig configFor(
-    String family,
     String directory,
     String modelFile,
     int threads,
-  ) {
-    final model = '$directory/$modelFile';
-    final voices = '$directory/voices.bin';
-    final tokens = '$directory/tokens.txt';
-    final data = '$directory/espeak-ng-data';
-    return switch (family) {
-      'kokoro' => sherpa.OfflineTtsModelConfig(
-        kokoro: sherpa.OfflineTtsKokoroModelConfig(
-          model: model,
-          voices: voices,
-          tokens: tokens,
-          dataDir: data,
-        ),
-        numThreads: threads,
-        debug: false,
-      ),
-      _ => sherpa.OfflineTtsModelConfig(
-        kitten: sherpa.OfflineTtsKittenModelConfig(
-          model: model,
-          voices: voices,
-          tokens: tokens,
-          dataDir: data,
-        ),
-        numThreads: threads,
-        debug: false,
-      ),
-    };
-  }
+  ) => sherpa.OfflineTtsModelConfig(
+    kitten: sherpa.OfflineTtsKittenModelConfig(
+      model: '$directory/$modelFile',
+      voices: '$directory/voices.bin',
+      tokens: '$directory/tokens.txt',
+      dataDir: '$directory/espeak-ng-data',
+    ),
+    numThreads: threads,
+    debug: false,
+  );
 
   /// [samples] turned down, if need be, so that none is louder than
   /// [ceiling].
@@ -509,14 +543,14 @@ class Synthesiser {
     return Float32List.fromList([for (final sample in samples) sample * gain]);
   }
 
-  static void _serve((SendPort, String, String, String, int) setup) {
-    final (reply, family, directory, modelFile, threads) = setup;
+  static void _serve((SendPort, String, String, int) setup) {
+    final (reply, directory, modelFile, threads) = setup;
     final sherpa.OfflineTts tts;
     try {
       sherpa.initBindings();
       tts = sherpa.OfflineTts(
         sherpa.OfflineTtsConfig(
-          model: configFor(family, directory, modelFile, threads),
+          model: configFor(directory, modelFile, threads),
         ),
       );
     } on Object catch (error) {

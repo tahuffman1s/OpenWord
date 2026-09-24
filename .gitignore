@@ -49,3 +49,6 @@ Thumbs.db
 *.log
 hs_err_pid*
 replay_pid*
+
+# The voice, fetched by tool/fetch_voice.dart rather than kept in git
+assets/voice/kitten.tar.gz

@@ -15,6 +15,13 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      # The voice is fetched rather than kept in git; see
+      # tool/fetch_voice.dart. Cached until that script changes.
+      - uses: actions/cache@v4
+        with:
+          path: assets/voice/kitten.tar.gz
+          key: voice-${{ hashFiles('tool/fetch_voice.dart') }}
+      - run: dart run tool/fetch_voice.dart
       - run: dart format --output=none --set-exit-if-changed lib test tool
       - run: flutter analyze
       - run: flutter test
@@ -49,6 +56,13 @@ jobs:
           channel: stable
           cache: true
       - run: flutter pub get
+      # The voice is fetched rather than kept in git; see
+      # tool/fetch_voice.dart. Cached until that script changes.
+      - uses: actions/cache@v4
+        with:
+          path: assets/voice/kitten.tar.gz
+          key: voice-${{ hashFiles('tool/fetch_voice.dart') }}
+      - run: dart run tool/fetch_voice.dart
       # Release, not debug: the release build is the one with the signing
       # script in it, and a mistake there should fail here rather than at
       # release time. Without the signing secret it falls back to the debug
