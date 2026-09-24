@@ -31,13 +31,15 @@ abstract class SpeechEngine {
   });
 
   /// Speaks [text]. Completes with true when it has been said to the end,
-  /// and false when it was stopped or failed. Where the platform says how
-  /// far it has got, [onProgress] is given the offset in [text] of each
-  /// word as it is reached.
+  /// and false when it was stopped or failed. [onProgress] is given the
+  /// offset in [text] of each place it reaches that it can tell — for this
+  /// voice, the start of each piece it is spoken in — and [breaks] are the
+  /// offsets it should tell of as it reaches them: where each verse begins.
   Future<bool> speak(
     String text, {
     void Function(int offset)? onProgress,
     void Function()? onStart,
+    List<int> breaks = const [],
   });
 
   Future<void> stop();
@@ -76,6 +78,7 @@ class NoSpeechEngine implements SpeechEngine {
     String text, {
     void Function(int offset)? onProgress,
     void Function()? onStart,
+    List<int> breaks = const [],
   }) async => false;
 
   @override
@@ -562,7 +565,10 @@ class ReadAloud extends ChangeNotifier {
     // it says nothing.
     _passageStartedAt = _clock();
     _estimator?.cancel();
-    if (_reportsProgress != true) {
+    // A voice that makes its own speech tells where it is as it gets
+    // there; estimating ahead of it, while it is still making the first
+    // piece, would move the verse before a word had been heard.
+    if (_reportsProgress != true && !engine.canPause) {
       _estimator = Timer.periodic(const Duration(milliseconds: 300), (_) {
         if (generation == _generation && isPlaying) _estimate();
       });
@@ -570,6 +576,7 @@ class ReadAloud extends ChangeNotifier {
     _saying = generation;
     final said = await engine.speak(
       text,
+      breaks: starts,
       onStart: () {
         if (generation == _generation) _passageStartedAt = _clock();
       },

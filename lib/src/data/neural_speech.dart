@@ -80,7 +80,7 @@ class NeuralSpeechEngine implements SpeechEngine {
   }) async {
     final (model, speaker) = NeuralModel.chosen(voice);
     _speaker = speaker.id;
-    _speed = rate;
+    _speed = rate / speaker.prior;
     await ready();
     await _preparePlayers();
     if (model != _model || _synth == null) {
@@ -123,6 +123,7 @@ class NeuralSpeechEngine implements SpeechEngine {
     String text, {
     void Function(int offset)? onProgress,
     void Function()? onStart,
+    List<int> breaks = const [],
   }) async {
     _reading?.cancel();
     final synth = _synth;
@@ -130,6 +131,7 @@ class NeuralSpeechEngine implements SpeechEngine {
     if (synth == null || clips == null) return false;
     final reading = _reading = _Reading(
       text: text,
+      breaks: breaks,
       synth: synth,
       players: _players,
       clips: clips,
@@ -186,8 +188,13 @@ class NeuralSpeechEngine implements SpeechEngine {
   /// characters at most — and each after it may be twice the one before,
   /// up to [longest]: the voice starts almost at once, and the pieces grow
   /// while it is being made ahead of what is heard.
+  ///
+  /// A piece also begins at every offset in [breaks] — where each verse
+  /// begins — so that the voice says which verse it is on the moment it
+  /// reaches it, at whatever speed.
   static List<(int, String)> pieces(
     String text, {
+    List<int> breaks = const [],
     int first = 40,
     int longest = 160,
   }) {
@@ -230,14 +237,28 @@ class NeuralSpeechEngine implements SpeechEngine {
       add(start, end);
     }
 
+    final bounds = <int>{
+      for (final at in breaks)
+        if (at > 0 && at < text.length) at,
+      for (final end in _sentenceEnd.allMatches(text)) end.end,
+      text.length,
+    }.toList()..sort();
     var start = 0;
-    for (final end in _sentenceEnd.allMatches(text)) {
-      cut(start, end.end);
-      start = end.end;
+    for (final end in bounds) {
+      cut(start, end);
+      start = end;
     }
-    cut(start, text.length);
     return result;
   }
+
+  /// A piece as it is handed to the voice. Cut short of its sentence's
+  /// end, a piece with no punctuation after its last word loses that word
+  /// a third of the time — swallowed, or said as something else — which
+  /// a comma, telling the voice the phrase ends there, puts right.
+  static String voiced(String piece) =>
+      _endsPhrase.hasMatch(piece) ? piece : '$piece,';
+
+  static final RegExp _endsPhrase = RegExp('[.,;:!?—–-][”’"\')\\]]*\$');
 
   static final RegExp _sentenceEnd = RegExp('[.;:!?][”’"\')]*\\s+');
 
@@ -286,7 +307,8 @@ class _Reading {
     this.onProgress,
     this.onStart,
     this.onHeard,
-  }) : pieces = NeuralSpeechEngine.pieces(text);
+    List<int> breaks = const [],
+  }) : pieces = NeuralSpeechEngine.pieces(text, breaks: breaks);
 
   final Synthesiser synth;
   final List<AudioPlayer> players;
@@ -316,7 +338,7 @@ class _Reading {
 
   /// The audio for a piece, made once, as a file.
   Future<String?> _make(int i) => _made[i] ??= synth.say(
-    pieces[i].$2,
+    NeuralSpeechEngine.voiced(pieces[i].$2),
     speaker: speaker,
     speed: speed,
     path: '${clips.path}/clip-${_clipCount++}.wav',
@@ -532,6 +554,37 @@ class Synthesiser {
   /// A model's output can go past full scale, and written out as 16-bit
   /// samples the loudest are cut off flat: heard as a crackle. Where a
   /// piece would be, the whole piece is made a little quieter instead.
+  /// [samples] brought gently to one loudness, so that one verse is not
+  /// heard louder than the one before: the speech in them — frames of
+  /// [sampleRate] / 50 above a whisper — is moved towards [target], by no
+  /// more than 3 dB either way, and then [limited].
+  static Float32List levelled(
+    Float32List samples,
+    int sampleRate, {
+    double target = 0.14,
+  }) {
+    final frame = math.max(1, sampleRate ~/ 50);
+    var energy = 0.0;
+    var frames = 0;
+    for (var start = 0; start + frame <= samples.length; start += frame) {
+      var sum = 0.0;
+      for (var i = start; i < start + frame; i++) {
+        sum += samples[i] * samples[i];
+      }
+      final rms = math.sqrt(sum / frame);
+      if (rms > 0.01) {
+        energy += rms * rms;
+        frames++;
+      }
+    }
+    if (frames == 0) return limited(samples);
+    final gain = (target / math.sqrt(energy / frames)).clamp(0.7, 1.4);
+    final scaled = Float32List.fromList([
+      for (final sample in samples) sample * gain,
+    ]);
+    return limited(scaled);
+  }
+
   static Float32List limited(Float32List samples, {double ceiling = 0.95}) {
     var peak = 0.0;
     for (final sample in samples) {
@@ -579,7 +632,7 @@ class Synthesiser {
         final clock = Stopwatch()..start();
         try {
           final audio = tts.generate(text: text, sid: speaker, speed: speed);
-          final samples = limited(audio.samples);
+          final samples = levelled(audio.samples, audio.sampleRate);
           if (samples.isNotEmpty &&
               sherpa.writeWave(
                 filename: path,

@@ -8,12 +8,17 @@ import 'read_aloud.dart';
 /// One voice of a model: a speaker it was trained on.
 @immutable
 class NeuralSpeaker {
-  const NeuralSpeaker(this.id, this.name, this.locale);
+  const NeuralSpeaker(this.id, this.name, this.locale, {this.prior = 1});
 
   /// The speaker's number in the model.
   final int id;
   final String name;
   final String locale;
+
+  /// What the runtime multiplies this speaker's speed by, as the model
+  /// asks: its "speed prior". Divided back out, so that 1× is the pace
+  /// the voice was trained at, which sounds natural where the prior drags.
+  final double prior;
 }
 
 /// The voice OpenWord reads aloud with: an open neural text-to-speech
@@ -54,15 +59,16 @@ class NeuralModel {
     title: 'Kitten',
     archive: 'kitten-nano-en-v0_8-fp32',
     modelFile: 'model.fp32.onnx',
+    // The priors are the model's own, from its metadata.
     speakers: [
-      NeuralSpeaker(1, 'Bella', 'en-US'),
-      NeuralSpeaker(0, 'Jasper', 'en-US'),
-      NeuralSpeaker(3, 'Luna', 'en-US'),
-      NeuralSpeaker(2, 'Bruno', 'en-US'),
-      NeuralSpeaker(5, 'Rosie', 'en-US'),
-      NeuralSpeaker(4, 'Hugo', 'en-US'),
-      NeuralSpeaker(7, 'Kiki', 'en-US'),
-      NeuralSpeaker(6, 'Leo', 'en-US'),
+      NeuralSpeaker(1, 'Bella', 'en-US', prior: 0.8),
+      NeuralSpeaker(0, 'Jasper', 'en-US', prior: 0.8),
+      NeuralSpeaker(3, 'Luna', 'en-US', prior: 0.8),
+      NeuralSpeaker(2, 'Bruno', 'en-US', prior: 0.8),
+      NeuralSpeaker(5, 'Rosie', 'en-US', prior: 0.8),
+      NeuralSpeaker(4, 'Hugo', 'en-US', prior: 0.9),
+      NeuralSpeaker(7, 'Kiki', 'en-US', prior: 0.8),
+      NeuralSpeaker(6, 'Leo', 'en-US', prior: 0.8),
     ],
   );
 

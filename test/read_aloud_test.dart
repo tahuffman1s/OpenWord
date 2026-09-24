@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart'
@@ -29,6 +30,9 @@ class FakeSpeech implements SpeechEngine {
   final List<String> said = [];
   final List<double> rates = [];
   int stops = 0;
+
+  /// Where the last passage was to tell of reaching: its verses' starts.
+  List<int> breaks = const [];
   int paused = 0;
   int resumed = 0;
 
@@ -66,8 +70,10 @@ class FakeSpeech implements SpeechEngine {
     String text, {
     void Function(int offset)? onProgress,
     void Function()? onStart,
+    List<int> breaks = const [],
   }) {
     said.add(text);
+    this.breaks = breaks;
     _progress = onProgress;
     _start = onStart;
     return (_saying = Completer<bool>()).future;
@@ -148,7 +154,13 @@ class _Recording implements SpeechEngine {
     String text, {
     void Function(int offset)? onProgress,
     void Function()? onStart,
-  }) => inner.speak(text, onProgress: onProgress, onStart: onStart);
+    List<int> breaks = const [],
+  }) => inner.speak(
+    text,
+    onProgress: onProgress,
+    onStart: onStart,
+    breaks: breaks,
+  );
 
   @override
   Future<void> stop() => inner.stop();
@@ -568,6 +580,22 @@ void main() {
       expect(loud[0] / loud[2], closeTo(0.5 / 1.9, 1e-6));
     });
 
+    test('pieces are brought to one loudness, gently', () {
+      Float32List tone(double level) => Float32List.fromList([
+        for (var i = 0; i < 2400; i++) level * math.sin(i / 3),
+      ]);
+      double rms(Float32List x) =>
+          math.sqrt(x.fold(0.0, (a, v) => a + v * v) / x.length);
+      final quiet = Synthesiser.levelled(tone(0.1), 24000);
+      final loud = Synthesiser.levelled(tone(0.25), 24000);
+      // Nearer each other than they were…
+      expect(rms(loud) / rms(quiet), lessThan(2.5 / 1.5));
+      // …but never more than twice as loud, nor clipped.
+      final whisper = Synthesiser.levelled(tone(0.02), 24000);
+      expect(rms(whisper), lessThanOrEqualTo(rms(tone(0.02)) * 1.4 + 1e-9));
+      expect(loud.every((v) => v.abs() <= 0.95), isTrue);
+    });
+
     test('models no longer used, and broken unpacking, are tidied', () async {
       final root = Directory.systemTemp.createTempSync('voices');
       addTearDown(() => root.deleteSync(recursive: true));
@@ -584,6 +612,48 @@ void main() {
             .toSet(),
         {NeuralModel.kitten.archive},
       );
+    });
+
+    test('a piece ending mid-phrase is told so, with a comma', () {
+      // Without one the voice swallows the last word a third of the time.
+      expect(NeuralSpeechEngine.voiced('in it I have'), 'in it I have,');
+      expect(NeuralSpeechEngine.voiced('there was light.'), 'there was light.');
+      expect(NeuralSpeechEngine.voiced('God said,'), 'God said,');
+      expect(
+        NeuralSpeechEngine.voiced('“Let there be light.”'),
+        '“Let there be light.”',
+      );
+      expect(NeuralSpeechEngine.voiced('he asked?'), 'he asked?');
+    });
+
+    test('every verse begins a piece of its own', () {
+      const text =
+          'Psalm 23. The Lord is my shepherd; I shall not want He makes me lie '
+          'down in green pastures';
+      final verse2 = text.indexOf('He makes');
+      final pieces = NeuralSpeechEngine.pieces(
+        text,
+        breaks: [0, text.indexOf('The Lord'), verse2],
+      );
+      expect(pieces.map((p) => p.$1), contains(verse2));
+      expect(
+        pieces.firstWhere((p) => p.$1 == verse2).$2,
+        startsWith('He makes'),
+      );
+      expect(pieces.map((p) => p.$2).join(' '), text);
+    });
+
+    test('the voice is told where every verse begins', () async {
+      voice.play(const Reference('GEN', 1));
+      await settle();
+      final passage = speech.said.single;
+      final chapter = chapterFor(const Reference('GEN', 1))!;
+      expect(speech.breaks.first, 0);
+      expect(
+        passage.substring(speech.breaks[1]),
+        startsWith(ReadAloud.speakable(chapter.verseText(1))),
+      );
+      expect(speech.breaks, hasLength(chapter.verseCount + 1));
     });
 
     test('a piece is not cut straight after a little word', () {

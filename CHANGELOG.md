@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Gibberish at the end of a phrase.** A long sentence was cut into pieces
+  at a plain space where there was no comma to cut at, and the voice,
+  finding no punctuation after the last word of a piece, swallowed that
+  word or said something else a third of the time — "said let the" came
+  out "said let me", "was evening and" as "…and twice". Pieces are now cut
+  at verses, sentence ends and commas, and one that still ends mid-phrase
+  is given a comma, which a speech recogniser run over the result hears
+  put every last word right.
+- **The highlight did not keep up with the voice.** The voice said where
+  it was only at the start of each piece it spoke, and a piece could run
+  across several verses, so the highlight stayed on the first until the
+  piece ended. Every verse now begins a piece of its own, and the
+  highlight moves the moment the voice reaches it, at any speed.
+
+### Changed
+- **1× is the voice's natural pace.** The runtime slowed each of Kitten's
+  voices to four fifths of the pace it was trained at, which is why 1.25×
+  sounded right; that is divided back out. A speed chosen before is
+  carried over as the one that sounds the same.
+- **One loudness from verse to verse.** Each piece is brought gently
+  towards the same level, by no more than 3 dB, before the peak limit.
+
 ## 1.22.0
 
 ### Added

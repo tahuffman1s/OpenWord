@@ -51,7 +51,8 @@ class Settings extends ChangeNotifier {
   static const _kLastCheck = 'lastUpdateCheck';
   static const _kSkippedUpdate = 'skippedUpdate';
   static const _kAnchorAnyway = 'anchorAnyway';
-  static const _kSpeechRate = 'speechRate';
+  static const _kSpeechPace = 'speechPace';
+  static const _kOldSpeechRate = 'speechRate';
   static const _kSpeechVoice = 'speechVoice';
 
   /// Fallback palette seeds offered where the platform has no Material You
@@ -89,9 +90,28 @@ class Settings extends ChangeNotifier {
   double get lineHeight => _prefs.getDouble(_kLineHeight) ?? 1.6;
   set lineHeight(double value) => _write(_kLineHeight, value);
 
-  /// How fast reading aloud goes, as a multiple of the voice's normal pace.
-  double get speechRate => _prefs.getDouble(_kSpeechRate) ?? 1.0;
-  set speechRate(double value) => _write(_kSpeechRate, value);
+  /// The speeds reading aloud offers.
+  static const List<double> speechRates = [0.75, 1.0, 1.25, 1.5, 2.0];
+
+  /// How fast reading aloud goes, as a multiple of the voice's natural
+  /// pace.
+  ///
+  /// Before 1.23 a multiple of a pace a fifth slower than that — the
+  /// voice's own "speed prior", which made 1× drag — and kept under
+  /// another name. A speed chosen then is carried over as the nearest
+  /// that sounds the same.
+  double get speechRate {
+    final pace = _prefs.getDouble(_kSpeechPace);
+    if (pace != null) return pace;
+    final before = _prefs.getDouble(_kOldSpeechRate);
+    if (before == null) return 1.0;
+    final same = before * 0.8;
+    return speechRates.reduce(
+      (a, b) => (a - same).abs() <= (b - same).abs() ? a : b,
+    );
+  }
+
+  set speechRate(double value) => _write(_kSpeechPace, value);
 
   /// The voice chosen for reading aloud, by the name it is kept by, or
   /// null for the first.

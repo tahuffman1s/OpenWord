@@ -2471,8 +2471,6 @@ class _VoiceSheet extends StatefulWidget {
   final SpeechEngine engine;
   final String language;
 
-  static const List<double> rates = [0.75, 1.0, 1.25, 1.5, 2.0];
-
   @override
   State<_VoiceSheet> createState() => _VoiceSheetState();
 }
@@ -2500,7 +2498,7 @@ class _VoiceSheetState extends State<_VoiceSheet> {
               Wrap(
                 spacing: 8,
                 children: [
-                  for (final rate in _VoiceSheet.rates)
+                  for (final rate in Settings.speechRates)
                     ChoiceChip(
                       label: Text(_PlayerBar.rateLabel(rate)),
                       selected: settings.speechRate == rate,
