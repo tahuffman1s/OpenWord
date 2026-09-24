@@ -207,7 +207,10 @@ class NeuralSpeechEngine implements SpeechEngine {
       while (end > start && text.codeUnitAt(end - 1) == 0x20) {
         end--;
       }
-      if (end > start) result.add((start, text.substring(start, end)));
+      // Nothing to say — a quotation mark left on its own — is no piece.
+      if (end > start && _hasWords.hasMatch(text.substring(start, end))) {
+        result.add((start, text.substring(start, end)));
+      }
     }
 
     void cut(int start, int end) {
@@ -251,16 +254,37 @@ class NeuralSpeechEngine implements SpeechEngine {
     return result;
   }
 
-  /// A piece as it is handed to the voice. Cut short of its sentence's
-  /// end, a piece with no punctuation after its last word loses that word
-  /// a third of the time — swallowed, or said as something else — which
-  /// a comma, telling the voice the phrase ends there, puts right.
-  static String voiced(String piece) =>
-      _endsPhrase.hasMatch(piece) ? piece : '$piece,';
+  /// A piece as it is handed to the voice.
+  ///
+  /// Without its quotation marks: the voice has no silence for them, and
+  /// says each as a short burst of nonsense — a sixth of a second of sound
+  /// for every quoted passage, heard as gibberish around the words. An
+  /// apostrophe inside a word, as in "LORD’s", is left; it is said right.
+  ///
+  /// And with a comma where it stops short of a phrase's end: a piece with
+  /// no punctuation after its last word loses that word a third of the
+  /// time — swallowed, or said as something else — which a comma, telling
+  /// the voice the phrase ends there, puts right.
+  static String voiced(String piece) {
+    final plain = piece
+        .replaceAll(_quotation, '')
+        .replaceAll(RegExp(' {2,}'), ' ')
+        .trim();
+    return plain.isEmpty || _endsPhrase.hasMatch(plain) ? plain : '$plain,';
+  }
+
+  /// Double quotation marks of every kind, and single ones that are not an
+  /// apostrophe inside a word.
+  static final RegExp _quotation = RegExp(
+    '[“”„"«»]|(?<!\\p{L})[‘’\']|[‘’\'](?!\\p{L})',
+    unicode: true,
+  );
 
   static final RegExp _endsPhrase = RegExp('[.,;:!?—–-][”’"\')\\]]*\$');
 
   static final RegExp _sentenceEnd = RegExp('[.;:!?][”’"\')]*\\s+');
+
+  static final RegExp _hasWords = RegExp('[\\p{L}\\p{N}]', unicode: true);
 
   static const Set<String> _leaning = {
     'a',

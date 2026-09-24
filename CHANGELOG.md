@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Gibberish around quotations** — found by ear, not by 1.23.0's
+  recogniser, which does not write down a noise that is not a word. The
+  voice has no silence for a quotation mark, curly or straight, double or
+  single, and says each as a short burst of nonsense: a sixth of a second
+  of sound for a quoted passage, more for a question, in 37 of the first
+  60 quoted pieces of the Berean Standard Bible. Quotation marks are now
+  left out of what the voice is given. An apostrophe inside a word, as in
+  "LORD’s", stays, and is said right; brackets and parentheses, which
+  make no such sound, stay too.
+
 ## 1.23.0
 
 ### Fixed

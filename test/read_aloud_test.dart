@@ -619,11 +619,30 @@ void main() {
       expect(NeuralSpeechEngine.voiced('in it I have'), 'in it I have,');
       expect(NeuralSpeechEngine.voiced('there was light.'), 'there was light.');
       expect(NeuralSpeechEngine.voiced('God said,'), 'God said,');
-      expect(
-        NeuralSpeechEngine.voiced('“Let there be light.”'),
-        '“Let there be light.”',
-      );
       expect(NeuralSpeechEngine.voiced('he asked?'), 'he asked?');
+    });
+
+    test('quotation marks are not handed to the voice', () {
+      // It says each as a burst of nonsense.
+      expect(
+        NeuralSpeechEngine.voiced('God said, “Let there be light.”'),
+        'God said, Let there be light.',
+      );
+      expect(NeuralSpeechEngine.voiced('He said, ‘Go.’'), 'He said, Go.');
+      expect(NeuralSpeechEngine.voiced('"Not so!"'), 'Not so!');
+      // The expanse “sky” ends its phrase once the marks are gone too.
+      expect(
+        NeuralSpeechEngine.voiced('God called the expanse “sky”'),
+        'God called the expanse sky,',
+      );
+      // An apostrophe in a word is said right, and stays.
+      expect(
+        NeuralSpeechEngine.voiced('the LORD’s house.'),
+        'the LORD’s house.',
+      );
+      expect(NeuralSpeechEngine.voiced('don\'t go.'), 'don\'t go.');
+      // Nor is a quotation mark on its own a piece.
+      expect(NeuralSpeechEngine.pieces('Amen. ”'), [(0, 'Amen.')]);
     });
 
     test('every verse begins a piece of its own', () {
