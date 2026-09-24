@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.22.0
 
 ### Added
 - **The licences, in the app.** Settings credits the voice — KittenTTS,
