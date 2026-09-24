@@ -2431,8 +2431,8 @@ class _VoiceSheetState extends State<_VoiceSheet> {
                       children: [
                         _voiceTile(
                           null,
-                          'The most natural voice installed',
-                          voices.isEmpty ? null : voices.first.name,
+                          'The most natural voice on this device',
+                          voices.where((v) => !v.online).firstOrNull?.name,
                         ),
                         for (final voice in voices)
                           _voiceTile(
@@ -2440,6 +2440,7 @@ class _VoiceSheetState extends State<_VoiceSheet> {
                             voice.name,
                             [
                               voice.qualityLabel,
+                              if (voice.online) 'Online',
                               voice.locale,
                             ].whereType<String>().join(' · '),
                           ),
@@ -2452,7 +2453,19 @@ class _VoiceSheetState extends State<_VoiceSheet> {
                               style: theme.textTheme.bodySmall,
                             ),
                           ),
-                        if (!voices.any((v) => v.quality >= 3))
+                        if (voices.any((v) => v.online))
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 12, 8, 0),
+                            child: Text(
+                              'Online voices send the words to their '
+                              'provider to be spoken, and need a connection. '
+                              'Every other voice speaks on this device.',
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        if (!voices.any((v) => v.quality >= 3 && !v.online))
                           Padding(
                             padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
                             child: Text(
@@ -2484,9 +2497,7 @@ class _VoiceSheetState extends State<_VoiceSheet> {
     TargetPlatform.android =>
       'For a more natural voice, install one: Settings → System → '
           'Languages → Text-to-speech output → the engine’s settings → '
-          'Install voice data. It then appears here. Voices that need the '
-          'internet are left out, since they send the words away to be '
-          'spoken.',
+          'Install voice data. It then appears here.',
     _ =>
       'The voices here are the ones this device has installed; installing '
           'a better one in its settings adds it to this list.',

@@ -32,13 +32,22 @@ class FakeSpeech implements SpeechEngine {
   }) async => rates.add(rate);
 
   void Function(int offset)? _progress;
+  void Function()? _start;
 
   @override
-  Future<bool> speak(String text, {void Function(int offset)? onProgress}) {
+  Future<bool> speak(
+    String text, {
+    void Function(int offset)? onProgress,
+    void Function()? onStart,
+  }) {
     said.add(text);
     _progress = onProgress;
+    _start = onStart;
     return (_saying = Completer<bool>()).future;
   }
+
+  /// Reports the voice as having begun what it was given.
+  void begin() => _start?.call();
 
   /// Reports the voice as having reached [words] in what it is saying.
   void reach(String words) {
@@ -81,11 +90,14 @@ void main() {
     late FakeSpeech speech;
     late List<Reference> heard;
     late ReadAloud voice;
+    late DateTime now;
 
     setUp(() {
       speech = FakeSpeech();
       heard = [];
+      now = DateTime(2026, 9, 24, 8);
       voice = ReadAloud(
+        clock: () => now,
         engine: speech,
         chapterFor: chapterFor,
         nextChapter: (r) => r.bookCode == 'GEN' && r.chapter == 1
@@ -212,21 +224,59 @@ void main() {
     });
 
     test(
-      'a platform that reports no progress is read a verse at a time',
+      'where no words are reported, the verse is estimated from time',
       () async {
-        voice.play(const Reference('GEN', 1, 1));
-        await settle();
-        expect(speech.said.single, contains('An indented paragraph'));
-        // A passage of several verses went by without a word reported, so
-        // the page could not have followed it.
-        speech.finish();
-        await settle();
         voice.play(const Reference('GEN', 1, 3));
         await settle();
-        expect(speech.said.last, startsWith('God said'));
-        expect(speech.said.last, isNot(contains('A paragraph set flush')));
+        speech.begin();
+        // About 14 characters a second: three seconds is past verse 3, which
+        // is 31 characters, and into verse 4.
+        now = now.add(const Duration(seconds: 3));
+        voice.debugEstimate();
+        expect(voice.current, const Reference('GEN', 1, 4));
       },
     );
+
+    test('resuming an estimated place goes back to its sentence', () async {
+      voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      speech.begin();
+      now = now.add(const Duration(seconds: 3));
+      voice.pause();
+      await settle();
+      expect(voice.current, const Reference('GEN', 1, 4));
+      voice.resume();
+      await settle();
+      // Not the passage again from verse 3, and not mid-word: the start of
+      // the sentence the voice was in.
+      expect(speech.said.last, startsWith('A paragraph set flush'));
+    });
+
+    test('a sentence start is found for an estimated place', () {
+      const text = 'In the beginning. God said, “Let there be light.” And so.';
+      expect(ReadAloud.sentenceStart(text, 5), 0);
+      expect(ReadAloud.sentenceStart(text, 25), 18);
+      expect(ReadAloud.sentenceStart(text, text.length - 2), 50);
+    });
+
+    test('the estimate learns how fast the voice really is', () async {
+      voice.play(const Reference('GEN', 1, 1));
+      await settle();
+      speech.begin();
+      final length = speech.said.last.length;
+      // This voice took twice as long as the guess would say.
+      now = now.add(Duration(milliseconds: (length / 7 * 1000).round()));
+      speech.finish();
+      await settle();
+      voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      speech.begin();
+      now = now.add(const Duration(seconds: 3));
+      voice.debugEstimate();
+      // Slower now — about 10.5 characters a second, halfway to what it
+      // measured — so three seconds is still in verse 3's 31 characters.
+      expect(voice.current, const Reference('GEN', 1, 3));
+    });
 
     test('one that does report progress keeps its passages', () async {
       voice.play(const Reference('GEN', 1, 1));
@@ -280,7 +330,7 @@ void main() {
       expect(voice.error, isNotNull);
     });
 
-    test('voices are ranked most natural first, and never online', () {
+    test('voices are ranked most natural first, online ones marked', () {
       final ranked = SpeechVoice.rank([
         {'name': 'plain', 'locale': 'en-US', 'quality': 'normal'},
         {
@@ -307,11 +357,14 @@ void main() {
         {'name': 'Amélie', 'locale': 'fr-CA', 'quality': 'premium'},
       ], 'en-GB');
       expect(ranked.map((v) => v.name), [
-        // Best quality first; the translation's own region breaks a tie.
-        'good-gb', 'Ava (Premium)', 'good-us', 'Daniel', 'plain',
+        // Best quality first; the translation's own region breaks a tie,
+        // then a voice on the device before one online.
+        'good-gb', 'Ava (Premium)', 'good-us', 'cloud', 'Daniel', 'plain',
       ]);
+      expect(ranked.firstWhere((v) => v.name == 'cloud').online, isTrue);
+      expect(ranked.first.online, isFalse);
       expect(ranked.first.qualityLabel, 'Natural');
-      expect(ranked[3].qualityLabel, 'Enhanced');
+      expect(ranked[4].qualityLabel, 'Enhanced');
       expect(ranked.last.qualityLabel, isNull);
     });
 
@@ -570,7 +623,10 @@ void main() {
       expect(harness.settings.speechRate, 1.5);
       // The automatic choice names the voice it would use; the voice's
       // own row is the second.
-      expect(find.text('The most natural voice installed'), findsOneWidget);
+      expect(
+        find.text('The most natural voice on this device'),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Serena').last);
       await tester.pumpAndSettle();
       expect(harness.settings.speechVoice, 'Serena');

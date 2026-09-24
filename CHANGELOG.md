@@ -1,5 +1,25 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **Resuming no longer starts the verse or passage again on phones whose
+  voice doesn't report its words.** Many Android voices (Samsung's among
+  them) never say which word they have reached, so pausing had nothing to
+  go on and resuming went back to the start. Where no words are reported,
+  the place is now estimated from how long the passage has been speaking,
+  at the chosen speed, and the estimate learns the voice's own pace as it
+  goes. Resuming picks up at the start of the sentence it was in, so a
+  slightly early estimate repeats a few words rather than skipping any.
+  Stepping forward or back from the lock screen uses the same estimate.
+
+### Changed
+- **Online voices can be chosen.** Voices that need a connection — often
+  the most natural a device has — are now listed in the voice sheet,
+  marked "Online". They are used only when chosen: with no voice chosen,
+  the best voice installed on the device is still the one read with, so
+  reading aloud keeps working without a signal.
+
 ## 1.20.3
 
 ### Changed

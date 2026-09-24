@@ -12,10 +12,15 @@ class SpeechVoice {
     required this.name,
     required this.locale,
     this.quality = 0,
+    this.online = false,
   });
 
   final String name;
   final String locale;
+
+  /// Whether the voice needs the internet: it sends the words to its
+  /// provider to be spoken, where every other voice speaks on the device.
+  final bool online;
 
   /// How natural the platform says the voice is, higher better: Apple's
   /// premium and enhanced voices, Android's "very high" and "high".
@@ -30,11 +35,10 @@ class SpeechVoice {
 
   /// The voices a platform lists that can read [language], best first.
   ///
-  /// Voices that need the internet are left out: they send the words to be
-  /// spoken to a server, and nothing else OpenWord reads leaves the device.
-  /// So are voices listed but not downloaded. The most natural come first,
-  /// and among equals the translation's own region, so a British edition
-  /// is heard in a British voice when one is as good.
+  /// Voices listed but not downloaded are left out. The most natural come
+  /// first, and among equals the translation's own region, so a British
+  /// edition is heard in a British voice when one is as good; then a voice
+  /// on the device before one that needs the internet.
   static List<SpeechVoice> rank(List<Object?> raw, String language) {
     final prefix = language.split(RegExp('[-_]')).first.toLowerCase();
     final exact = language.toLowerCase().replaceAll('_', '-');
@@ -45,7 +49,6 @@ class SpeechVoice {
       final locale = entry['locale']?.toString() ?? '';
       if (name == null) continue;
       if (!locale.toLowerCase().startsWith(prefix)) continue;
-      if (entry['network_required']?.toString() == '1') continue;
       if ((entry['features']?.toString() ?? '').contains('notInstalled')) {
         continue;
       }
@@ -53,6 +56,7 @@ class SpeechVoice {
         SpeechVoice(
           name: name,
           locale: locale,
+          online: entry['network_required']?.toString() == '1',
           quality: switch (entry['quality']?.toString()) {
             'premium' || 'very high' => 3,
             'enhanced' || 'high' => 2,
@@ -67,6 +71,7 @@ class SpeechVoice {
     result.sort((a, b) {
       if (a.quality != b.quality) return b.quality - a.quality;
       if (own(a) != own(b)) return own(a) ? -1 : 1;
+      if (a.online != b.online) return a.online ? 1 : -1;
       return a.name.compareTo(b.name);
     });
     return result;
@@ -89,7 +94,11 @@ abstract class SpeechEngine {
   /// and false when it was stopped or failed. Where the platform says how
   /// far it has got, [onProgress] is given the offset in [text] of each
   /// word as it is reached.
-  Future<bool> speak(String text, {void Function(int offset)? onProgress});
+  Future<bool> speak(
+    String text, {
+    void Function(int offset)? onProgress,
+    void Function()? onStart,
+  });
 
   Future<void> stop();
 
@@ -102,7 +111,10 @@ abstract class SpeechEngine {
 /// has.
 class PlatformSpeechEngine implements SpeechEngine {
   PlatformSpeechEngine() {
-    _tts.setStartHandler(() => _started = true);
+    _tts.setStartHandler(() {
+      _started = true;
+      _onStart?.call();
+    });
     _tts.setCompletionHandler(() => _finish(true));
     // Stopping the voice to move to another verse is reported back after
     // the fact, and can arrive once the next verse has been handed over.
@@ -123,6 +135,7 @@ class PlatformSpeechEngine implements SpeechEngine {
 
   String? _speaking;
   void Function(int offset)? _onProgress;
+  void Function()? _onStart;
 
   final FlutterTts _tts = FlutterTts();
   Completer<bool>? _pending;
@@ -187,11 +200,12 @@ class PlatformSpeechEngine implements SpeechEngine {
     await _prepareSession();
     await _tts.setLanguage(language);
     await _tts.setSpeechRate(rateFor(rate, web: kIsWeb));
-    // With no voice chosen, the most natural one installed rather than the
-    // platform's default, which is often its plainest.
+    // With no voice chosen, the most natural one on the device rather than
+    // the platform's default, which is often its plainest. An online voice
+    // is used only when someone has chosen it: it sends the words away.
     final available = await voices(language);
     final match = voice == null
-        ? available.take(1)
+        ? available.where((v) => !v.online).take(1)
         : available.where((v) => v.name == voice);
     if (match.isNotEmpty) {
       await _tts.setVoice({
@@ -205,11 +219,13 @@ class PlatformSpeechEngine implements SpeechEngine {
   Future<bool> speak(
     String text, {
     void Function(int offset)? onProgress,
+    void Function()? onStart,
   }) async {
     _finish(false);
     _started = false;
     _speaking = text;
     _onProgress = onProgress;
+    _onStart = onStart;
     final pending = _pending = Completer<bool>();
     try {
       await _tts.speak(text);
@@ -263,7 +279,11 @@ class ReadAloud extends ChangeNotifier {
     required this.chapterFor,
     required this.nextChapter,
     this.onChapterHeard,
-  });
+    DateTime Function()? clock,
+  }) : _clock = clock ?? DateTime.now;
+
+  /// What time it is; a test sets it.
+  final DateTime Function() _clock;
 
   final SpeechEngine engine;
 
@@ -354,6 +374,16 @@ class ReadAloud extends ChangeNotifier {
 
   void pause() {
     if (!isPlaying) return;
+    // Where it had got to. Exact where the platform reports its words;
+    // otherwise estimated from the time it has been speaking, and taken
+    // back to the start of that sentence so that nothing is skipped.
+    if (!_passageHasProgress) {
+      _estimate();
+      if (_index < _queue.length) {
+        _resumeAt = sentenceStart(_queue[_index].text, _resumeAt);
+      }
+    }
+    _estimator?.cancel();
     _generation++;
     _state = ReadAloudState.paused;
     notifyListeners();
@@ -368,6 +398,7 @@ class ReadAloud extends ChangeNotifier {
   }
 
   void stop() {
+    _estimator?.cancel();
     _generation++;
     final wasActive = isActive;
     _state = ReadAloudState.idle;
@@ -381,6 +412,8 @@ class ReadAloud extends ChangeNotifier {
   /// chapter's first verse says it again.
   void skip(int delta) {
     if (!isActive) return;
+    // Stepping is from the verse the voice is on, as near as can be told.
+    if (isPlaying && !_passageHasProgress) _estimate();
     _resumeAt = 0;
     final next = (_index + delta).clamp(0, _queue.length - 1);
     if (delta > 0 && _index + delta >= _queue.length) {
@@ -396,6 +429,7 @@ class ReadAloud extends ChangeNotifier {
 
   @override
   void dispose() {
+    _estimator?.cancel();
     _generation++;
     if (isActive) engine.stop();
     super.dispose();
@@ -406,16 +440,80 @@ class ReadAloud extends ChangeNotifier {
   /// Not a verse at a time: a voice that starts and stops between every
   /// verse clips the first syllable of many of them, most of all over
   /// Bluetooth, which lets the link sleep in the gaps. Several verses go
-  /// together as one utterance, and the words the platform reports as it
-  /// reaches them say which verse is being read. Short enough that
-  /// stepping to another verse, which starts a new one, is prompt.
+  /// together as one utterance. Where the platform reports each word as it
+  /// reaches it, that says which verse is being read, and a passage can be
+  /// long. Where it does not — Samsung's engine among others — the verse is
+  /// estimated from how long the voice has been speaking, and a passage is
+  /// kept to half a minute or so, so that the estimate never drifts far
+  /// before the next passage puts it right.
   static const int passageLength = 1200;
+  static const int estimatedPassageLength = 400;
 
-  /// Whether this platform says where it has got to within an utterance:
-  /// unknown until a passage of several verses has been read. Where it
-  /// does not, the page could not follow the voice through a passage, so
-  /// verses go one at a time as they used to.
+  /// Whether this platform reports the words it reaches: unknown until it
+  /// has read something.
   bool? _reportsProgress;
+
+  /// How fast the voice speaks at normal pace, in characters a second: a
+  /// fair guess to begin with, then measured from each passage it finishes.
+  double _charsPerSecond = 14;
+
+  // The passage being spoken, for estimating where the voice has got to.
+  List<int> _passageStarts = const [];
+  int _passageFirst = 0;
+  int _passageTrim = 0;
+  int _passageLength = 0;
+  DateTime? _passageStartedAt;
+  bool _passageHasProgress = false;
+  Timer? _estimator;
+
+  /// Moves the place along by the time the voice has been speaking, where
+  /// the platform does not say which word it is on.
+  void _estimate() {
+    final startedAt = _passageStartedAt;
+    if (_passageHasProgress || startedAt == null || _passageStarts.isEmpty) {
+      return;
+    }
+    final seconds =
+        _clock().difference(startedAt).inMilliseconds /
+        Duration.millisecondsPerSecond;
+    final offset = (seconds * _charsPerSecond * _rate).floor().clamp(
+      0,
+      _passageLength > 0 ? _passageLength - 1 : 0,
+    );
+    _place(offset);
+  }
+
+  /// Takes an offset into the passage to the verse, and the place in it.
+  void _place(int offset) {
+    final starts = _passageStarts;
+    var k = 0;
+    while (k + 1 < starts.length && starts[k + 1] <= offset) {
+      k++;
+    }
+    _resumeAt = (k == 0 ? _passageTrim : 0) + offset - starts[k];
+    if (_passageFirst + k != _index) {
+      _index = _passageFirst + k;
+      notifyListeners();
+    }
+  }
+
+  /// Where the sentence around [offset] in [text] begins, so that a place
+  /// that is only estimated is taken back to somewhere sensible to resume.
+  static int sentenceStart(String text, int offset) {
+    if (offset <= 0 || offset > text.length) return 0;
+    var start = 0;
+    for (final end in _sentenceEnd.allMatches(text)) {
+      if (end.end > offset) break;
+      start = end.end;
+    }
+    return start;
+  }
+
+  static final RegExp _sentenceEnd = RegExp('[.;:!?][”’"\')]*\\s+');
+
+  /// Test hook: estimate the place now, as the timer would.
+  @visibleForTesting
+  void debugEstimate() => _estimate();
 
   /// Says a passage from the current verse on, and on to the next when it
   /// is done.
@@ -446,7 +544,9 @@ class ReadAloud extends ChangeNotifier {
     final trim = _resumeAt > 0 && _resumeAt < firstText.length ? _resumeAt : 0;
     final starts = <int>[];
     final passage = StringBuffer();
-    final length = _reportsProgress == false ? 0 : passageLength;
+    final length = _reportsProgress == true
+        ? passageLength
+        : estimatedPassageLength;
     var last = first;
     for (var i = first; i < _queue.length; i++) {
       final text = i == first ? firstText.substring(trim) : _queue[i].text;
@@ -456,25 +556,38 @@ class ReadAloud extends ChangeNotifier {
       passage.write(text);
       last = i;
     }
-    var progressed = false;
+    final text = passage.toString();
+    _passageStarts = starts;
+    _passageFirst = first;
+    _passageTrim = trim;
+    _passageLength = text.length;
+    _passageHasProgress = false;
+    // Counted from when the platform says it has begun, or from now where
+    // it says nothing.
+    _passageStartedAt = _clock();
+    _estimator?.cancel();
+    if (_reportsProgress != true) {
+      _estimator = Timer.periodic(const Duration(milliseconds: 300), (_) {
+        if (generation == _generation && isPlaying) _estimate();
+      });
+    }
     final said = await engine.speak(
-      passage.toString(),
+      text,
+      onStart: () {
+        if (generation == _generation) _passageStartedAt = _clock();
+      },
       onProgress: (offset) {
         if (generation != _generation) return;
-        progressed = true;
-        var k = 0;
-        while (k + 1 < starts.length && starts[k + 1] <= offset) {
-          k++;
-        }
-        // Where to take up again after a pause: this word, in its verse.
-        _resumeAt = (k == 0 ? trim : 0) + offset - starts[k];
-        if (first + k != _index) {
-          _index = first + k;
-          notifyListeners();
-        }
+        _passageHasProgress = true;
+        _estimator?.cancel();
+        // Exact: this word, in its verse.
+        _place(offset);
       },
     );
+    _estimator?.cancel();
     if (generation != _generation) return;
+    final progressed = _passageHasProgress;
+    final startedAt = _passageStartedAt;
     if (!said) {
       // Once is a hiccup — an engine still waking up, a stop reported
       // late — and the verse is simply said again. Twice running, the
@@ -496,8 +609,18 @@ class ReadAloud extends ChangeNotifier {
     _retrying = false;
     if (progressed) {
       _reportsProgress = true;
-    } else if (last > first) {
+    } else {
       _reportsProgress ??= false;
+      // How fast this voice really is, from a passage it has finished,
+      // for the next estimate.
+      final seconds = startedAt == null
+          ? 0.0
+          : _clock().difference(startedAt).inMilliseconds /
+                Duration.millisecondsPerSecond;
+      if (seconds >= 2 && text.length >= 40) {
+        final measured = text.length / seconds / _rate;
+        _charsPerSecond = (_charsPerSecond + measured) / 2;
+      }
     }
     _resumeAt = 0;
     if (last + 1 < _queue.length) {
