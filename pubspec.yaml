@@ -40,6 +40,11 @@ dependencies:
   share_plus: ^13.3.0
   flutter_tts: ^4.2.5
   audio_service: ^0.18.19
+  # OpenWord's own voices: open neural text-to-speech models, run on the
+  # device. The models are downloaded when asked for, never bundled.
+  sherpa_onnx: ^1.13.8
+  # Plays what those voices make.
+  audioplayers: ^6.8.1
 
 dev_dependencies:
   flutter_test:

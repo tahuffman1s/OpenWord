@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 import '../model/bible.dart';
+import 'neural_voices.dart';
 
 /// A voice the platform offers.
 @immutable
@@ -11,19 +12,30 @@ class SpeechVoice {
   const SpeechVoice({
     required this.name,
     required this.locale,
+    this.title,
     this.quality = 0,
     this.online = false,
+    this.builtIn = false,
   });
 
+  /// What the voice is chosen by, and kept in settings as.
   final String name;
   final String locale;
+
+  /// What to call it, where that is not its name.
+  final String? title;
+
+  /// Whether it is one of OpenWord's own, downloaded into the app, rather
+  /// than one of the platform's.
+  final bool builtIn;
 
   /// Whether the voice needs the internet: it sends the words to its
   /// provider to be spoken, where every other voice speaks on the device.
   final bool online;
 
   /// How natural the platform says the voice is, higher better: Apple's
-  /// premium and enhanced voices, Android's "very high" and "high".
+  /// premium and enhanced voices, Android's "very high" and "high"; and
+  /// above them all, OpenWord's own neural voices.
   final int quality;
 
   /// What the voice sheet calls it, where it is better than ordinary.
@@ -104,6 +116,15 @@ abstract class SpeechEngine {
 
   /// The voices for a language, best first.
   Future<List<SpeechVoice>> voices(String language);
+
+  /// Whether [pause] holds the voice where it is, for [resume] to go on
+  /// from mid-word. Where it cannot, pausing stops the voice, and resuming
+  /// speaks again from the word it had reached.
+  bool get canPause;
+
+  Future<void> pause();
+
+  Future<void> resume();
 }
 
 /// The platform's own text-to-speech, through flutter_tts. Nothing leaves
@@ -246,13 +267,144 @@ class PlatformSpeechEngine implements SpeechEngine {
     final raw = await _tts.getVoices;
     return raw is List ? SpeechVoice.rank(raw, language) : const [];
   }
+
+  /// Android's pause is a stop that remembers the word, no better than
+  /// what [ReadAloud] does itself, and Apple's cannot be relied on to come
+  /// back after the audio session has been interrupted.
+  @override
+  bool get canPause => false;
+
+  @override
+  Future<void> pause() async {}
+
+  @override
+  Future<void> resume() async {}
+}
+
+/// The platform's voices and OpenWord's own as one engine. Which of them
+/// speaks is decided by the voice chosen.
+class SpeechEngines implements SpeechEngine {
+  SpeechEngines(this.platform, this.neural);
+
+  final SpeechEngine platform;
+  final NeuralVoices neural;
+  SpeechEngine? _own;
+  late SpeechEngine _active = platform;
+
+  @override
+  bool get isAvailable => platform.isAvailable;
+
+  @override
+  bool get canPause => _active.canPause;
+
+  @override
+  Future<void> configure({
+    required String language,
+    required double rate,
+    String? voice,
+  }) async {
+    final chosen = NeuralModel.parse(voice);
+    if (chosen != null && neural.isSupported) {
+      await neural.ready;
+      if (neural.isInstalled(chosen.$1)) {
+        final own = _own ??= neural.engine();
+        try {
+          await _switchTo(own);
+          await own.configure(language: language, rate: rate, voice: voice);
+          return;
+        } on Object catch (error) {
+          // A model that will not load: the platform's voice rather than
+          // silence.
+          debugPrint('OpenWord: the voice could not be loaded: $error');
+        }
+      }
+    }
+    await _switchTo(platform);
+    await platform.configure(
+      language: language,
+      rate: rate,
+      voice: chosen == null ? voice : null,
+    );
+  }
+
+  Future<void> _switchTo(SpeechEngine engine) async {
+    if (identical(engine, _active)) return;
+    await _active.stop();
+    _active = engine;
+  }
+
+  @override
+  Future<bool> speak(
+    String text, {
+    void Function(int offset)? onProgress,
+    void Function()? onStart,
+  }) => _active.speak(text, onProgress: onProgress, onStart: onStart);
+
+  @override
+  Future<void> stop() => _active.stop();
+
+  @override
+  Future<void> pause() => _active.pause();
+
+  @override
+  Future<void> resume() => _active.resume();
+
+  @override
+  Future<List<SpeechVoice>> voices(String language) async {
+    if (neural.isSupported) await neural.ready;
+    return [
+      if (neural.isSupported) ...neural.voicesFor(language),
+      ...await platform.voices(language),
+    ];
+  }
 }
 
 /// Makes the engine the reader speaks with. A test puts a silent one in
 /// its place.
-SpeechEngine Function() createSpeechEngine = PlatformSpeechEngine.new;
+SpeechEngine Function() createSpeechEngine = () =>
+    SpeechEngines(PlatformSpeechEngine(), neuralVoices);
 
 enum ReadAloudState { idle, playing, paused }
+
+/// Where listening got to: a verse, and how far into it, kept so that it
+/// can be taken up again after the bar is closed or the app is.
+@immutable
+class ListeningPlace {
+  const ListeningPlace(this.verse, {this.offset = 0, this.fromTop = false});
+
+  final Reference verse;
+
+  /// How far into the verse's spoken words.
+  final int offset;
+
+  /// Whether the chapter was begun from its top, so that finishing it
+  /// still counts it as heard.
+  final bool fromTop;
+
+  /// Nothing heard yet: taking it up is the same as starting.
+  bool get atTop => (verse.verse ?? 1) <= 1 && offset == 0;
+
+  String encode() => '${verse.encode()}|$offset|${fromTop ? 1 : 0}';
+
+  static ListeningPlace? decode(String? raw) {
+    final parts = raw?.split('|');
+    if (parts == null || parts.length != 3) return null;
+    final verse = Reference.decode(parts[0]);
+    final offset = int.tryParse(parts[1]);
+    if (verse == null || verse.verse == null || offset == null) return null;
+    return ListeningPlace(verse, offset: offset, fromTop: parts[2] == '1');
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      other is ListeningPlace &&
+      other.verse == verse &&
+      other.offset == offset &&
+      other.fromTop == fromTop;
+
+  @override
+  int get hashCode => Object.hash(verse, offset, fromTop);
+}
 
 /// One thing to say: a verse, or the name of a chapter as it begins.
 @immutable
@@ -269,16 +421,17 @@ class Utterance {
 /// It keeps its place by the verse, which is what lets the page follow
 /// along and lets the reader step back a verse or on to the next; the
 /// voice is handed passages of several verses at once, and the words the
-/// platform reports reaching say which verse it is on. Pausing stops the
-/// voice and remembers the word it had reached; resuming takes up from
-/// that word, which every platform can do, where a true mid-sentence pause
-/// is only offered by some.
+/// platform reports reaching say which verse it is on. Pausing holds the
+/// voice where it is, where the engine can; otherwise it stops the voice
+/// and remembers the word it had reached, and resuming takes up from that
+/// word, which every platform can do.
 class ReadAloud extends ChangeNotifier {
   ReadAloud({
     required this.engine,
     required this.chapterFor,
     required this.nextChapter,
     this.onChapterHeard,
+    this.onPlace,
     DateTime Function()? clock,
   }) : _clock = clock ?? DateTime.now;
 
@@ -295,6 +448,13 @@ class ReadAloud extends ChangeNotifier {
 
   /// Called when a whole chapter has been heard to its last verse.
   final void Function(Reference chapter)? onChapterHeard;
+
+  /// Told where listening has got to as it moves from verse to verse, and
+  /// when it is paused or stopped, so that it can be kept; told null when
+  /// it has been heard to its end and there is nothing to take up. Not
+  /// told about reading a selection.
+  final void Function(ListeningPlace? place)? onPlace;
+  ListeningPlace? _lastPlace;
 
   ReadAloudState _state = ReadAloudState.idle;
   List<Utterance> _queue = const [];
@@ -320,6 +480,14 @@ class ReadAloud extends ChangeNotifier {
   /// rather than starting the verse again.
   int _resumeAt = 0;
 
+  /// Whether the engine is holding the passage, paused where it is, to go
+  /// on from there.
+  bool _held = false;
+
+  /// The generation whose passage the engine has been given and not yet
+  /// finished.
+  int _saying = -1;
+
   /// How long to wait before saying a verse again after the engine did not
   /// finish it.
   @visibleForTesting
@@ -334,6 +502,35 @@ class ReadAloud extends ChangeNotifier {
   Reference? get current =>
       isActive && _index < _queue.length ? _queue[_index].reference : null;
 
+  /// Where to take up again, as it would be kept.
+  ListeningPlace? get place {
+    final verse = current;
+    if (verse == null || verse.verse == null || _stopAtEnd) return null;
+    return ListeningPlace(verse, offset: _resumeAt, fromTop: _startedAtTop);
+  }
+
+  void _notePlace() {
+    final place = this.place;
+    if (place == null || place == _lastPlace) return;
+    _lastPlace = place;
+    onPlace?.call(place);
+  }
+
+  @override
+  void notifyListeners() {
+    _notePlace();
+    super.notifyListeners();
+  }
+
+  /// Lets go of a passage the engine is holding paused, when what is to be
+  /// said next is not what it holds.
+  void _release() {
+    if (!_held) return;
+    _held = false;
+    _generation++;
+    engine.stop();
+  }
+
   /// Sets how it sounds. Takes effect from the next verse, or at once when
   /// something is being said.
   void configure({
@@ -345,23 +542,41 @@ class ReadAloud extends ChangeNotifier {
     _language = language;
     _rate = rate;
     _voice = voice;
-    if (changed && isPlaying) _speakCurrent(interrupt: true);
+    if (!changed) return;
+    if (isPlaying) {
+      _speakCurrent(interrupt: true);
+    } else {
+      // Held in the old voice; resuming says it again in the new one.
+      _release();
+    }
   }
 
   /// Starts reading at [from]: its verse, or the top of its chapter with
   /// the chapter's name. With [only], reads those verses and stops.
-  void play(Reference from, {Set<int>? only}) {
+  ///
+  /// [offset] takes up the verse part way in, and [fromTop] says the
+  /// chapter was begun from its top before, for taking up a kept place.
+  void play(
+    Reference from, {
+    Set<int>? only,
+    int offset = 0,
+    bool fromTop = false,
+  }) {
+    _release();
     final chapter = from.withVerse(null);
+    final atTop = only == null && (from.verse ?? 1) <= 1 && offset == 0;
     _stopAtEnd = only != null;
-    _startedAtTop = only == null && (from.verse ?? 1) <= 1;
+    _startedAtTop = atTop || (only == null && fromTop);
     _queue = _utterancesFor(
       chapter,
       from: from.verse ?? 1,
       only: only,
-      announce: _startedAtTop,
+      announce: atTop,
     );
     _index = 0;
-    _resumeAt = 0;
+    _resumeAt = _queue.isNotEmpty && _queue.first.reference == from
+        ? offset
+        : 0;
     error = null;
     if (_queue.isEmpty) {
       stop();
@@ -374,6 +589,15 @@ class ReadAloud extends ChangeNotifier {
 
   void pause() {
     if (!isPlaying) return;
+    _estimator?.cancel();
+    if (engine.canPause && _saying == _generation) {
+      // Held where it is, mid-word, to go on from there.
+      _held = true;
+      _state = ReadAloudState.paused;
+      notifyListeners();
+      engine.pause();
+      return;
+    }
     // Where it had got to. Exact where the platform reports its words;
     // otherwise estimated from the time it has been speaking, and taken
     // back to the start of that sentence so that nothing is skipped.
@@ -394,12 +618,30 @@ class ReadAloud extends ChangeNotifier {
     if (_state != ReadAloudState.paused) return;
     _state = ReadAloudState.playing;
     notifyListeners();
+    if (_held) {
+      _held = false;
+      engine.resume();
+      return;
+    }
     _speakCurrent();
   }
 
   void stop() {
+    if (isPlaying && !_passageHasProgress) {
+      _estimate();
+      if (_index < _queue.length) {
+        _resumeAt = sentenceStart(_queue[_index].text, _resumeAt);
+      }
+    }
+    // Kept, to be taken up another time.
+    _notePlace();
+    _end();
+  }
+
+  void _end() {
     _estimator?.cancel();
     _generation++;
+    _held = false;
     final wasActive = isActive;
     _state = ReadAloudState.idle;
     _queue = const [];
@@ -412,6 +654,7 @@ class ReadAloud extends ChangeNotifier {
   /// chapter's first verse says it again.
   void skip(int delta) {
     if (!isActive) return;
+    _release();
     // Stepping is from the verse the voice is on, as near as can be told.
     if (isPlaying && !_passageHasProgress) _estimate();
     _resumeAt = 0;
@@ -571,6 +814,7 @@ class ReadAloud extends ChangeNotifier {
         if (generation == _generation && isPlaying) _estimate();
       });
     }
+    _saying = generation;
     final said = await engine.speak(
       text,
       onStart: () {
@@ -586,6 +830,7 @@ class ReadAloud extends ChangeNotifier {
     );
     _estimator?.cancel();
     if (generation != _generation) return;
+    _saying = -1;
     final progressed = _passageHasProgress;
     final startedAt = _passageStartedAt;
     if (!said) {
@@ -638,7 +883,14 @@ class ReadAloud extends ChangeNotifier {
     if (heardToEnd && _startedAtTop) onChapterHeard?.call(chapter);
     final next = _stopAtEnd ? null : nextChapter(chapter);
     if (next == null) {
-      stop();
+      if (heardToEnd && !_stopAtEnd) {
+        // Heard to the end: nothing is left to take up.
+        _lastPlace = null;
+        onPlace?.call(null);
+        _end();
+      } else {
+        stop();
+      }
       return;
     }
     _queue = _utterancesFor(next, from: 1, announce: true);

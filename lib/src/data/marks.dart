@@ -111,6 +111,7 @@ class ReadingStore extends ChangeNotifier {
   static const _kMarks = 'marks';
   static const _kLegacyBookmarks = 'bookmarks';
   static const _kPosition = 'lastPosition';
+  static const _kListening = 'listeningPlace';
   static const _kHistory = 'history';
   static const _kPlans = 'plans';
   static const _historyLimit = 20;
@@ -417,6 +418,18 @@ class ReadingStore extends ChangeNotifier {
         previous.bookCode != reference.bookCode ||
         previous.chapter != reference.chapter) {
       _pushHistory(reference.withVerse(null));
+    }
+  }
+
+  /// Where listening aloud last got to, as `ListeningPlace.encode` puts
+  /// it, so that it can be taken up after the app has been closed.
+  String? get listeningPlace => _prefs.getString(_kListening);
+
+  set listeningPlace(String? value) {
+    if (value == null) {
+      _prefs.remove(_kListening);
+    } else {
+      _prefs.setString(_kListening, value);
     }
   }
 

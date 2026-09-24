@@ -1,0 +1,476 @@
+import 'dart:async';
+import 'dart:io';
+import 'dart:isolate';
+import 'dart:math' as math;
+
+import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:path_provider/path_provider.dart';
+import 'package:sherpa_onnx/sherpa_onnx.dart' as sherpa;
+
+import 'neural_voices.dart';
+import 'read_aloud.dart';
+
+/// Speaks with a neural model on the device, through sherpa-onnx.
+///
+/// The model runs on an isolate of its own, one piece of the text at a
+/// time, a piece ahead of what is being heard; each piece is played as it
+/// is ready, on one of two players that take turns, so that the next is
+/// loaded while this one plays and there is no gap to hear between them.
+///
+/// Unlike the platform's voices it can truly pause: the audio simply
+/// stops where it is and goes on from there, mid-word.
+class NeuralSpeechEngine implements SpeechEngine {
+  NeuralSpeechEngine({required this.modelDirectory});
+
+  /// Where a downloaded model was unpacked.
+  final String Function(NeuralModel model) modelDirectory;
+
+  Synthesiser? _synth;
+  NeuralModel? _model;
+  int _speaker = 0;
+  double _speed = 1.0;
+
+  final List<AudioPlayer> _players = [AudioPlayer(), AudioPlayer()];
+  bool _playersReady = false;
+  Directory? _clips;
+  _Reading? _reading;
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  bool get canPause => true;
+
+  @override
+  Future<void> configure({
+    required String language,
+    required double rate,
+    String? voice,
+  }) async {
+    final chosen = NeuralModel.parse(voice);
+    if (chosen == null) throw ArgumentError.value(voice, 'voice');
+    final (model, speaker) = chosen;
+    _speaker = speaker.id;
+    _speed = rate;
+    await _preparePlayers();
+    if (model != _model || _synth == null) {
+      await stop();
+      _synth?.close();
+      _synth = null;
+      _model = null;
+      _synth = await Synthesiser.start(model, modelDirectory(model));
+      _model = model;
+    }
+  }
+
+  /// Played as speech, through the same audio session reading aloud has
+  /// always used: not muted by the silent switch, going on with the
+  /// screen off, and holding the device awake between pieces.
+  Future<void> _preparePlayers() async {
+    if (_playersReady) return;
+    final context = AudioContext(
+      android: const AudioContextAndroid(
+        stayAwake: true,
+        contentType: AndroidContentType.speech,
+        usageType: AndroidUsageType.media,
+        audioFocus: AndroidAudioFocus.gain,
+      ),
+      iOS: AudioContextIOS(category: AVAudioSessionCategory.playback),
+    );
+    for (final player in _players) {
+      await player.setAudioContext(context);
+      await player.setReleaseMode(ReleaseMode.stop);
+    }
+    // Made afresh each run: what an earlier one left is of no use.
+    final clips = Directory('${(await getTemporaryDirectory()).path}/voice');
+    if (clips.existsSync()) clips.deleteSync(recursive: true);
+    _clips = clips..createSync(recursive: true);
+    _playersReady = true;
+  }
+
+  @override
+  Future<bool> speak(
+    String text, {
+    void Function(int offset)? onProgress,
+    void Function()? onStart,
+  }) async {
+    _reading?.cancel();
+    final synth = _synth;
+    final clips = _clips;
+    if (synth == null || clips == null) return false;
+    final reading = _reading = _Reading(
+      text: text,
+      synth: synth,
+      players: _players,
+      clips: clips,
+      speaker: _speaker,
+      speed: _speed,
+      onProgress: onProgress,
+      onStart: onStart,
+    );
+    final said = await reading.run();
+    if (identical(_reading, reading)) _reading = null;
+    return said;
+  }
+
+  @override
+  Future<void> stop() async {
+    _reading?.cancel();
+    _reading = null;
+    for (final player in _players) {
+      try {
+        await player.stop();
+      } on Object {
+        // Nothing was playing.
+      }
+    }
+  }
+
+  @override
+  Future<void> pause() async => _reading?.pause();
+
+  @override
+  Future<void> resume() async => _reading?.resume();
+
+  /// The voices of the models that are installed come from
+  /// [NeuralVoices]; this engine has none of its own to list.
+  @override
+  Future<List<SpeechVoice>> voices(String language) async => const [];
+
+  /// Where [text] is cut to be voiced a piece at a time, as the offset of
+  /// each piece and its words.
+  ///
+  /// At the end of every sentence, and a long sentence again at a comma,
+  /// or failing that a space: the first sound comes soon after it is asked
+  /// for, and no piece keeps the next waiting long.
+  static List<(int, String)> pieces(String text, {int longest = 200}) {
+    final result = <(int, String)>[];
+    void add(int start, int end) {
+      while (start < end && text.codeUnitAt(start) == 0x20) {
+        start++;
+      }
+      while (end > start && text.codeUnitAt(end - 1) == 0x20) {
+        end--;
+      }
+      if (end > start) result.add((start, text.substring(start, end)));
+    }
+
+    void cut(int start, int end) {
+      while (end - start > longest) {
+        final window = text.substring(start, start + longest);
+        var at = math.max(window.lastIndexOf(', '), window.lastIndexOf('; '));
+        at = at > longest ~/ 3 ? at + 1 : window.lastIndexOf(' ');
+        if (at <= 0) at = longest;
+        add(start, start + at);
+        start += at;
+      }
+      add(start, end);
+    }
+
+    var start = 0;
+    for (final end in _sentenceEnd.allMatches(text)) {
+      cut(start, end.end);
+      start = end.end;
+    }
+    cut(start, text.length);
+    return result;
+  }
+
+  static final RegExp _sentenceEnd = RegExp('[.;:!?][”’"\')]*\\s+');
+}
+
+/// One passage being voiced: made, played, paused, or given up.
+class _Reading {
+  _Reading({
+    required String text,
+    required this.synth,
+    required this.players,
+    required this.clips,
+    required this.speaker,
+    required this.speed,
+    this.onProgress,
+    this.onStart,
+  }) : pieces = NeuralSpeechEngine.pieces(text);
+
+  final Synthesiser synth;
+  final List<AudioPlayer> players;
+  final Directory clips;
+  final int speaker;
+  final double speed;
+  final void Function(int offset)? onProgress;
+  final void Function()? onStart;
+  final List<(int, String)> pieces;
+
+  final Map<int, Future<String?>> _made = {};
+  final Map<int, Future<bool>> _loaded = {};
+  final Completer<void> _cancelled = Completer();
+  Completer<void>? _unpaused;
+  AudioPlayer? _playing;
+
+  bool get cancelled => _cancelled.isCompleted;
+  bool get paused => _unpaused != null;
+
+  static int _clipCount = 0;
+
+  /// The audio for a piece, made once, as a file.
+  Future<String?> _make(int i) => _made[i] ??= synth.say(
+    pieces[i].$2,
+    speaker: speaker,
+    speed: speed,
+    path: '${clips.path}/clip-${_clipCount++}.wav',
+    owner: this,
+  );
+
+  /// A piece made and loaded into its player, ready to start at once.
+  Future<bool> _load(int i) => _loaded[i] ??= _make(i).then((path) async {
+    if (path == null || cancelled) return false;
+    await players[i % 2].setSource(DeviceFileSource(path));
+    return true;
+  });
+
+  Future<bool> run() async {
+    try {
+      for (var i = 0; i < pieces.length; i++) {
+        if (!await _load(i) || cancelled) return false;
+        // The next is made while this one plays.
+        if (i + 1 < pieces.length) unawaited(_load(i + 1));
+        await _whileUnpaused();
+        if (cancelled) return false;
+        final player = players[i % 2];
+        final done = player.onPlayerComplete.first;
+        if (i == 0) onStart?.call();
+        onProgress?.call(pieces[i].$1);
+        _playing = player;
+        await player.resume();
+        // Paused while it was starting.
+        if (paused) await player.pause();
+        await Future.any([done, _cancelled.future]);
+        _playing = null;
+        if (cancelled) return false;
+        _forget(i);
+      }
+      return true;
+    } on Object {
+      return false;
+    } finally {
+      for (final i in _made.keys.toList()) {
+        _forget(i);
+      }
+    }
+  }
+
+  /// The file of a piece is deleted once heard, or once it is no longer
+  /// wanted, whenever it is finished being made.
+  void _forget(int i) {
+    final made = _made.remove(i);
+    made?.then((path) {
+      if (path != null) File(path).delete().ignore();
+    });
+  }
+
+  Future<void> _whileUnpaused() async {
+    while (_unpaused != null && !cancelled) {
+      await Future.any([_unpaused!.future, _cancelled.future]);
+    }
+  }
+
+  void pause() {
+    if (cancelled || paused) return;
+    _unpaused = Completer();
+    _playing?.pause();
+  }
+
+  void resume() {
+    final unpaused = _unpaused;
+    if (unpaused == null) return;
+    _unpaused = null;
+    _playing?.resume();
+    unpaused.complete();
+  }
+
+  void cancel() {
+    if (cancelled) return;
+    _cancelled.complete();
+    // What it asked for and no longer wants is not made.
+    synth.forget(this);
+  }
+}
+
+/// The model, loaded on an isolate of its own so that making speech never
+/// holds up the screen.
+@visibleForTesting
+class Synthesiser {
+  Synthesiser._(this._isolate, this._requests, this._replies);
+
+  final Isolate _isolate;
+  final SendPort _requests;
+  final ReceivePort _replies;
+  final Map<int, Completer<String?>> _waiting = {};
+  int _next = 0;
+
+  /// Asked for and not yet sent. The isolate is handed one at a time, so
+  /// that what is no longer wanted — after a skip, say — can be dropped
+  /// before it takes its turn, rather than keep the next words waiting.
+  final List<_Request> _queue = [];
+  bool _busy = false;
+
+  static Future<Synthesiser> start(NeuralModel model, String directory) async {
+    final replies = ReceivePort();
+    final threads = math.min(4, math.max(1, Platform.numberOfProcessors - 1));
+    final isolate = await Isolate.spawn(_serve, (
+      replies.sendPort,
+      model.family.name,
+      directory,
+      threads,
+    ), debugName: 'voice');
+    final first = Completer<Object?>();
+    late final Synthesiser synth;
+    replies.listen((message) {
+      if (!first.isCompleted) {
+        first.complete(message);
+        return;
+      }
+      if (message case (int id, String? path)) {
+        synth._waiting.remove(id)?.complete(path);
+        synth._busy = false;
+        synth._sendNext();
+      }
+    });
+    final answer = await first.future;
+    if (answer is! SendPort) {
+      replies.close();
+      isolate.kill();
+      throw StateError('The voice could not be loaded: $answer');
+    }
+    return synth = Synthesiser._(isolate, answer, replies);
+  }
+
+  /// Makes [text] into a WAV file at [path]; null if it could not, or if
+  /// [owner] no longer wants it.
+  Future<String?> say(
+    String text, {
+    required int speaker,
+    required double speed,
+    required String path,
+    Object? owner,
+  }) {
+    final id = _next++;
+    final waiting = _waiting[id] = Completer<String?>();
+    _queue.add(_Request(id, (id, text, speaker, speed, path), owner));
+    _sendNext();
+    return waiting.future;
+  }
+
+  void _sendNext() {
+    if (_busy || _queue.isEmpty) return;
+    _busy = true;
+    _requests.send(_queue.removeAt(0).message);
+  }
+
+  /// Drops what [owner] asked for that has not yet been begun.
+  void forget(Object owner) {
+    _queue.removeWhere((request) {
+      if (!identical(request.owner, owner)) return false;
+      _waiting.remove(request.id)?.complete(null);
+      return true;
+    });
+  }
+
+  void close() {
+    _requests.send(null);
+    _replies.close();
+    _queue.clear();
+    for (final waiting in _waiting.values) {
+      waiting.complete(null);
+    }
+    _waiting.clear();
+    // Let it free the model before it goes.
+    Future<void>.delayed(const Duration(seconds: 5), _isolate.kill);
+  }
+
+  static sherpa.OfflineTtsModelConfig configFor(
+    String family,
+    String directory,
+    int threads,
+  ) {
+    final model = '$directory/model.int8.onnx';
+    final voices = '$directory/voices.bin';
+    final tokens = '$directory/tokens.txt';
+    final data = '$directory/espeak-ng-data';
+    return switch (family) {
+      'kokoro' => sherpa.OfflineTtsModelConfig(
+        kokoro: sherpa.OfflineTtsKokoroModelConfig(
+          model: model,
+          voices: voices,
+          tokens: tokens,
+          dataDir: data,
+        ),
+        numThreads: threads,
+        debug: false,
+      ),
+      _ => sherpa.OfflineTtsModelConfig(
+        kitten: sherpa.OfflineTtsKittenModelConfig(
+          model: model,
+          voices: voices,
+          tokens: tokens,
+          dataDir: data,
+        ),
+        numThreads: threads,
+        debug: false,
+      ),
+    };
+  }
+
+  static void _serve((SendPort, String, String, int) setup) {
+    final (reply, family, directory, threads) = setup;
+    final sherpa.OfflineTts tts;
+    try {
+      sherpa.initBindings();
+      tts = sherpa.OfflineTts(
+        sherpa.OfflineTtsConfig(model: configFor(family, directory, threads)),
+      );
+    } on Object catch (error) {
+      reply.send('$error');
+      return;
+    }
+    final requests = ReceivePort();
+    reply.send(requests.sendPort);
+    requests.listen((message) {
+      if (message case (
+        int id,
+        String text,
+        int speaker,
+        double speed,
+        String path,
+      )) {
+        String? made;
+        try {
+          final audio = tts.generate(text: text, sid: speaker, speed: speed);
+          if (audio.samples.isNotEmpty &&
+              sherpa.writeWave(
+                filename: path,
+                samples: audio.samples,
+                sampleRate: audio.sampleRate,
+              )) {
+            made = path;
+          }
+        } on Object {
+          made = null;
+        }
+        reply.send((id, made));
+      } else {
+        tts.free();
+        requests.close();
+      }
+    });
+  }
+}
+
+class _Request {
+  _Request(this.id, this.message, this.owner);
+
+  final int id;
+  final (int, String, int, double, String) message;
+  final Object? owner;
+}

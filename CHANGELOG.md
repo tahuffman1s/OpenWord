@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Natural voices built into OpenWord.** The voice sheet now offers two
+  open neural voices that OpenWord runs itself, on the device, through
+  [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx): **Kitten**
+  (KittenTTS nano 0.8, 31 MB, eight voices, quick on any phone) and
+  **Kokoro** (Kokoro 82M, 103 MB, ten American and British voices, the most
+  natural, for recent phones). Neither is in the app itself: each is
+  downloaded once when asked for, checked against its SHA-256, unpacked, and
+  from then on reads with no connection. The first voice of a model is
+  chosen when it finishes downloading; removing it goes back to the
+  device's own. English translations only, on Android, iOS, macOS and
+  Windows.
+
+### Fixed
+- **The chapter's *Listen* started the chapter again.** Tapped while the
+  chapter was paused — the obvious way to carry on — it began again from
+  the top. It now reads *Pause* while the chapter is being read and
+  *Resume* while it is paused, and does just that.
+- **Closing the bar, or the app, lost the place.** Where listening got to —
+  the verse and the word in it — is now kept as it goes, and the chapter's
+  *Listen* reads *Resume* and takes it up there, after the bar has been
+  closed, the app has been closed, or the phone has restarted. A chapter
+  heard to its end leaves nothing to take up. *Listen from here* on a
+  verse still starts wherever it is asked to.
+- **Pausing a built-in voice holds it mid-word.** The platform's voices can
+  only be stopped and started again from the word they had reached;
+  OpenWord's own voices pause the audio itself, and go on from exactly
+  there.
+
 ## 1.20.4
 
 ### Fixed

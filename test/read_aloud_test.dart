@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/material.dart' show FilledButton;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:audio_service/audio_service.dart';
+import 'package:openword/src/data/neural_speech.dart';
+import 'package:openword/src/data/neural_voices.dart';
 import 'package:openword/src/data/read_aloud.dart';
 import 'package:openword/src/data/read_aloud_session.dart';
 import 'package:openword/src/model/bible.dart';
@@ -13,12 +16,26 @@ import 'reader_screen_test.dart' show appBarText, pumpReader;
 
 /// A speech engine that says nothing and finishes when told to.
 class FakeSpeech implements SpeechEngine {
-  FakeSpeech({this.available = true});
+  FakeSpeech({this.available = true, this.pauses = false});
 
   final bool available;
+
+  /// Whether it can hold what it is saying, as OpenWord's own voices can.
+  final bool pauses;
   final List<String> said = [];
   final List<double> rates = [];
   int stops = 0;
+  int paused = 0;
+  int resumed = 0;
+
+  @override
+  bool get canPause => pauses;
+
+  @override
+  Future<void> pause() async => paused++;
+
+  @override
+  Future<void> resume() async => resumed++;
   Completer<bool>? _saying;
 
   @override
@@ -73,6 +90,87 @@ class FakeSpeech implements SpeechEngine {
   Future<List<SpeechVoice>> voices(String language) async => const [
     SpeechVoice(name: 'Serena', locale: 'en-GB'),
   ];
+}
+
+/// OpenWord's own voices, without the downloading: each model installs
+/// when asked, and speaks with a silent engine.
+class FakeNeuralVoices extends NeuralVoices {
+  final Set<NeuralModel> installed = {};
+  final FakeSpeech speech = FakeSpeech(pauses: true);
+  final List<String?> configured = [];
+
+  @override
+  bool get isSupported => true;
+
+  @override
+  Future<void> get ready => Future.value();
+
+  @override
+  bool isInstalled(NeuralModel model) => installed.contains(model);
+
+  @override
+  double? progress(NeuralModel model) => null;
+
+  @override
+  String? error(NeuralModel model) => null;
+
+  @override
+  Future<void> install(NeuralModel model) async {
+    installed.add(model);
+    notifyListeners();
+  }
+
+  @override
+  void cancel(NeuralModel model) {}
+
+  @override
+  Future<void> remove(NeuralModel model) async {
+    installed.remove(model);
+    notifyListeners();
+  }
+
+  @override
+  SpeechEngine engine() => _Recording(speech, configured);
+}
+
+/// Passes everything to [inner], noting the voices it is configured with.
+class _Recording implements SpeechEngine {
+  _Recording(this.inner, this.configured);
+
+  final FakeSpeech inner;
+  final List<String?> configured;
+
+  @override
+  bool get isAvailable => true;
+
+  @override
+  bool get canPause => inner.canPause;
+
+  @override
+  Future<void> configure({
+    required String language,
+    required double rate,
+    String? voice,
+  }) async => configured.add(voice);
+
+  @override
+  Future<bool> speak(
+    String text, {
+    void Function(int offset)? onProgress,
+    void Function()? onStart,
+  }) => inner.speak(text, onProgress: onProgress, onStart: onStart);
+
+  @override
+  Future<void> stop() => inner.stop();
+
+  @override
+  Future<void> pause() => inner.pause();
+
+  @override
+  Future<void> resume() => inner.resume();
+
+  @override
+  Future<List<SpeechVoice>> voices(String language) async => const [];
 }
 
 Future<void> settle() async {
@@ -212,6 +310,92 @@ void main() {
       voice.resume();
       await settle();
       expect(speech.said.last, startsWith('light.'));
+    });
+
+    test('a voice that can pause is held where it is, not stopped', () async {
+      final held = FakeSpeech(pauses: true);
+      voice = ReadAloud(
+        engine: held,
+        chapterFor: chapterFor,
+        nextChapter: (_) => null,
+      );
+      voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      held.reach('be light');
+      final stops = held.stops;
+      voice.pause();
+      await settle();
+      expect(voice.state, ReadAloudState.paused);
+      expect(held.paused, 1);
+      expect(held.stops, stops);
+      voice.resume();
+      await settle();
+      // Taken up mid-word by the engine, not said again.
+      expect(held.resumed, 1);
+      expect(held.said, hasLength(1));
+      expect(voice.isPlaying, isTrue);
+
+      // Stepping while held lets go of it, and the next verse is said.
+      voice.pause();
+      voice.skip(1);
+      await settle();
+      expect(held.stops, greaterThan(stops));
+      voice.resume();
+      await settle();
+      expect(held.resumed, 1);
+      expect(held.said.last, startsWith('A paragraph set flush'));
+    });
+
+    test('where listening got to is kept, and taken up again', () async {
+      final places = <ListeningPlace?>[];
+      voice = ReadAloud(
+        engine: speech,
+        chapterFor: chapterFor,
+        nextChapter: (_) => null,
+        onPlace: places.add,
+      );
+      voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      speech.reach('be light');
+      voice.stop();
+      await settle();
+      final kept = places.last!;
+      expect(kept.verse, const Reference('GEN', 1, 3));
+      expect(kept.offset, greaterThan(0));
+      expect(kept.atTop, isFalse);
+      expect(ListeningPlace.decode(kept.encode()), kept);
+
+      voice.play(kept.verse, offset: kept.offset, fromTop: kept.fromTop);
+      await settle();
+      expect(speech.said.last, startsWith('be light'));
+      // Heard to the end, there is nothing left to take up.
+      speech.finish();
+      await settle();
+      expect(voice.isActive, isFalse);
+      expect(places.last, isNull);
+    });
+
+    test('a chapter begun at its top counts as heard when taken up', () async {
+      voice.play(const Reference('GEN', 1, 3), offset: 4, fromTop: true);
+      await settle();
+      expect(speech.said.last, startsWith('said'));
+      speech.finish();
+      await settle();
+      expect(heard, [const Reference('GEN', 1)]);
+    });
+
+    test('a selection read aloud is not kept as a place', () async {
+      final places = <ListeningPlace?>[];
+      voice = ReadAloud(
+        engine: speech,
+        chapterFor: chapterFor,
+        nextChapter: (_) => null,
+        onPlace: places.add,
+      );
+      voice.play(const Reference('GEN', 1, 3), only: {3, 4});
+      await settle();
+      voice.stop();
+      expect(places, isEmpty);
     });
 
     test('stepping to another verse starts it from the beginning', () async {
@@ -366,6 +550,66 @@ void main() {
       expect(ranked.first.qualityLabel, 'Natural');
       expect(ranked[4].qualityLabel, 'Enhanced');
       expect(ranked.last.qualityLabel, isNull);
+    });
+
+    test('the chosen voice decides which engine speaks', () async {
+      final platform = FakeSpeech();
+      final neural = FakeNeuralVoices();
+      final engines = SpeechEngines(platform, neural);
+      final bella = NeuralModel.kitten.voiceName(
+        NeuralModel.kitten.speakers.first,
+      );
+
+      // Not downloaded: the platform's own choice, rather than a name it
+      // does not know.
+      await engines.configure(language: 'en', rate: 1, voice: bella);
+      expect(neural.configured, isEmpty);
+      engines.speak('Words');
+      expect(platform.said, ['Words']);
+      expect(engines.canPause, isFalse);
+
+      await neural.install(NeuralModel.kitten);
+      await engines.configure(language: 'en', rate: 1, voice: bella);
+      expect(neural.configured, [bella]);
+      engines.speak('More words');
+      expect(neural.speech.said, ['More words']);
+      expect(engines.canPause, isTrue);
+      // The platform was stopped as the other took over.
+      expect(platform.stops, 1);
+
+      final voices = await engines.voices('en-US');
+      expect(voices.first.title, 'Bella · Kitten');
+      expect(voices.first.qualityLabel, 'Natural');
+      expect(voices.last.name, 'Serena');
+      // English only.
+      expect((await engines.voices('fr')).where((v) => v.builtIn), isEmpty);
+    });
+
+    test('a built-in voice is kept by a name that says whose it is', () {
+      final lewis = NeuralModel.kokoro.speakers.last;
+      final name = NeuralModel.kokoro.voiceName(lewis);
+      expect(NeuralModel.parse(name), (NeuralModel.kokoro, lewis));
+      expect(NeuralModel.parse('Samantha'), isNull);
+      expect(NeuralModel.parse('openword:kokoro:99'), isNull);
+      expect(NeuralModel.parse(null), isNull);
+    });
+
+    test('text is voiced a sentence at a time, long ones cut again', () {
+      const text =
+          'Genesis, chapter 1. In the beginning God created the heavens '
+          'and the earth. Now the earth was formless and empty, darkness '
+          'was over the surface of the deep, and the Spirit of God was '
+          'hovering over the waters.';
+      final pieces = NeuralSpeechEngine.pieces(text, longest: 60);
+      expect(pieces.first, (0, 'Genesis, chapter 1.'));
+      for (final (offset, words) in pieces) {
+        expect(text.substring(offset, offset + words.length), words);
+        expect(words.length, lessThanOrEqualTo(60));
+        expect(words.trim(), words);
+      }
+      // Nothing left out, and a long sentence cut at a comma.
+      expect(pieces.map((p) => p.$2).join(' '), text);
+      expect(pieces.any((p) => p.$2.endsWith('empty,')), isTrue);
     });
 
     test('normal pace is what each platform calls normal', () {
@@ -530,6 +774,88 @@ void main() {
       await tester.tap(find.byTooltip('Stop reading aloud'));
       await tester.pumpAndSettle();
       expect(find.byTooltip('Pause'), findsNothing);
+    });
+
+    testWidgets('the chapter\'s Listen pauses, resumes, and takes up a place', (
+      tester,
+    ) async {
+      await pumpReader(tester);
+      await tester.tap(find.text('LISTEN'));
+      await tester.pump();
+      speech.reach('In the beginning');
+      await tester.pump();
+
+      // Not started again from the top: paused and resumed.
+      await tester.ensureVisible(find.text('PAUSE'));
+      await tester.tap(find.text('PAUSE'));
+      await tester.pump();
+      expect(find.text('Paused'), findsOneWidget);
+      await tester.ensureVisible(find.text('RESUME'));
+      await tester.tap(find.text('RESUME'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.textContaining('Reading aloud'), findsOneWidget);
+      expect(speech.said.last, startsWith('In the beginning'));
+
+      // Closed part way, the place is kept, and Listen takes it up.
+      speech.reach('be light');
+      await tester.pump();
+      await tester.tap(find.byTooltip('Stop reading aloud'));
+      await tester.pumpAndSettle();
+      expect(find.text('LISTEN'), findsNothing);
+      await tester.ensureVisible(find.text('RESUME'));
+      await tester.tap(find.text('RESUME'));
+      await tester.pump();
+      await tester.pump();
+      expect(speech.said.last, startsWith('be light'));
+      expect(find.text('Genesis 1:3'), findsOneWidget);
+    });
+
+    testWidgets('a kept place outlasts the app', (tester) async {
+      await pumpReader(
+        tester,
+        prefs: {
+          'listeningPlace': const ListeningPlace(Reference('GEN', 1, 4))
+              .encode(),
+        },
+      );
+      await tester.tap(find.text('RESUME'));
+      await tester.pump();
+      await tester.pump();
+      expect(speech.said.last, startsWith('A paragraph set flush'));
+    });
+
+    testWidgets('a natural voice is downloaded from the sheet, and chosen', (
+      tester,
+    ) async {
+      final neural = FakeNeuralVoices();
+      final previous = neuralVoices;
+      neuralVoices = neural;
+      addTearDown(() => neuralVoices = previous);
+      createSpeechEngine = () => SpeechEngines(speech, neural);
+      final harness = await pumpReader(tester);
+      await tester.tap(find.text('LISTEN'));
+      await tester.pump();
+      await tester.tap(find.byTooltip('Speed and voice'));
+      await tester.pumpAndSettle();
+      expect(find.text('Natural voices for OpenWord'), findsOneWidget);
+      expect(find.text('Kokoro'), findsOneWidget);
+
+      final download = find.widgetWithText(FilledButton, 'Download').first;
+      await tester.ensureVisible(download);
+      await tester.tap(download);
+      await tester.pumpAndSettle();
+      expect(neural.isInstalled(NeuralModel.kitten), isTrue);
+      expect(harness.settings.speechVoice, 'openword:kitten:1');
+      expect(find.text('Bella · Kitten'), findsOneWidget);
+
+      // Removed, the voice goes back to the device's own.
+      final remove = find.byTooltip('Remove Kitten');
+      await tester.ensureVisible(remove);
+      await tester.tap(remove);
+      await tester.pumpAndSettle();
+      expect(harness.settings.speechVoice, isNull);
+      expect(find.text('Bella · Kitten'), findsNothing);
     });
 
     testWidgets('a session that cannot start says why, once', (tester) async {

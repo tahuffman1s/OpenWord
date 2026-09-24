@@ -13,6 +13,7 @@ import '../data/book_intros.dart';
 import '../data/cross_references.dart';
 import '../data/originals.dart';
 import '../data/marks.dart';
+import '../data/neural_voices.dart';
 import '../data/plan_progress.dart';
 import '../data/read_aloud.dart';
 import '../data/read_aloud_art.dart';
@@ -89,6 +90,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
           _bible.bookByCode(reference.bookCode)?.chapter(reference.chapter),
       nextChapter: _chapterAfterListening,
       onChapterHeard: _heardChapter,
+      onPlace: (place) => _reading.listeningPlace = place?.encode(),
     );
     voice.addListener(_followVoice);
     return voice;
@@ -160,9 +162,60 @@ class _ReaderScreenState extends State<ReaderScreen> {
     );
   }
 
-  void _listen(Reference from, {Set<int>? only}) {
+  /// Where listening got to in [chapter] before, if it got anywhere.
+  ListeningPlace? _keptPlaceIn(Reference chapter) {
+    final place = ListeningPlace.decode(_reading.listeningPlace);
+    if (place == null ||
+        place.atTop ||
+        place.verse.bookCode != chapter.bookCode ||
+        place.verse.chapter != chapter.chapter) {
+      return null;
+    }
+    return place;
+  }
+
+  /// What the chapter's own Listen does: pauses or resumes what is being
+  /// read of it, takes up where listening to it stopped before, or starts
+  /// it from the top.
+  void _listenToChapter(Reference chapter) {
+    final voice = _readAloud;
+    final current = voice?.current;
+    if (voice != null &&
+        current != null &&
+        current.bookCode == chapter.bookCode &&
+        current.chapter == chapter.chapter) {
+      voice.isPlaying ? voice.pause() : voice.resume();
+      return;
+    }
+    final kept = _keptPlaceIn(chapter);
+    if (kept != null) {
+      _listen(kept.verse, offset: kept.offset, fromTop: kept.fromTop);
+    } else {
+      _listen(chapter);
+    }
+  }
+
+  /// What the chapter's Listen says it will do.
+  String _listenLabel(Reference chapter) {
+    final voice = _readAloud;
+    final current = voice?.current;
+    if (voice != null &&
+        current != null &&
+        current.bookCode == chapter.bookCode &&
+        current.chapter == chapter.chapter) {
+      return voice.isPlaying ? 'PAUSE' : 'RESUME';
+    }
+    return _keptPlaceIn(chapter) != null ? 'RESUME' : 'LISTEN';
+  }
+
+  void _listen(
+    Reference from, {
+    Set<int>? only,
+    int offset = 0,
+    bool fromTop = false,
+  }) {
     _configureVoice();
-    _voice.play(from, only: only);
+    _voice.play(from, only: only, offset: offset, fromTop: fromTop);
     // Handed to the system as well, so it goes on with the screen off and
     // answers the lock screen. Started the first time it is wanted rather
     // than at launch, and never in the way if it cannot be had.
@@ -211,6 +264,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
       builder: (_) => _VoiceSheet(
         settings: _settings,
         engine: _voice.engine,
+        neural: neuralVoices,
         language: _bible.translation.language,
       ),
     );
@@ -1088,8 +1142,9 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       onStep: _step,
                       planCard: _planCardFor(reference),
                       onListen: _canListen && comparison == null
-                          ? () => _listen(reference)
+                          ? () => _listenToChapter(reference)
                           : null,
+                      listenLabel: _listenLabel(reference),
                       speakingVerse: _speakingVerseOn(reference),
                       hasPrevious: page > 0,
                       hasNext: page < _index.length - 1,
@@ -1131,6 +1186,7 @@ class _ChapterPage extends StatefulWidget {
     required this.hasNext,
     this.planCard,
     this.onListen,
+    this.listenLabel = 'LISTEN',
     this.speakingVerse,
     super.key,
   });
@@ -1173,6 +1229,9 @@ class _ChapterPage extends StatefulWidget {
 
   /// Starts reading the chapter aloud, where the platform can.
   final VoidCallback? onListen;
+
+  /// LISTEN, or PAUSE or RESUME while it is being read or has been begun.
+  final String listenLabel;
 
   /// The verse being read aloud, which is marked and kept in view.
   final int? speakingVerse;
@@ -1611,13 +1670,17 @@ class _ChapterPageState extends State<_ChapterPage>
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
-                          Icons.headphones_rounded,
+                          switch (widget.listenLabel) {
+                            'PAUSE' => Icons.pause_rounded,
+                            'RESUME' => Icons.play_arrow_rounded,
+                            _ => Icons.headphones_rounded,
+                          },
                           size: 14,
                           color: theme.colorScheme.primary,
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'LISTEN',
+                          widget.listenLabel,
                           style: theme.textTheme.labelMedium?.copyWith(
                             color: theme.colorScheme.primary,
                             letterSpacing: 1.2,
@@ -2367,11 +2430,13 @@ class _VoiceSheet extends StatefulWidget {
   const _VoiceSheet({
     required this.settings,
     required this.engine,
+    required this.neural,
     required this.language,
   });
 
   final Settings settings;
   final SpeechEngine engine;
+  final NeuralVoices neural;
   final String language;
 
   static const List<double> rates = [0.75, 1.0, 1.25, 1.5, 2.0];
@@ -2381,18 +2446,71 @@ class _VoiceSheet extends StatefulWidget {
 }
 
 class _VoiceSheetState extends State<_VoiceSheet> {
-  late final Future<List<SpeechVoice>> _voices = widget.engine
+  late Future<List<SpeechVoice>> _voices = _listVoices();
+
+  Future<List<SpeechVoice>> _listVoices() => widget.engine
       .voices(widget.language)
       .catchError((Object _) => const <SpeechVoice>[]);
+
+  /// Which models were installed when the voices were last listed.
+  String _installed = '';
+
+  String _installedNow() => [
+    for (final model in NeuralModel.catalog)
+      if (widget.neural.isInstalled(model)) model.id,
+  ].join(',');
+
+  bool get _offersOwnVoices =>
+      widget.neural.isSupported && NeuralModel.speaks(widget.language);
+
+  @override
+  void initState() {
+    super.initState();
+    _installed = _installedNow();
+    widget.neural.addListener(_onModels);
+  }
+
+  @override
+  void dispose() {
+    widget.neural.removeListener(_onModels);
+    super.dispose();
+  }
+
+  /// A model downloaded or removed changes the voices to choose from.
+  void _onModels() {
+    final installed = _installedNow();
+    if (installed == _installed) return;
+    setState(() {
+      _installed = installed;
+      _voices = _listVoices();
+    });
+  }
+
+  Future<void> _download(NeuralModel model) async {
+    await widget.neural.install(model);
+    // Downloaded to be heard: its first voice is chosen, unless one of
+    // OpenWord's own already was.
+    if (widget.neural.isInstalled(model) &&
+        NeuralModel.parse(widget.settings.speechVoice) == null) {
+      widget.settings.speechVoice = model.voiceName(model.speakers.first);
+    }
+  }
+
+  Future<void> _remove(NeuralModel model) async {
+    if (NeuralModel.parse(widget.settings.speechVoice)?.$1 == model) {
+      widget.settings.speechVoice = null;
+    }
+    await widget.neural.remove(model);
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final settings = widget.settings;
     return AnimatedBuilder(
-      animation: settings,
+      animation: Listenable.merge([settings, widget.neural]),
       builder: (context, _) => SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
@@ -2432,14 +2550,18 @@ class _VoiceSheetState extends State<_VoiceSheet> {
                         _voiceTile(
                           null,
                           'The most natural voice on this device',
-                          voices.where((v) => !v.online).firstOrNull?.name,
+                          voices
+                              .where((v) => !v.online && !v.builtIn)
+                              .firstOrNull
+                              ?.name,
                         ),
                         for (final voice in voices)
                           _voiceTile(
                             voice.name,
-                            voice.name,
+                            voice.title ?? voice.name,
                             [
                               voice.qualityLabel,
+                              if (voice.builtIn) 'OpenWord',
                               if (voice.online) 'Online',
                               voice.locale,
                             ].whereType<String>().join(' · '),
@@ -2465,7 +2587,8 @@ class _VoiceSheetState extends State<_VoiceSheet> {
                               ),
                             ),
                           ),
-                        if (!voices.any((v) => v.quality >= 3 && !v.online))
+                        if (!voices.any((v) => v.quality >= 3 && !v.online) &&
+                            !_offersOwnVoices)
                           Padding(
                             padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
                             child: Text(
@@ -2480,11 +2603,94 @@ class _VoiceSheetState extends State<_VoiceSheet> {
                   );
                 },
               ),
+              if (_offersOwnVoices) ..._ownVoices(theme),
             ],
           ),
         ),
       ),
     );
+  }
+
+  /// OpenWord's own voices: open neural models, each downloaded once and
+  /// then run on the device.
+  List<Widget> _ownVoices(ThemeData theme) {
+    final neural = widget.neural;
+    final muted = theme.textTheme.bodySmall?.copyWith(
+      color: theme.colorScheme.onSurfaceVariant,
+    );
+    return [
+      const SizedBox(height: 20),
+      Text('Natural voices for OpenWord', style: theme.textTheme.titleMedium),
+      const SizedBox(height: 4),
+      Text(
+        'Open neural voices that run on this device. Each is downloaded '
+        'once, from GitHub, and from then on reads with no connection.',
+        style: muted,
+      ),
+      for (final model in NeuralModel.catalog)
+        Builder(
+          builder: (context) {
+            final progress = neural.progress(model);
+            final error = neural.error(model);
+            final installed = neural.isInstalled(model);
+            return ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.record_voice_over_rounded),
+              title: Text(model.title),
+              subtitle: progress != null
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 6),
+                        LinearProgressIndicator(
+                          value: progress < 1 ? progress : null,
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          progress < 1
+                              ? 'Downloading · ${(progress * 100).round()}%'
+                              : 'Unpacking…',
+                        ),
+                      ],
+                    )
+                  : Text(
+                      [
+                        installed
+                            ? '${model.speakers.length} voices'
+                            : '${model.size} download',
+                        model.blurb,
+                        ?error,
+                      ].join(' · '),
+                      style: error == null
+                          ? null
+                          : TextStyle(color: theme.colorScheme.error),
+                    ),
+              trailing: progress != null
+                  ? IconButton(
+                      tooltip: 'Stop downloading',
+                      onPressed: progress < 1
+                          ? () => neural.cancel(model)
+                          : null,
+                      icon: const Icon(Icons.close_rounded),
+                    )
+                  : installed
+                  ? IconButton(
+                      tooltip: 'Remove ${model.title}',
+                      onPressed: () => _remove(model),
+                      icon: const Icon(Icons.delete_outline_rounded),
+                    )
+                  : FilledButton.tonal(
+                      onPressed: () => _download(model),
+                      child: const Text('Download'),
+                    ),
+            );
+          },
+        ),
+      Text(
+        'KittenTTS and Kokoro, both Apache-2.0, run with sherpa-onnx.',
+        style: muted,
+      ),
+    ];
   }
 
   /// Where a more natural voice comes from. The system's own voices are
