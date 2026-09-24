@@ -181,6 +181,36 @@ void main() {
       expect(voice.current, const Reference('GEN', 1, 2));
     });
 
+    test('resuming takes up the word it had reached, not the verse', () async {
+      voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      speech.reach('be light');
+      voice.pause();
+      await settle();
+      voice.resume();
+      await settle();
+      expect(speech.said.last, startsWith('be light'));
+      expect(voice.current, const Reference('GEN', 1, 3));
+      // And the verses after it follow as before.
+      expect(speech.said.last, contains('A paragraph set flush'));
+      // A word reached in the resumed passage is placed in its verse.
+      speech.reach('light.');
+      voice.pause();
+      await settle();
+      voice.resume();
+      await settle();
+      expect(speech.said.last, startsWith('light.'));
+    });
+
+    test('stepping to another verse starts it from the beginning', () async {
+      voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      speech.reach('be light');
+      voice.skip(1);
+      await settle();
+      expect(speech.said.last, startsWith('A paragraph set flush'));
+    });
+
     test(
       'a platform that reports no progress is read a verse at a time',
       () async {
@@ -248,6 +278,41 @@ void main() {
       await settle();
       expect(voice.state, ReadAloudState.idle);
       expect(voice.error, isNotNull);
+    });
+
+    test('voices are ranked most natural first, and never online', () {
+      final ranked = SpeechVoice.rank([
+        {'name': 'plain', 'locale': 'en-US', 'quality': 'normal'},
+        {
+          'name': 'cloud',
+          'locale': 'en-US',
+          'quality': 'very high',
+          'network_required': '1',
+        },
+        {
+          'name': 'missing',
+          'locale': 'en-US',
+          'quality': 'very high',
+          'features': 'embeddedTts\tnotInstalled',
+        },
+        {
+          'name': 'good-us',
+          'locale': 'en-US',
+          'quality': 'very high',
+          'network_required': '0',
+        },
+        {'name': 'good-gb', 'locale': 'en-GB', 'quality': 'very high'},
+        {'name': 'Ava (Premium)', 'locale': 'en-US', 'quality': 'premium'},
+        {'name': 'Daniel', 'locale': 'en-GB', 'quality': 'enhanced'},
+        {'name': 'Amélie', 'locale': 'fr-CA', 'quality': 'premium'},
+      ], 'en-GB');
+      expect(ranked.map((v) => v.name), [
+        // Best quality first; the translation's own region breaks a tie.
+        'good-gb', 'Ava (Premium)', 'good-us', 'Daniel', 'plain',
+      ]);
+      expect(ranked.first.qualityLabel, 'Natural');
+      expect(ranked[3].qualityLabel, 'Enhanced');
+      expect(ranked.last.qualityLabel, isNull);
     });
 
     test('normal pace is what each platform calls normal', () {
@@ -335,6 +400,25 @@ void main() {
       );
     });
 
+    test('the lock screen gets a cover for the chapter', () async {
+      final drawn = <Reference>[];
+      handler.bind(
+        voice,
+        () => 'Test Translation',
+        artwork: (chapter) async {
+          drawn.add(chapter);
+          return Uri.file('/covers/${chapter.bookCode}-${chapter.chapter}.png');
+        },
+      );
+      voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      expect(handler.mediaItem.value!.artUri, Uri.file('/covers/GEN-1.png'));
+      // Once per chapter, not once per verse.
+      voice.skip(1);
+      await settle();
+      expect(drawn, [const Reference('GEN', 1)]);
+    });
+
     test('a new voice can take over the session', () async {
       final another = ReadAloud(
         engine: speech,
@@ -362,7 +446,7 @@ void main() {
       speech = FakeSpeech();
       createSpeechEngine = () => speech;
       sessions.clear();
-      startReadAloudSession = (voice, describe) async {
+      startReadAloudSession = (voice, describe, {artwork}) async {
         sessions.add(voice);
         return null;
       };
@@ -396,7 +480,7 @@ void main() {
     });
 
     testWidgets('a session that cannot start says why, once', (tester) async {
-      startReadAloudSession = (voice, describe) async {
+      startReadAloudSession = (voice, describe, {artwork}) async {
         readAloudSessionError = 'no service';
         return null;
       };
@@ -484,7 +568,10 @@ void main() {
       await tester.tap(find.text('1.5×'));
       await tester.pumpAndSettle();
       expect(harness.settings.speechRate, 1.5);
-      await tester.tap(find.text('Serena'));
+      // The automatic choice names the voice it would use; the voice's
+      // own row is the second.
+      expect(find.text('The most natural voice installed'), findsOneWidget);
+      await tester.tap(find.text('Serena').last);
       await tester.pumpAndSettle();
       expect(harness.settings.speechVoice, 'Serena');
     });

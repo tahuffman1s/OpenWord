@@ -1,6 +1,7 @@
 import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 
+import '../model/bible.dart';
 import 'read_aloud.dart';
 
 /// Reading aloud as the system sees it: a media session, so it can go on
@@ -24,12 +25,26 @@ class ReadAloudHandler extends BaseAudioHandler {
   ReadAloud? _voice;
   String Function() _describe;
 
+  /// Draws a chapter's cover for the lock screen, where there is one.
+  Future<Uri?> Function(Reference chapter)? _artwork;
+  final Map<String, Uri?> _art = {};
+  final Set<String> _drawing = {};
+
   ReadAloud? get voice => _voice;
 
   /// Hands the session to a voice. The session lasts as long as the app,
   /// and a reader screen built again brings a voice of its own.
-  void bind(ReadAloud voice, String Function() describe) {
+  void bind(
+    ReadAloud voice,
+    String Function() describe, {
+    Future<Uri?> Function(Reference chapter)? artwork,
+  }) {
     _describe = describe;
+    if (artwork != null) {
+      _artwork = artwork;
+      // Drawn again in the colours of the theme now in use.
+      _art.clear();
+    }
     if (identical(voice, _voice)) return;
     _voice?.removeListener(_publish);
     _voice = voice;
@@ -59,7 +74,7 @@ class ReadAloudHandler extends BaseAudioHandler {
         );
 
   /// "Genesis 1:3", or the chapter while its name is announced.
-  static MediaItem? itemFor(ReadAloud voice, String album) {
+  static MediaItem? itemFor(ReadAloud voice, String album, {Uri? art}) {
     final current = voice.current;
     if (current == null) return null;
     final title = current.verse == null
@@ -72,6 +87,7 @@ class ReadAloudHandler extends BaseAudioHandler {
       title: title,
       album: album,
       artist: 'OpenWord',
+      artUri: art,
     );
   }
 
@@ -79,7 +95,28 @@ class ReadAloudHandler extends BaseAudioHandler {
     final voice = _voice;
     playbackState.add(stateFor(voice));
     if (voice == null) return;
-    final item = itemFor(voice, _describe());
+    final current = voice.current;
+    final key = current == null
+        ? null
+        : '${current.bookCode}/${current.chapter}';
+    final artwork = _artwork;
+    if (key != null &&
+        artwork != null &&
+        !_art.containsKey(key) &&
+        _drawing.add(key)) {
+      // Drawn once per chapter, off the voice's path; the item is sent
+      // again with its picture when the picture is ready.
+      artwork(current!.withVerse(null)).then((uri) {
+        _drawing.remove(key);
+        _art[key] = uri;
+        if (uri != null) _publish();
+      });
+    }
+    final item = itemFor(
+      voice,
+      _describe(),
+      art: key == null ? null : _art[key],
+    );
     if (item != null) mediaItem.add(item);
   }
 
@@ -149,10 +186,14 @@ String? readAloudSessionError;
 
 /// Binds [voice] to the system's media session, starting it if it was not
 /// already. A seam, so a test runs without a platform.
-Future<ReadAloudHandler?> Function(ReadAloud voice, String Function() describe)
-startReadAloudSession = (voice, describe) async {
+Future<ReadAloudHandler?> Function(
+  ReadAloud voice,
+  String Function() describe, {
+  Future<Uri?> Function(Reference chapter)? artwork,
+})
+startReadAloudSession = (voice, describe, {artwork}) async {
   final session = await prepareReadAloudSession();
-  session?.bind(voice, describe);
+  session?.bind(voice, describe, artwork: artwork);
   return session;
 };
 

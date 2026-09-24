@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Resuming takes up the word it stopped at.** Pausing used to remember
+  only the verse, so resuming started the verse again. The words the
+  platform reports as it reaches them now say how far into the verse it
+  had got, and resuming picks up from that word. Stepping to another verse
+  still starts that verse from its beginning.
+- **The lock screen has a picture.** Each chapter gets a cover — the book's
+  name and the chapter's number in the reader's own theme colours — drawn
+  on the device the first time the chapter is read aloud and kept in the
+  app's cache. Nothing is downloaded. (Not on the web, where there is no
+  file to hand over.)
+- **The most natural voice installed is used, not the plainest.** With no
+  voice chosen, reading aloud used the platform's default, which is often
+  its most robotic. It now picks the best voice the device has — Apple's
+  Premium and Enhanced voices, Android's "very high" and "high" quality —
+  preferring the translation's own region among equals. The voice sheet
+  labels them *Natural* and *Enhanced*, and where none is installed it says
+  where in the device's settings to download one. Voices that need the
+  internet are never offered: they send the words away to be spoken, and
+  nothing else OpenWord reads leaves the device.
+
 ## 1.20.2
 
 ### Fixed

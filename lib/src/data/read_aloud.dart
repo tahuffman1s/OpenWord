@@ -8,10 +8,69 @@ import '../model/bible.dart';
 /// A voice the platform offers.
 @immutable
 class SpeechVoice {
-  const SpeechVoice({required this.name, required this.locale});
+  const SpeechVoice({
+    required this.name,
+    required this.locale,
+    this.quality = 0,
+  });
 
   final String name;
   final String locale;
+
+  /// How natural the platform says the voice is, higher better: Apple's
+  /// premium and enhanced voices, Android's "very high" and "high".
+  final int quality;
+
+  /// What the voice sheet calls it, where it is better than ordinary.
+  String? get qualityLabel => quality >= 3
+      ? 'Natural'
+      : quality == 2
+      ? 'Enhanced'
+      : null;
+
+  /// The voices a platform lists that can read [language], best first.
+  ///
+  /// Voices that need the internet are left out: they send the words to be
+  /// spoken to a server, and nothing else OpenWord reads leaves the device.
+  /// So are voices listed but not downloaded. The most natural come first,
+  /// and among equals the translation's own region, so a British edition
+  /// is heard in a British voice when one is as good.
+  static List<SpeechVoice> rank(List<Object?> raw, String language) {
+    final prefix = language.split(RegExp('[-_]')).first.toLowerCase();
+    final exact = language.toLowerCase().replaceAll('_', '-');
+    final result = <SpeechVoice>[];
+    for (final entry in raw) {
+      if (entry is! Map) continue;
+      final name = entry['name']?.toString();
+      final locale = entry['locale']?.toString() ?? '';
+      if (name == null) continue;
+      if (!locale.toLowerCase().startsWith(prefix)) continue;
+      if (entry['network_required']?.toString() == '1') continue;
+      if ((entry['features']?.toString() ?? '').contains('notInstalled')) {
+        continue;
+      }
+      result.add(
+        SpeechVoice(
+          name: name,
+          locale: locale,
+          quality: switch (entry['quality']?.toString()) {
+            'premium' || 'very high' => 3,
+            'enhanced' || 'high' => 2,
+            'default' || 'normal' => 1,
+            _ => 0,
+          },
+        ),
+      );
+    }
+    bool own(SpeechVoice v) =>
+        v.locale.toLowerCase().replaceAll('_', '-') == exact;
+    result.sort((a, b) {
+      if (a.quality != b.quality) return b.quality - a.quality;
+      if (own(a) != own(b)) return own(a) ? -1 : 1;
+      return a.name.compareTo(b.name);
+    });
+    return result;
+  }
 }
 
 /// What reading aloud needs from the platform's text-to-speech. A seam, so
@@ -128,14 +187,17 @@ class PlatformSpeechEngine implements SpeechEngine {
     await _prepareSession();
     await _tts.setLanguage(language);
     await _tts.setSpeechRate(rateFor(rate, web: kIsWeb));
-    if (voice != null) {
-      final match = (await voices(language)).where((v) => v.name == voice);
-      if (match.isNotEmpty) {
-        await _tts.setVoice({
-          'name': match.first.name,
-          'locale': match.first.locale,
-        });
-      }
+    // With no voice chosen, the most natural one installed rather than the
+    // platform's default, which is often its plainest.
+    final available = await voices(language);
+    final match = voice == null
+        ? available.take(1)
+        : available.where((v) => v.name == voice);
+    if (match.isNotEmpty) {
+      await _tts.setVoice({
+        'name': match.first.name,
+        'locale': match.first.locale,
+      });
     }
   }
 
@@ -166,27 +228,7 @@ class PlatformSpeechEngine implements SpeechEngine {
   @override
   Future<List<SpeechVoice>> voices(String language) async {
     final raw = await _tts.getVoices;
-    if (raw is! List) return const [];
-    final prefix = language.split('-').first.toLowerCase();
-    final result = <SpeechVoice>[];
-    for (final entry in raw) {
-      if (entry is! Map) continue;
-      final name = entry['name']?.toString();
-      final locale = entry['locale']?.toString() ?? '';
-      if (name == null) continue;
-      if (!locale.toLowerCase().startsWith(prefix)) continue;
-      result.add(SpeechVoice(name: name, locale: locale));
-    }
-    // The translation's own region first: a British edition in a British
-    // voice.
-    final exact = language.toLowerCase().replaceAll('_', '-');
-    result.sort((a, b) {
-      final aExact = a.locale.toLowerCase().replaceAll('_', '-') == exact;
-      final bExact = b.locale.toLowerCase().replaceAll('_', '-') == exact;
-      if (aExact != bExact) return aExact ? -1 : 1;
-      return a.name.compareTo(b.name);
-    });
-    return result;
+    return raw is List ? SpeechVoice.rank(raw, language) : const [];
   }
 }
 
@@ -208,12 +250,13 @@ class Utterance {
 
 /// Reads Scripture aloud, a verse at a time.
 ///
-/// A verse at a time rather than a chapter at a time, because that is what
-/// lets the page follow along, and lets the reader step back a verse or on
-/// to the next without losing their place. Pausing stops the voice and
-/// remembers the verse; resuming says that verse again from its beginning,
-/// which every platform can do, where a true mid-sentence pause is only
-/// offered by some.
+/// It keeps its place by the verse, which is what lets the page follow
+/// along and lets the reader step back a verse or on to the next; the
+/// voice is handed passages of several verses at once, and the words the
+/// platform reports reaching say which verse it is on. Pausing stops the
+/// voice and remembers the word it had reached; resuming takes up from
+/// that word, which every platform can do, where a true mid-sentence pause
+/// is only offered by some.
 class ReadAloud extends ChangeNotifier {
   ReadAloud({
     required this.engine,
@@ -251,6 +294,11 @@ class ReadAloud extends ChangeNotifier {
 
   /// Whether the verse being said is a second attempt at it.
   bool _retrying = false;
+
+  /// How far into the current verse the voice had got, from the words the
+  /// platform reports, so that resuming after a pause takes up that word
+  /// rather than starting the verse again.
+  int _resumeAt = 0;
 
   /// How long to wait before saying a verse again after the engine did not
   /// finish it.
@@ -293,6 +341,7 @@ class ReadAloud extends ChangeNotifier {
       announce: _startedAtTop,
     );
     _index = 0;
+    _resumeAt = 0;
     error = null;
     if (_queue.isEmpty) {
       stop();
@@ -332,6 +381,7 @@ class ReadAloud extends ChangeNotifier {
   /// chapter's first verse says it again.
   void skip(int delta) {
     if (!isActive) return;
+    _resumeAt = 0;
     final next = (_index + delta).clamp(0, _queue.length - 1);
     if (delta > 0 && _index + delta >= _queue.length) {
       _generation++;
@@ -389,14 +439,17 @@ class ReadAloud extends ChangeNotifier {
     }
     if (generation != _generation) return;
 
-    // The passage: this verse and those after it, as far as will go.
+    // The passage: this verse and those after it, as far as will go. After
+    // a pause it takes up the verse at the word it had reached.
     final first = _index;
+    final firstText = _queue[first].text;
+    final trim = _resumeAt > 0 && _resumeAt < firstText.length ? _resumeAt : 0;
     final starts = <int>[];
     final passage = StringBuffer();
     final length = _reportsProgress == false ? 0 : passageLength;
     var last = first;
     for (var i = first; i < _queue.length; i++) {
-      final text = _queue[i].text;
+      final text = i == first ? firstText.substring(trim) : _queue[i].text;
       if (i > first && passage.length + 1 + text.length > length) break;
       if (i > first) passage.write(' ');
       starts.add(passage.length);
@@ -413,6 +466,8 @@ class ReadAloud extends ChangeNotifier {
         while (k + 1 < starts.length && starts[k + 1] <= offset) {
           k++;
         }
+        // Where to take up again after a pause: this word, in its verse.
+        _resumeAt = (k == 0 ? trim : 0) + offset - starts[k];
         if (first + k != _index) {
           _index = first + k;
           notifyListeners();
@@ -444,6 +499,7 @@ class ReadAloud extends ChangeNotifier {
     } else if (last > first) {
       _reportsProgress ??= false;
     }
+    _resumeAt = 0;
     if (last + 1 < _queue.length) {
       _index = last + 1;
       notifyListeners();
@@ -465,6 +521,7 @@ class ReadAloud extends ChangeNotifier {
     _queue = _utterancesFor(next, from: 1, announce: true);
     _startedAtTop = true;
     _index = 0;
+    _resumeAt = 0;
     if (_queue.isEmpty) {
       stop();
       return;

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart' show ShareParams;
@@ -14,6 +15,7 @@ import '../data/originals.dart';
 import '../data/marks.dart';
 import '../data/plan_progress.dart';
 import '../data/read_aloud.dart';
+import '../data/read_aloud_art.dart';
 import '../data/read_aloud_session.dart';
 import '../data/reference_search.dart';
 import '../data/settings.dart';
@@ -164,9 +166,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
     // Handed to the system as well, so it goes on with the screen off and
     // answers the lock screen. Started the first time it is wanted rather
     // than at launch, and never in the way if it cannot be had.
-    startReadAloudSession(_voice, () => _bible.translation.name).then((
-      session,
-    ) {
+    final scheme = Theme.of(context).colorScheme;
+    final colours = ArtColours(
+      from: scheme.primaryContainer,
+      to: scheme.tertiaryContainer,
+      ink: scheme.onPrimaryContainer,
+      accent: scheme.primary,
+    );
+    startReadAloudSession(
+      _voice,
+      () => _bible.translation.name,
+      artwork: (chapter) => chapterArtFile(chapter, colours: colours),
+    ).then((session) {
       if (!mounted) return;
       _session = session;
       final error = readAloudSessionError;
@@ -2418,9 +2429,20 @@ class _VoiceSheetState extends State<_VoiceSheet> {
                     child: ListView(
                       shrinkWrap: true,
                       children: [
-                        _voiceTile(null, 'The device’s own choice', null),
+                        _voiceTile(
+                          null,
+                          'The most natural voice installed',
+                          voices.isEmpty ? null : voices.first.name,
+                        ),
                         for (final voice in voices)
-                          _voiceTile(voice.name, voice.name, voice.locale),
+                          _voiceTile(
+                            voice.name,
+                            voice.name,
+                            [
+                              voice.qualityLabel,
+                              voice.locale,
+                            ].whereType<String>().join(' · '),
+                          ),
                         if (voices.isEmpty)
                           Padding(
                             padding: const EdgeInsets.all(8),
@@ -2428,6 +2450,16 @@ class _VoiceSheetState extends State<_VoiceSheet> {
                               'This device offers no other voices for this '
                               'translation’s language.',
                               style: theme.textTheme.bodySmall,
+                            ),
+                          ),
+                        if (!voices.any((v) => v.quality >= 3))
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+                            child: Text(
+                              _betterVoicesHint,
+                              style: theme.textTheme.bodySmall?.copyWith(
+                                color: theme.colorScheme.onSurfaceVariant,
+                              ),
                             ),
                           ),
                       ],
@@ -2441,6 +2473,24 @@ class _VoiceSheetState extends State<_VoiceSheet> {
       ),
     );
   }
+
+  /// Where a more natural voice comes from. The system's own voices are
+  /// all an app can use, and the best of them are a download away.
+  static String get _betterVoicesHint => switch (defaultTargetPlatform) {
+    TargetPlatform.iOS || TargetPlatform.macOS =>
+      'For a more natural voice, download an Enhanced or Premium one: '
+          'Settings → Accessibility → Spoken Content → Voices → English. '
+          'It then appears here.',
+    TargetPlatform.android =>
+      'For a more natural voice, install one: Settings → System → '
+          'Languages → Text-to-speech output → the engine’s settings → '
+          'Install voice data. It then appears here. Voices that need the '
+          'internet are left out, since they send the words away to be '
+          'spoken.',
+    _ =>
+      'The voices here are the ones this device has installed; installing '
+          'a better one in its settings adds it to this list.',
+  };
 
   Widget _voiceTile(String? name, String title, String? locale) {
     final selected = widget.settings.speechVoice == name;
