@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.23.0
 
 ### Fixed
 - **Gibberish at the end of a phrase.** A long sentence was cut into pieces
