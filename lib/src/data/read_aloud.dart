@@ -470,6 +470,31 @@ class ReadAloud extends ChangeNotifier {
   /// The settings last handed to the engine, so they are sent again only
   /// when they change: looking a voice up is not free.
   (String, double, String?)? _applied;
+
+  /// Handing them over, which for a voice of OpenWord's own means loading
+  /// its model; speaking waits for it.
+  Future<void>? _applying;
+
+  Future<void> _apply() {
+    final wanted = (_language, _rate, _voice);
+    if (_applied == wanted && _applying != null) return _applying!;
+    _applied = wanted;
+    final (language, rate, voice) = wanted;
+    // One after another: a voice chosen while the last is still loading
+    // waits for it.
+    return _applying = (_applying ?? Future<void>.value()).then(
+      (_) => engine
+          .configure(language: language, rate: rate, voice: voice)
+          .catchError((Object _) {
+            // A voice or rate the platform refuses still leaves it able
+            // to speak.
+          }),
+    );
+  }
+
+  /// Gets the voice ready before it is asked to speak — for one of
+  /// OpenWord's own, loading its model — so that Listen is heard at once.
+  void prepare() => _apply();
   String? error;
 
   /// Whether the verse being said is a second attempt at it.
@@ -768,16 +793,7 @@ class ReadAloud extends ChangeNotifier {
     final generation = ++_generation;
     if (interrupt) await engine.stop();
     if (generation != _generation) return;
-    final wanted = (_language, _rate, _voice);
-    if (_applied != wanted) {
-      _applied = wanted;
-      try {
-        await engine.configure(language: _language, rate: _rate, voice: _voice);
-      } on Object {
-        // A voice or rate the platform refuses still leaves it able to
-        // speak.
-      }
-    }
+    await _apply();
     if (generation != _generation) return;
 
     // The passage: this verse and those after it, as far as will go. After
@@ -787,7 +803,12 @@ class ReadAloud extends ChangeNotifier {
     final trim = _resumeAt > 0 && _resumeAt < firstText.length ? _resumeAt : 0;
     final starts = <int>[];
     final passage = StringBuffer();
-    final length = _reportsProgress == true
+    // An engine that makes its own speech is handed the rest of the
+    // chapter at once: it cuts it up itself, a sentence ahead of what is
+    // heard, and a new passage would start that from nothing.
+    final length = engine.canPause
+        ? 1 << 30
+        : _reportsProgress == true
         ? passageLength
         : estimatedPassageLength;
     var last = first;

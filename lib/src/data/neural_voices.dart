@@ -186,6 +186,10 @@ abstract class NeuralVoices extends ChangeNotifier {
   /// [isSupported].
   SpeechEngine engine();
 
+  /// A model this device has been found to make speech with more slowly
+  /// than it is heard, so that reading with it pauses between sentences.
+  NeuralModel? get fallingBehind => null;
+
   /// The installed voices that can read [language], best first.
   List<SpeechVoice> voicesFor(String language) => [
     if (NeuralModel.speaks(language))

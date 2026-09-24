@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/material.dart' show FilledButton;
+import 'package:flutter/material.dart'
+    show FilledButton, Scaffold, ScaffoldMessenger;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:audio_service/audio_service.dart';
 import 'package:openword/src/data/neural_speech.dart';
@@ -41,12 +42,18 @@ class FakeSpeech implements SpeechEngine {
   @override
   bool get isAvailable => available;
 
+  /// Held open to keep configuring from finishing, as loading a model does.
+  Completer<void>? configuring;
+
   @override
   Future<void> configure({
     required String language,
     required double rate,
     String? voice,
-  }) async => rates.add(rate);
+  }) async {
+    rates.add(rate);
+    await configuring?.future;
+  }
 
   void Function(int offset)? _progress;
   void Function()? _start;
@@ -96,6 +103,12 @@ class FakeSpeech implements SpeechEngine {
 /// when asked, and speaks with a silent engine.
 class FakeNeuralVoices extends NeuralVoices {
   final Set<NeuralModel> installed = {};
+
+  NeuralModel? slow;
+
+  @override
+  NeuralModel? get fallingBehind => slow;
+
   final FakeSpeech speech = FakeSpeech(pauses: true);
   final List<String?> configured = [];
 
@@ -585,6 +598,23 @@ void main() {
       expect((await engines.voices('fr')).where((v) => v.builtIn), isEmpty);
     });
 
+    test('a voice made ready ahead is not made ready again', () async {
+      final loading = speech.configuring = Completer<void>();
+      voice.configure(language: 'en', rate: 1, voice: 'Serena');
+      voice.prepare();
+      await settle();
+      expect(speech.rates, hasLength(1));
+      // Listen while it is still loading waits for it, rather than
+      // speaking with nothing loaded.
+      voice.play(const Reference('GEN', 1, 3));
+      await settle();
+      expect(speech.said, isEmpty);
+      loading.complete();
+      await settle();
+      expect(speech.said, hasLength(1));
+      expect(speech.rates, hasLength(1));
+    });
+
     test('a built-in voice is kept by a name that says whose it is', () {
       final lewis = NeuralModel.kokoro.speakers.last;
       final name = NeuralModel.kokoro.voiceName(lewis);
@@ -610,6 +640,23 @@ void main() {
       // Nothing left out, and a long sentence cut at a comma.
       expect(pieces.map((p) => p.$2).join(' '), text);
       expect(pieces.any((p) => p.$2.endsWith('empty,')), isTrue);
+    });
+
+    test('the first piece is short, so the voice starts at once', () {
+      final text = List.filled(
+        40,
+        'and the evening and the morning',
+      ).join(', ');
+      final pieces = NeuralSpeechEngine.pieces(text);
+      final lengths = [for (final (_, words) in pieces) words.length];
+      expect(lengths.first, lessThanOrEqualTo(40));
+      expect(lengths[1], lessThanOrEqualTo(80));
+      expect(lengths[1], greaterThan(40));
+      // Then as long as a piece may be, and no longer, but for whatever is
+      // left at the end.
+      final middle = lengths.sublist(2, lengths.length - 1);
+      expect(middle.every((n) => n > 80 && n <= 160), isTrue);
+      expect(pieces.map((p) => p.$2).join(' '), text);
     });
 
     test('normal pace is what each platform calls normal', () {
@@ -856,6 +903,33 @@ void main() {
       await tester.pumpAndSettle();
       expect(harness.settings.speechVoice, isNull);
       expect(find.text('Bella · Kitten'), findsNothing);
+    });
+
+    testWidgets('a voice too slow for the device says so, once', (
+      tester,
+    ) async {
+      final neural = FakeNeuralVoices()..installed.add(NeuralModel.kokoro);
+      final previous = neuralVoices;
+      neuralVoices = neural;
+      addTearDown(() => neuralVoices = previous);
+      await pumpReader(
+        tester,
+        prefs: {
+          'speechVoice': NeuralModel.kokoro.voiceName(
+            NeuralModel.kokoro.speakers.first,
+          ),
+        },
+      );
+      neural.slow = NeuralModel.kokoro;
+      neural.notifyListeners();
+      await tester.pump();
+      expect(find.textContaining('Kitten is quicker'), findsOneWidget);
+      ScaffoldMessenger.of(tester.element(find.byType(Scaffold).first))
+          .removeCurrentSnackBar();
+      await tester.pumpAndSettle();
+      neural.notifyListeners();
+      await tester.pump();
+      expect(find.textContaining('Kitten is quicker'), findsNothing);
     });
 
     testWidgets('a session that cannot start says why, once', (tester) async {

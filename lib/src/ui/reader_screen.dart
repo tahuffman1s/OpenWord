@@ -155,10 +155,46 @@ class _ReaderScreenState extends State<ReaderScreen> {
   }
 
   void _configureVoice() {
-    _readAloud?.configure(
+    // One of OpenWord's own voices has a model to load, and it is loaded
+    // now rather than when Listen is tapped, so that it speaks at once.
+    final own = NeuralModel.parse(_settings.speechVoice) != null;
+    final voice = own && _canListen ? _voice : _readAloud;
+    voice?.configure(
       language: _bible.translation.language,
       rate: _settings.speechRate,
       voice: _settings.speechVoice,
+    );
+    if (own) voice?.prepare();
+  }
+
+  /// Said once, when the voice chosen turns out to be too slow for this
+  /// device to keep up with, which is heard only as pauses.
+  NeuralModel? _toldTooSlow;
+  NeuralVoices? _neural;
+
+  void _onNeuralVoices() {
+    final slow = _neural?.fallingBehind;
+    if (!mounted ||
+        slow == null ||
+        slow == _toldTooSlow ||
+        NeuralModel.parse(_settings.speechVoice)?.$1 != slow) {
+      return;
+    }
+    _toldTooSlow = slow;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          slow == NeuralModel.kitten
+              ? 'This device makes ${slow.title}’s speech more slowly than '
+                    'it is heard, so it pauses between sentences. The '
+                    'device’s own voices do not.'
+              : 'This device makes ${slow.title}’s speech more slowly than '
+                    'it is heard, so it pauses between sentences. Kitten '
+                    'is quicker.',
+        ),
+        duration: const Duration(seconds: 10),
+        action: SnackBarAction(label: 'Voices', onPressed: _openVoiceSettings),
+      ),
     );
   }
 
@@ -378,6 +414,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
     if (!_restored) {
       _restored = true;
       _settings.addListener(_onSettingsChanged);
+      _neural = neuralVoices..addListener(_onNeuralVoices);
       final resume = _reading.lastPosition;
       final target =
           resume != null && _bible.bookByCode(resume.bookCode) != null
@@ -389,6 +426,10 @@ class _ReaderScreenState extends State<ReaderScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_pages.hasClients) _pages.jumpToPage(_page);
         _syncComparison();
+        // A voice of OpenWord's own starts loading as the app opens.
+        if (mounted && NeuralModel.parse(_settings.speechVoice) != null) {
+          _configureVoice();
+        }
       });
     }
   }
@@ -396,6 +437,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
   @override
   void dispose() {
     _settings.removeListener(_onSettingsChanged);
+    _neural?.removeListener(_onNeuralVoices);
     _readAloud?.removeListener(_followVoice);
     if (_readAloud case final voice?) _session?.release(voice);
     _readAloud?.dispose();

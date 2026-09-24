@@ -182,8 +182,18 @@ class DeviceNeuralVoices extends NeuralVoices {
   }
 
   @override
-  SpeechEngine engine() =>
-      _engine ??= NeuralSpeechEngine(modelDirectory: _modelPath);
+  SpeechEngine engine() => _engine ??= NeuralSpeechEngine(
+    modelDirectory: _modelPath,
+    onFallingBehind: (model) {
+      _fallingBehind = model;
+      notifyListeners();
+    },
+  );
+
+  NeuralModel? _fallingBehind;
+
+  @override
+  NeuralModel? get fallingBehind => _fallingBehind;
 }
 
 /// Unpacks a model's `.tar.bz2` [archive] into [target], where it makes

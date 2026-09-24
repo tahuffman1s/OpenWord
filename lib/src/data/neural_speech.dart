@@ -21,10 +21,15 @@ import 'read_aloud.dart';
 /// Unlike the platform's voices it can truly pause: the audio simply
 /// stops where it is and goes on from there, mid-word.
 class NeuralSpeechEngine implements SpeechEngine {
-  NeuralSpeechEngine({required this.modelDirectory});
+  NeuralSpeechEngine({required this.modelDirectory, this.onFallingBehind});
 
   /// Where a downloaded model was unpacked.
   final String Function(NeuralModel model) modelDirectory;
+
+  /// Told, once for each model, when this device makes its speech more
+  /// slowly than it is heard, so that there will be pauses.
+  final void Function(NeuralModel model)? onFallingBehind;
+  final Set<NeuralModel> _toldSlow = {};
 
   Synthesiser? _synth;
   NeuralModel? _model;
@@ -42,8 +47,23 @@ class NeuralSpeechEngine implements SpeechEngine {
   @override
   bool get canPause => true;
 
+  /// Loading one model after another, never two at once.
+  Future<void> _configuring = Future.value();
+
   @override
   Future<void> configure({
+    required String language,
+    required double rate,
+    String? voice,
+  }) {
+    final next = _configuring.then(
+      (_) => _configure(language: language, rate: rate, voice: voice),
+    );
+    _configuring = next.catchError((Object _) {});
+    return next;
+  }
+
+  Future<void> _configure({
     required String language,
     required double rate,
     String? voice,
@@ -108,10 +128,20 @@ class NeuralSpeechEngine implements SpeechEngine {
       speed: _speed,
       onProgress: onProgress,
       onStart: onStart,
+      onHeard: _checkPace,
     );
     final said = await reading.run();
     if (identical(_reading, reading)) _reading = null;
     return said;
+  }
+
+  void _checkPace() {
+    final model = _model;
+    if (model != null &&
+        (_synth?.fallingBehind ?? false) &&
+        _toldSlow.add(model)) {
+      onFallingBehind?.call(model);
+    }
   }
 
   @override
@@ -141,11 +171,19 @@ class NeuralSpeechEngine implements SpeechEngine {
   /// Where [text] is cut to be voiced a piece at a time, as the offset of
   /// each piece and its words.
   ///
-  /// At the end of every sentence, and a long sentence again at a comma,
-  /// or failing that a space: the first sound comes soon after it is asked
-  /// for, and no piece keeps the next waiting long.
-  static List<(int, String)> pieces(String text, {int longest = 200}) {
+  /// At the end of every sentence, and a sentence longer than a piece may
+  /// be again at a comma, or failing that a space. Nothing is heard until
+  /// the first piece has been made whole, so the first is short — [first]
+  /// characters at most — and each after it may be twice the one before,
+  /// up to [longest]: the voice starts almost at once, and the pieces grow
+  /// while it is being made ahead of what is heard.
+  static List<(int, String)> pieces(
+    String text, {
+    int first = 40,
+    int longest = 160,
+  }) {
     final result = <(int, String)>[];
+    int limit() => math.min(longest, first << math.min(result.length, 8));
     void add(int start, int end) {
       while (start < end && text.codeUnitAt(start) == 0x20) {
         start++;
@@ -157,11 +195,12 @@ class NeuralSpeechEngine implements SpeechEngine {
     }
 
     void cut(int start, int end) {
-      while (end - start > longest) {
-        final window = text.substring(start, start + longest);
+      while (end - start > limit()) {
+        final size = limit();
+        final window = text.substring(start, start + size);
         var at = math.max(window.lastIndexOf(', '), window.lastIndexOf('; '));
-        at = at > longest ~/ 3 ? at + 1 : window.lastIndexOf(' ');
-        if (at <= 0) at = longest;
+        at = at > size ~/ 3 ? at + 1 : window.lastIndexOf(' ');
+        if (at <= 0) at = size;
         add(start, start + at);
         start += at;
       }
@@ -191,6 +230,7 @@ class _Reading {
     required this.speed,
     this.onProgress,
     this.onStart,
+    this.onHeard,
   }) : pieces = NeuralSpeechEngine.pieces(text);
 
   final Synthesiser synth;
@@ -200,6 +240,9 @@ class _Reading {
   final double speed;
   final void Function(int offset)? onProgress;
   final void Function()? onStart;
+
+  /// After each piece has been heard.
+  final void Function()? onHeard;
   final List<(int, String)> pieces;
 
   final Map<int, Future<String?>> _made = {};
@@ -212,6 +255,9 @@ class _Reading {
   bool get paused => _unpaused != null;
 
   static int _clipCount = 0;
+
+  /// How many pieces are made ahead of the one being heard.
+  static const int _ahead = 3;
 
   /// The audio for a piece, made once, as a file.
   Future<String?> _make(int i) => _made[i] ??= synth.say(
@@ -233,8 +279,13 @@ class _Reading {
     try {
       for (var i = 0; i < pieces.length; i++) {
         if (!await _load(i) || cancelled) return false;
-        // The next is made while this one plays.
+        // The next is loaded into the other player while this one plays,
+        // and those after it are made, so that a slow sentence can borrow
+        // time from quick ones.
         if (i + 1 < pieces.length) unawaited(_load(i + 1));
+        for (var k = i + 2; k < pieces.length && k <= i + _ahead; k++) {
+          unawaited(_make(k));
+        }
         await _whileUnpaused();
         if (cancelled) return false;
         final player = players[i % 2];
@@ -249,6 +300,7 @@ class _Reading {
         _playing = null;
         if (cancelled) return false;
         _forget(i);
+        onHeard?.call();
       }
       return true;
     } on Object {
@@ -315,6 +367,14 @@ class Synthesiser {
   final List<_Request> _queue = [];
   bool _busy = false;
 
+  /// How long making speech takes against how long it lasts, smoothed
+  /// over the pieces made so far; above 1 it cannot keep up.
+  double _pace = 0;
+  int _made = 0;
+
+  /// Whether this device makes speech more slowly than it is heard.
+  bool get fallingBehind => _made >= 4 && _pace > 1.05;
+
   static Future<Synthesiser> start(NeuralModel model, String directory) async {
     final replies = ReceivePort();
     final threads = math.min(4, math.max(1, Platform.numberOfProcessors - 1));
@@ -331,7 +391,14 @@ class Synthesiser {
         first.complete(message);
         return;
       }
-      if (message case (int id, String? path)) {
+      if (message case (int id, String? path, double lasts, double took)) {
+        if (path != null && lasts > 0) {
+          final pace = took / lasts;
+          synth._pace = synth._made == 0
+              ? pace
+              : synth._pace * 0.7 + pace * 0.3;
+          synth._made++;
+        }
         synth._waiting.remove(id)?.complete(path);
         synth._busy = false;
         synth._sendNext();
@@ -436,6 +503,13 @@ class Synthesiser {
     }
     final requests = ReceivePort();
     reply.send(requests.sendPort);
+    // The first run of a model is slower than any after it; it is had
+    // now, while nothing is waiting to be heard.
+    try {
+      tts.generate(text: 'Hello.', sid: 0, speed: 1);
+    } on Object {
+      // Found out on the first real piece, if it matters.
+    }
     requests.listen((message) {
       if (message case (
         int id,
@@ -445,6 +519,8 @@ class Synthesiser {
         String path,
       )) {
         String? made;
+        var lasts = 0.0;
+        final clock = Stopwatch()..start();
         try {
           final audio = tts.generate(text: text, sid: speaker, speed: speed);
           if (audio.samples.isNotEmpty &&
@@ -454,11 +530,13 @@ class Synthesiser {
                 sampleRate: audio.sampleRate,
               )) {
             made = path;
+            lasts = audio.samples.length / audio.sampleRate;
           }
         } on Object {
           made = null;
         }
-        reply.send((id, made));
+        final took = clock.elapsedMicroseconds / Duration.microsecondsPerSecond;
+        reply.send((id, made, lasts, took));
       } else {
         tts.free();
         requests.close();

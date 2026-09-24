@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- **OpenWord's own voices took a long time to start, and paused part way.**
+  Four things added up. The voice's model was loaded only when *Listen*
+  was tapped, and a model's first run is far slower than any after it —
+  twelve seconds for Kokoro on a desktop processor, more on a phone. It is
+  now loaded, and run once, in the background as the app opens with one of
+  these voices chosen, or as soon as one is chosen. Nothing was heard until
+  the first piece had been made whole, and that could be a long sentence; the
+  first piece is now forty characters at most, and each after it may be
+  twice as long as the one before, so the voice starts almost at once and
+  keeps ahead. Reading was handed over a passage at a time, and each new
+  passage started making speech from nothing, which was a silence every
+  minute or so; these voices are now given the rest of the chapter at once.
+  And only one piece was made ahead of what was heard, so one slow sentence
+  left a gap; three are now. Where a voice still cannot keep up on a device,
+  the reader says so once, and points to a quicker one.
+
 ## 1.21.0
 
 ### Added
