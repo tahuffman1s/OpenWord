@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.23.1
 
 ### Changed
 - **Books are listed with their short forms.** Each book in the book list
