@@ -355,6 +355,7 @@ class _NavigatorSheetState extends State<_NavigatorSheet> {
         dense: true,
         visualDensity: VisualDensity.compact,
         selected: selected,
+        leading: _BookBadge(book.abbrev, selected: selected),
         title: Text(book.name),
         subtitle: Text(
           book.chapterCount == 1
@@ -405,6 +406,42 @@ class _NavigatorSheetState extends State<_NavigatorSheet> {
           : null,
       marked: widget.reading.flaggedVersesIn(book.code, _chapter),
       onSelected: (verse) => _pop(Reference(book.code, _chapter, verse)),
+    );
+  }
+}
+
+/// A book's short form — Gen, Exo, 1Sa — beside its name in the list, the
+/// way it is written in references and typed into the search.
+class _BookBadge extends StatelessWidget {
+  const _BookBadge(this.abbrev, {required this.selected});
+
+  final String abbrev;
+  final bool selected;
+
+  @override
+  Widget build(BuildContext context) {
+    final colours = Theme.of(context).colorScheme;
+    return Container(
+      width: 48,
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: selected
+            ? colours.primaryContainer
+            : colours.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Text(
+        abbrev,
+        maxLines: 1,
+        style: Theme.of(context).textTheme.labelMedium?.copyWith(
+          color: selected
+              ? colours.onPrimaryContainer
+              : colours.onSurfaceVariant,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.2,
+        ),
+      ),
     );
   }
 }

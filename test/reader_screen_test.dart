@@ -248,6 +248,21 @@ void main() {
     expect(find.text('Genesis'), findsOneWidget);
   });
 
+  testWidgets('each book is listed with its short form', (tester) async {
+    await pumpReader(tester);
+    await tester.tap(find.text('Genesis 1'));
+    await tester.pumpAndSettle();
+
+    final tile = find.ancestor(
+      of: find.text('Genesis'),
+      matching: find.byType(ListTile),
+    );
+    expect(
+      find.descendant(of: tile, matching: find.text('Gen')),
+      findsOneWidget,
+    );
+  });
+
   testWidgets('a jump scrolls the chapter down to the verse', (tester) async {
     await pumpReader(tester, bible: parseLongFixture());
     final scroller = tester.widget<SingleChildScrollView>(

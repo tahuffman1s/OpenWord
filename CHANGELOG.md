@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **Books are listed with their short forms.** Each book in the book list
+  now shows its abbreviation — Gen, Exo, 1Sa, Phm — beside its name, the
+  way references are written and the way they can be typed into the
+  search. The book being read has its short form highlighted.
+
 ## 1.23.0
 
 ### Fixed
