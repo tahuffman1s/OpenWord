@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.24.0
 
 ### Added
 - **Learn a verse by heart.** A verse's sheet offers *Memorise*, and the
