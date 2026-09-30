@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../model/bible.dart';
 import '../model/book_meta.dart';
+import '../model/memory_verse.dart';
 import '../model/reading_plan.dart';
 import 'plan_progress.dart';
 
@@ -114,6 +115,7 @@ class ReadingStore extends ChangeNotifier {
   static const _kListening = 'listeningPlace';
   static const _kHistory = 'history';
   static const _kPlans = 'plans';
+  static const _kMemory = 'memory';
   static const _historyLimit = 20;
 
   /// Number of colours in the highlight palette.
@@ -125,6 +127,9 @@ class ReadingStore extends ChangeNotifier {
 
   /// Reading plans in progress, in the order they were started.
   final Map<String, PlanProgress> _plans = {};
+
+  /// Verses being learnt by heart, in the order they were added.
+  final Map<String, MemoryVerse> _memory = {};
 
   /// What "today" is. A test sets it; the app reads the clock.
   final DateTime Function() _clock;
@@ -150,6 +155,22 @@ class ReadingStore extends ChangeNotifier {
     ];
     final plans = _prefs.getString(_kPlans);
     if (plans != null) _decodePlansInto(plans, _plans);
+    final memory = _prefs.getString(_kMemory);
+    if (memory != null) _decodeMemoryInto(memory, _memory);
+  }
+
+  static int _decodeMemoryInto(Object? raw, Map<String, MemoryVerse> into) {
+    final decoded = raw is String ? jsonDecode(raw) : raw;
+    if (decoded is! List) return 0;
+    var count = 0;
+    for (final entry in decoded) {
+      if (entry is! Map) continue;
+      final verse = MemoryVerse.fromJson(entry.cast<String, Object?>());
+      if (verse == null) continue;
+      into[verse.key] = verse;
+      count++;
+    }
+    return count;
   }
 
   static int _decodePlansInto(Object? raw, Map<String, PlanProgress> into) {
@@ -289,7 +310,12 @@ class ReadingStore extends ChangeNotifier {
     if (_marks.remove(Mark.keyFor(reference)) != null) _persist();
   }
 
+  /// Removes every mark and every verse being learnt.
   void clearAll() {
+    if (_memory.isNotEmpty) {
+      _memory.clear();
+      _persistMemory();
+    }
     if (_marks.isEmpty) return;
     _marks.clear();
     _persist();
@@ -406,6 +432,71 @@ class ReadingStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- memory verses ---------------------------------------------------
+
+  /// Verses being learnt, in the order they were added.
+  List<MemoryVerse> get memoryVerses => List.unmodifiable(_memory.values);
+
+  MemoryVerse? memoryFor(Reference reference) =>
+      reference.verse == null ? null : _memory[reference.encode()];
+
+  bool isMemorising(Reference reference) => memoryFor(reference) != null;
+
+  /// Verses due for practice today, the longest waiting first, then in the
+  /// order they were added.
+  List<MemoryVerse> get memoryDue {
+    final now = today;
+    final due = _memory.values.where((verse) => verse.isDueOn(now)).toList()
+      ..sort((a, b) => a.due.compareTo(b.due));
+    return List.unmodifiable(due);
+  }
+
+  /// Whether any verse is waiting to be practised today: what the
+  /// library button carries a dot for.
+  bool get hasMemoryDue => _memory.values.any((verse) => verse.isDueOn(today));
+
+  /// Starts learning a verse, or stops if it is being learnt already.
+  /// Returns true when the verse was added.
+  bool toggleMemorise(Reference reference) {
+    if (reference.verse == null) return false;
+    final key = reference.encode();
+    if (_memory.remove(key) != null) {
+      _persistMemory();
+      return false;
+    }
+    _memory[key] = MemoryVerse.start(reference, today);
+    _persistMemory();
+    return true;
+  }
+
+  /// Records a practice: the verse moves up the ladder when it was
+  /// recalled and back to the bottom when it was not.
+  void reviewMemory(Reference reference, {required bool remembered}) {
+    final verse = memoryFor(reference);
+    if (verse == null) return;
+    _memory[verse.key] = verse.reviewed(remembered: remembered, today: today);
+    _persistMemory();
+  }
+
+  void removeMemory(Reference reference) {
+    if (_memory.remove(reference.encode()) != null) _persistMemory();
+  }
+
+  /// Puts back a verse just removed, its place on the ladder and all:
+  /// what Undo does.
+  void restoreMemory(MemoryVerse verse) {
+    _memory[verse.key] = verse;
+    _persistMemory();
+  }
+
+  void _persistMemory() {
+    _prefs.setString(
+      _kMemory,
+      jsonEncode([for (final verse in _memory.values) verse.toJson()]),
+    );
+    notifyListeners();
+  }
+
   // --- position --------------------------------------------------------
 
   /// Where the reader was last looking, used to resume on launch.
@@ -467,31 +558,55 @@ class ReadingStore extends ChangeNotifier {
     'marks': [for (final mark in _marks.values) mark.toJson()],
     if (_plans.isNotEmpty)
       'plans': [for (final progress in _plans.values) progress.toJson()],
+    if (_memory.isNotEmpty)
+      'memory': [for (final verse in _memory.values) verse.toJson()],
   });
 
   /// Whether there is anything a backup would hold.
-  bool get hasBackupContent => _marks.isNotEmpty || _plans.isNotEmpty;
+  bool get hasBackupContent =>
+      _marks.isNotEmpty || _plans.isNotEmpty || _memory.isNotEmpty;
 
   /// Merges exported JSON back in, keeping whichever copy of a verse was
   /// touched more recently. Existing marks are never dropped.
   ///
   /// A reading plan is merged the same way: the copy touched more recently
-  /// wins, since a plan's ticks only make sense together.
+  /// wins, since a plan's ticks only make sense together. So is a verse
+  /// being learnt, with its place on the ladder.
   ImportResult import(String raw) {
     final incoming = <String, Mark>{};
     final incomingPlans = <String, PlanProgress>{};
+    final incomingMemory = <String, MemoryVerse>{};
     try {
       final marks = _decodeInto(raw, incoming);
       final decoded = jsonDecode(raw);
       final plans = decoded is Map
           ? _decodePlansInto(decoded['plans'], incomingPlans)
           : 0;
-      if (marks == 0 && plans == 0) return const ImportResult.failed();
+      final memory = decoded is Map
+          ? _decodeMemoryInto(decoded['memory'], incomingMemory)
+          : 0;
+      if (marks == 0 && plans == 0 && memory == 0) {
+        return const ImportResult.failed();
+      }
     } on Object {
       return const ImportResult.failed();
     }
     var added = 0;
     var updated = 0;
+    var memoryChanged = false;
+    for (final verse in incomingMemory.values) {
+      final existing = _memory[verse.key];
+      if (existing == null) {
+        _memory[verse.key] = verse;
+        added++;
+        memoryChanged = true;
+      } else if (verse.updated.isAfter(existing.updated)) {
+        _memory[verse.key] = verse;
+        updated++;
+        memoryChanged = true;
+      }
+    }
+    if (memoryChanged) _persistMemory();
     var plansChanged = false;
     for (final progress in incomingPlans.values) {
       final existing = _plans[progress.plan.id];

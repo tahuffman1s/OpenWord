@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Learn a verse by heart.** A verse's sheet offers *Memorise*, and the
+  verse goes on a ladder: it is asked for today, then after a day, three
+  days, a week, a fortnight, a month, two and four — climbing a rung each
+  time you have it and dropping to the bottom when you do not, so what you
+  know well is asked rarely and what you are still learning is asked
+  often. *Memory*, a new tab in the library, lists the verses with when
+  each is next due and practises the ones due today, one after another:
+  read it over, see only the first letter of each word, or nothing but the
+  reference, then show the verse and say whether you had it. A verse not
+  recalled comes round again before the session ends. A dot on the library
+  button says something is due. Memory verses go into the backup and are
+  merged on restore like everything else.
+
 ## 1.23.1
 
 ### Changed

@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import '../app_scope.dart';
 import '../data/marks.dart';
 import '../model/bible.dart';
+import '../model/memory_verse.dart';
+import 'memory_screen.dart';
 import 'theme.dart';
 
-/// Everything the reader has saved: bookmarks, highlights, notes and the
-/// chapters they have been in lately. Returns the chosen reference.
+/// Everything the reader has saved: bookmarks, highlights, notes, the
+/// verses they are learning and the chapters they have been in lately.
+/// Returns the chosen reference.
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
 
@@ -17,15 +20,21 @@ class LibraryScreen extends StatelessWidget {
     final bible = scope.library.bible;
 
     return DefaultTabController(
-      length: 4,
+      length: 5,
+      // Memory first when something is due, so the dot on the library
+      // button leads somewhere.
+      initialIndex: reading.hasMemoryDue ? 3 : 0,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('My library'),
           bottom: const TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             tabs: [
               Tab(text: 'Bookmarks'),
               Tab(text: 'Highlights'),
               Tab(text: 'Notes'),
+              Tab(text: 'Memory'),
               Tab(text: 'Recent'),
             ],
           ),
@@ -53,6 +62,7 @@ class LibraryScreen extends StatelessWidget {
                 emptyMessage: 'Tap a verse and choose Add note.',
                 showNotesFirst: true,
               ),
+              _MemoryList(reading: reading, bible: bible),
               _RecentList(reading: reading),
             ],
           ),
@@ -170,6 +180,147 @@ class _MarkList extends StatelessWidget {
             .bookByCode(mark.reference.bookCode)
             ?.chapter(mark.reference.chapter)
             ?.verseText(verse) ??
+        '';
+  }
+}
+
+/// The verses being learnt by heart, the due ones first, with a button to
+/// practise what is due. Tapping a verse practises it, due or not.
+class _MemoryList extends StatelessWidget {
+  const _MemoryList({required this.reading, required this.bible});
+
+  final ReadingStore reading;
+  final Bible? bible;
+
+  Future<void> _practise(BuildContext context, {Reference? first}) async {
+    final reference = await Navigator.of(context).push<Reference>(
+      MaterialPageRoute(builder: (_) => MemoryScreen(first: first)),
+    );
+    if (reference != null && context.mounted) {
+      Navigator.of(context).pop(reference);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final verses = reading.memoryVerses;
+    if (verses.isEmpty) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Text(
+            'Tap a verse and choose Memorise to learn it by heart. It is '
+            'asked for today, then after a day, three days, a week, and '
+            'longer each time you have it.',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+      );
+    }
+    final today = reading.today;
+    final due = reading.memoryDue.length;
+    final ordered = [...verses]
+      ..sort((a, b) {
+        final byDue = a.due.compareTo(b.due);
+        return byDue != 0 ? byDue : a.added.compareTo(b.added);
+      });
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 24),
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  due == 0
+                      ? 'Nothing due today'
+                      : due == 1
+                      ? '1 verse due today'
+                      : '$due verses due today',
+                  style: theme.textTheme.titleMedium,
+                ),
+              ),
+              FilledButton.icon(
+                onPressed: due == 0 ? null : () => _practise(context),
+                icon: const Icon(Icons.psychology_rounded),
+                label: const Text('Practise'),
+              ),
+            ],
+          ),
+        ),
+        for (final verse in ordered)
+          Dismissible(
+            key: ValueKey('memory/${verse.key}'),
+            direction: DismissDirection.endToStart,
+            background: Container(
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 24),
+              color: theme.colorScheme.errorContainer,
+              child: Icon(
+                Icons.delete_rounded,
+                color: theme.colorScheme.onErrorContainer,
+              ),
+            ),
+            onDismissed: (_) {
+              reading.removeMemory(verse.reference);
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    'No longer memorising ${verse.reference.label}',
+                  ),
+                  action: SnackBarAction(
+                    label: 'Undo',
+                    onPressed: () => reading.restoreMemory(verse),
+                  ),
+                ),
+              );
+            },
+            child: Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: Icon(
+                  verse.isLearnt
+                      ? Icons.verified_rounded
+                      : Icons.psychology_rounded,
+                  color: verse.isDueOn(today)
+                      ? theme.colorScheme.primary
+                      : theme.colorScheme.onSurfaceVariant,
+                ),
+                title: Text(verse.reference.label),
+                subtitle: Text(
+                  _verseText(verse),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                trailing: Text(
+                  memoryDueLabel(verse, today),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: verse.isDueOn(today)
+                        ? theme.colorScheme.primary
+                        : theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                onTap: () => _practise(context, first: verse.reference),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  String _verseText(MemoryVerse verse) {
+    final reference = verse.reference;
+    if (bible == null || reference.verse == null) return '';
+    return bible!
+            .bookByCode(reference.bookCode)
+            ?.chapter(reference.chapter)
+            ?.verseText(reference.verse!) ??
         '';
   }
 }

@@ -319,7 +319,7 @@ class SettingsScreen extends StatelessWidget {
                   'Remove everything',
                   style: TextStyle(color: theme.colorScheme.error),
                 ),
-                onTap: reading.all.isEmpty
+                onTap: reading.all.isEmpty && reading.memoryVerses.isEmpty
                     ? null
                     : () => _confirmClear(context, reading),
               ),
@@ -458,8 +458,8 @@ class SettingsScreen extends StatelessWidget {
       builder: (dialogContext) => AlertDialog(
         title: const Text('Remove everything?'),
         content: const Text(
-          'Bookmarks, highlights and notes will all be deleted. This cannot '
-          'be undone.',
+          'Bookmarks, highlights, notes and the verses being memorised '
+          'will all be deleted. This cannot be undone.',
         ),
         actions: [
           TextButton(

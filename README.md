@@ -86,8 +86,16 @@ no network entitlement.
   piling up. The end of each chapter in today's reading has one button:
   *Done — next: Matthew 2*. Fall two days behind and the plan says so once,
   kindly, with *Pick up from today*; it never marks anything read for you.
-- **Your library** in one place: bookmarks, highlights, notes and the chapters
-  you have been reading, each a tap away from the text.
+- **Learn a verse by heart.** *Memorise* on a verse's sheet puts it on a
+  ladder: it is asked for today, then after a day, three days, a week, a
+  fortnight, a month, two and four — up a rung each time you have it, back
+  to the bottom when you do not. The library's *Memory* tab practises what
+  is due: read the verse over, see only the first letter of each word, or
+  nothing but the reference, then show it and say whether you had it. A dot
+  on the library button says something is due; nothing is timed or scored.
+- **Your library** in one place: bookmarks, highlights, notes, the verses you
+  are learning and the chapters you have been reading, each a tap away from
+  the text.
 - **Search** the whole Bible, one testament or the book you are in, with an
   optional whole-word match, results grouped by book and the match emphasised
   in context.

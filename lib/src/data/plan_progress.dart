@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../model/bible.dart';
+import '../model/local_date.dart';
 import '../model/reading_plan.dart';
 
 /// How far a reader is through one plan.
@@ -114,7 +115,7 @@ class PlanProgress {
 
   Map<String, Object?> toJson() => {
     'id': plan.id,
-    'start': _formatDate(startedOn),
+    'start': LocalDate.format(startedOn),
     't': updated.millisecondsSinceEpoch,
     'done': (done.toList()..sort()),
   };
@@ -124,7 +125,7 @@ class PlanProgress {
     if (id is! String) return null;
     final plan = ReadingPlans.byId(id);
     if (plan == null) return null;
-    final start = _parseDate(json['start']);
+    final start = LocalDate.parse(json['start']);
     if (start == null) return null;
     final rawDone = json['done'];
     return PlanProgress(
@@ -143,20 +144,5 @@ class PlanProgress {
 
   /// Midnight UTC of the local calendar date, so that the days between
   /// two dates are never 23 or 25 hours across a change of clocks.
-  static DateTime dateOnly(DateTime moment) =>
-      DateTime.utc(moment.year, moment.month, moment.day);
-
-  static String _formatDate(DateTime date) =>
-      '${date.year.toString().padLeft(4, '0')}-'
-      '${date.month.toString().padLeft(2, '0')}-'
-      '${date.day.toString().padLeft(2, '0')}';
-
-  static DateTime? _parseDate(Object? raw) {
-    if (raw is! String) return null;
-    final parts = raw.split('-');
-    if (parts.length != 3) return null;
-    final numbers = parts.map(int.tryParse).toList();
-    if (numbers.contains(null)) return null;
-    return DateTime.utc(numbers[0]!, numbers[1]!, numbers[2]!);
-  }
+  static DateTime dateOnly(DateTime moment) => LocalDate.only(moment);
 }

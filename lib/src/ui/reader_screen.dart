@@ -1078,10 +1078,19 @@ class _ReaderScreenState extends State<ReaderScreen> {
                     onPressed: _openPlans,
                   ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.bookmarks_rounded),
-                  tooltip: 'Bookmarks, highlights and notes',
-                  onPressed: _openLibrary,
+                AnimatedBuilder(
+                  animation: _reading,
+                  builder: (context, _) => IconButton(
+                    // The same dot while a verse being learnt is due.
+                    icon: Badge(
+                      isLabelVisible: _reading.hasMemoryDue,
+                      smallSize: 8,
+                      backgroundColor: theme.colorScheme.primary,
+                      child: const Icon(Icons.bookmarks_rounded),
+                    ),
+                    tooltip: 'Bookmarks, highlights, notes and memory',
+                    onPressed: _openLibrary,
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.text_fields_rounded),
@@ -2240,6 +2249,34 @@ class _VerseSheet extends StatelessWidget {
                         },
                         icon: const Icon(Icons.hub_outlined),
                         label: Text('${_passageCount()} cross-references'),
+                      ),
+                    if (text.isNotEmpty)
+                      FilledButton.tonalIcon(
+                        onPressed: () {
+                          final added = reading.toggleMemorise(reference);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                added
+                                    ? 'Memorising ${reference.label}: '
+                                          'practise it under Memory in '
+                                          'your library'
+                                    : 'No longer memorising '
+                                          '${reference.label}',
+                              ),
+                            ),
+                          );
+                        },
+                        icon: Icon(
+                          reading.isMemorising(reference)
+                              ? Icons.psychology_rounded
+                              : Icons.psychology_outlined,
+                        ),
+                        label: Text(
+                          reading.isMemorising(reference)
+                              ? 'Memorising'
+                              : 'Memorise',
+                        ),
                       ),
                     FilledButton.tonalIcon(
                       onPressed: () => _editNote(context),
