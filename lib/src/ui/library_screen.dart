@@ -4,12 +4,14 @@ import '../app_scope.dart';
 import '../data/marks.dart';
 import '../model/bible.dart';
 import '../model/memory_verse.dart';
+import '../model/quiz.dart';
 import 'memory_screen.dart';
+import 'quiz_screen.dart';
 import 'theme.dart';
 
-/// Everything the reader has saved: bookmarks, highlights, notes, the
-/// verses they are learning and the chapters they have been in lately.
-/// Returns the chosen reference.
+/// Everything the reader has saved: bookmarks, highlights, notes, what
+/// they are learning and the chapters they have been in lately. Returns
+/// the chosen reference.
 class LibraryScreen extends StatelessWidget {
   const LibraryScreen({super.key});
 
@@ -21,7 +23,7 @@ class LibraryScreen extends StatelessWidget {
 
     return DefaultTabController(
       length: 5,
-      // Memory first when something is due, so the dot on the library
+      // Learn first when something is due, so the dot on the library
       // button leads somewhere.
       initialIndex: reading.hasMemoryDue ? 3 : 0,
       child: Scaffold(
@@ -34,7 +36,7 @@ class LibraryScreen extends StatelessWidget {
               Tab(text: 'Bookmarks'),
               Tab(text: 'Highlights'),
               Tab(text: 'Notes'),
-              Tab(text: 'Memory'),
+              Tab(text: 'Learn'),
               Tab(text: 'Recent'),
             ],
           ),
@@ -62,7 +64,7 @@ class LibraryScreen extends StatelessWidget {
                 emptyMessage: 'Tap a verse and choose Add note.',
                 showNotesFirst: true,
               ),
-              _MemoryList(reading: reading, bible: bible),
+              _LearnTab(reading: reading, bible: bible),
               _RecentList(reading: reading),
             ],
           ),
@@ -184,10 +186,11 @@ class _MarkList extends StatelessWidget {
   }
 }
 
-/// The verses being learnt by heart, the due ones first, with a button to
-/// practise what is due. Tapping a verse practises it, due or not.
-class _MemoryList extends StatelessWidget {
-  const _MemoryList({required this.reading, required this.bible});
+/// Learning: a round of questions to test yourself with, and the verses
+/// being learnt by heart, the due ones first, with a button to practise
+/// what is due. Tapping a verse practises it, due or not.
+class _LearnTab extends StatelessWidget {
+  const _LearnTab({required this.reading, required this.bible});
 
   final ReadingStore reading;
   final Bible? bible;
@@ -201,26 +204,19 @@ class _MemoryList extends StatelessWidget {
     }
   }
 
+  Future<void> _quiz(BuildContext context, QuizKind kind) async {
+    final reference = await Navigator.of(context).push<Reference>(
+      MaterialPageRoute(builder: (_) => QuizScreen(kind: kind)),
+    );
+    if (reference != null && context.mounted) {
+      Navigator.of(context).pop(reference);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final verses = reading.memoryVerses;
-    if (verses.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Text(
-            'Tap a verse and choose Memorise to learn it by heart. It is '
-            'asked for today, then after a day, three days, a week, and '
-            'longer each time you have it.',
-            textAlign: TextAlign.center,
-            style: theme.textTheme.bodyLarge?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ),
-      );
-    }
     final today = reading.today;
     final due = reading.memoryDue.length;
     final ordered = [...verses]
@@ -233,83 +229,134 @@ class _MemoryList extends StatelessWidget {
       padding: const EdgeInsets.only(bottom: 24),
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  due == 0
-                      ? 'Nothing due today'
-                      : due == 1
-                      ? '1 verse due today'
-                      : '$due verses due today',
-                  style: theme.textTheme.titleMedium,
-                ),
-              ),
-              FilledButton.icon(
-                onPressed: due == 0 ? null : () => _practise(context),
-                icon: const Icon(Icons.psychology_rounded),
-                label: const Text('Practise'),
-              ),
-            ],
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+          child: Text('Test yourself', style: theme.textTheme.titleMedium),
+        ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+          child: Text(
+            'Ten questions drawn from the translation you are reading, '
+            'never the same round twice.',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
           ),
         ),
-        for (final verse in ordered)
-          Dismissible(
-            key: ValueKey('memory/${verse.key}'),
-            direction: DismissDirection.endToStart,
-            background: Container(
-              alignment: Alignment.centerRight,
-              padding: const EdgeInsets.only(right: 24),
-              color: theme.colorScheme.errorContainer,
-              child: Icon(
-                Icons.delete_rounded,
-                color: theme.colorScheme.onErrorContainer,
+        for (final kind in QuizKind.values)
+          Material(
+            type: MaterialType.transparency,
+            child: ListTile(
+              leading: Icon(switch (kind) {
+                QuizKind.whichBook => Icons.auto_stories_rounded,
+                QuizKind.finishVerse => Icons.short_text_rounded,
+                QuizKind.bookOrder => Icons.format_list_numbered_rounded,
+                QuizKind.mixed => Icons.shuffle_rounded,
+              }, color: theme.colorScheme.primary),
+              title: Text(kind.label),
+              subtitle: Text(kind.description),
+              trailing: const Icon(Icons.chevron_right_rounded),
+              onTap: bible == null ? null : () => _quiz(context, kind),
+            ),
+          ),
+        const Divider(height: 24),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+          child: Text('Memory verses', style: theme.textTheme.titleMedium),
+        ),
+        if (verses.isEmpty)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            child: Text(
+              'Tap a verse and choose Memorise to learn it by heart. It is '
+              'asked for today, then after a day, three days, a week, and '
+              'longer each time you have it.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
-            onDismissed: (_) {
-              reading.removeMemory(verse.reference);
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    'No longer memorising ${verse.reference.label}',
+          )
+        else ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    due == 0
+                        ? 'Nothing due today'
+                        : due == 1
+                        ? '1 verse due today'
+                        : '$due verses due today',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
                   ),
-                  action: SnackBarAction(
-                    label: 'Undo',
-                    onPressed: () => reading.restoreMemory(verse),
+                ),
+                FilledButton.icon(
+                  onPressed: due == 0 ? null : () => _practise(context),
+                  icon: const Icon(Icons.psychology_rounded),
+                  label: const Text('Practise'),
+                ),
+              ],
+            ),
+          ),
+          for (final verse in ordered)
+            Dismissible(
+              key: ValueKey('memory/${verse.key}'),
+              direction: DismissDirection.endToStart,
+              background: Container(
+                alignment: Alignment.centerRight,
+                padding: const EdgeInsets.only(right: 24),
+                color: theme.colorScheme.errorContainer,
+                child: Icon(
+                  Icons.delete_rounded,
+                  color: theme.colorScheme.onErrorContainer,
+                ),
+              ),
+              onDismissed: (_) {
+                reading.removeMemory(verse.reference);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'No longer memorising ${verse.reference.label}',
+                    ),
+                    action: SnackBarAction(
+                      label: 'Undo',
+                      onPressed: () => reading.restoreMemory(verse),
+                    ),
                   ),
-                ),
-              );
-            },
-            child: Material(
-              type: MaterialType.transparency,
-              child: ListTile(
-                leading: Icon(
-                  verse.isLearnt
-                      ? Icons.verified_rounded
-                      : Icons.psychology_rounded,
-                  color: verse.isDueOn(today)
-                      ? theme.colorScheme.primary
-                      : theme.colorScheme.onSurfaceVariant,
-                ),
-                title: Text(verse.reference.label),
-                subtitle: Text(
-                  _verseText(verse),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                trailing: Text(
-                  memoryDueLabel(verse, today),
-                  style: theme.textTheme.labelMedium?.copyWith(
+                );
+              },
+              child: Material(
+                type: MaterialType.transparency,
+                child: ListTile(
+                  leading: Icon(
+                    verse.isLearnt
+                        ? Icons.verified_rounded
+                        : Icons.psychology_rounded,
                     color: verse.isDueOn(today)
                         ? theme.colorScheme.primary
                         : theme.colorScheme.onSurfaceVariant,
                   ),
+                  title: Text(verse.reference.label),
+                  subtitle: Text(
+                    _verseText(verse),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  trailing: Text(
+                    memoryDueLabel(verse, today),
+                    style: theme.textTheme.labelMedium?.copyWith(
+                      color: verse.isDueOn(today)
+                          ? theme.colorScheme.primary
+                          : theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  onTap: () => _practise(context, first: verse.reference),
                 ),
-                onTap: () => _practise(context, first: verse.reference),
               ),
             ),
-          ),
+        ],
       ],
     );
   }

@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Test yourself.** The library's *Learn* tab offers rounds of ten
+  questions drawn from the translation being read, never the same round
+  twice. *Which book?* shows a verse and asks which book it is from, with
+  the other choices from the same testament. *Finish the verse* shows the
+  first half of a verse and asks how it goes on. *Books in order* asks
+  which book comes before or after another. *A bit of everything* shuffles
+  the three. A wrong answer shows the right one, every answer has the
+  passage a tap away, and the end of a round lists the ones missed, each
+  leading to its passage. The deuterocanon is asked about only when it is
+  shown.
+
+### Changed
+- **Memory is now Learn.** The library tab that held the verses being
+  memorised holds the rounds as well, with the memory verses beneath them.
+
 ## 1.24.0
 
 ### Added

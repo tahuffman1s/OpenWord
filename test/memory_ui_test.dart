@@ -6,7 +6,23 @@ import 'package:openword/src/ui/memory_screen.dart';
 import 'reader_screen_test.dart' show appBarText, pumpReader, verseNumber;
 
 Finder libraryButton() =>
-    find.byTooltip('Bookmarks, highlights, notes and memory');
+    find.byTooltip('Bookmarks, highlights, notes and learning');
+
+/// Scrolls the Learn tab until [finder] is on screen: the memory verses
+/// sit under the rounds to test yourself with.
+Future<void> reveal(WidgetTester tester, Finder finder) async {
+  await tester.dragUntilVisible(
+    finder,
+    find
+        .descendant(
+          of: find.byType(TabBarView),
+          matching: find.byType(ListView),
+        )
+        .first,
+    const Offset(0, -150),
+  );
+  await tester.pumpAndSettle();
+}
 
 void main() {
   const verse = Reference('GEN', 1, 3);
@@ -55,6 +71,7 @@ void main() {
     harness.reading.toggleMemorise(verse);
     await tester.tap(libraryButton());
     await tester.pumpAndSettle();
+    await reveal(tester, find.text('Practise'));
     await tester.tap(find.text('Practise'));
     await tester.pumpAndSettle();
 
@@ -99,6 +116,7 @@ void main() {
 
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
+    await reveal(tester, find.text('Tomorrow'));
     expect(find.text('Nothing due today'), findsOneWidget);
     expect(find.text('Tomorrow'), findsOneWidget);
   });
@@ -110,6 +128,7 @@ void main() {
     harness.reading.toggleMemorise(verse);
     await tester.tap(libraryButton());
     await tester.pumpAndSettle();
+    await reveal(tester, find.text('Genesis 1:3'));
     await tester.tap(find.text('Genesis 1:3'));
     await tester.pumpAndSettle();
     expect(find.byType(MemoryScreen), findsOneWidget);
@@ -126,6 +145,7 @@ void main() {
     harness.reading.toggleMemorise(verse);
     await tester.tap(libraryButton());
     await tester.pumpAndSettle();
+    await reveal(tester, find.text('Genesis 1:3'));
     await tester.drag(find.text('Genesis 1:3'), const Offset(-600, 0));
     await tester.pumpAndSettle();
     expect(harness.reading.isMemorising(verse), isFalse);

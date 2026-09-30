@@ -89,10 +89,16 @@ no network entitlement.
 - **Learn a verse by heart.** *Memorise* on a verse's sheet puts it on a
   ladder: it is asked for today, then after a day, three days, a week, a
   fortnight, a month, two and four — up a rung each time you have it, back
-  to the bottom when you do not. The library's *Memory* tab practises what
+  to the bottom when you do not. The library's *Learn* tab practises what
   is due: read the verse over, see only the first letter of each word, or
   nothing but the reference, then show it and say whether you had it. A dot
   on the library button says something is due; nothing is timed or scored.
+- **Test yourself.** Rounds of ten questions drawn from the translation you
+  are reading, never the same round twice: *Which book?* shows a verse and
+  asks where it is from; *Finish the verse* shows the first half and asks
+  how it goes on; *Books in order* asks which book comes before or after
+  another; or a bit of everything. A wrong answer shows the right one, and
+  every answer, and every question missed, is a tap from its passage.
 - **Your library** in one place: bookmarks, highlights, notes, the verses you
   are learning and the chapters you have been reading, each a tap away from
   the text.

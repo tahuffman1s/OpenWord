@@ -1088,7 +1088,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       backgroundColor: theme.colorScheme.primary,
                       child: const Icon(Icons.bookmarks_rounded),
                     ),
-                    tooltip: 'Bookmarks, highlights, notes and memory',
+                    tooltip: 'Bookmarks, highlights, notes and learning',
                     onPressed: _openLibrary,
                   ),
                 ),
@@ -2259,7 +2259,7 @@ class _VerseSheet extends StatelessWidget {
                               content: Text(
                                 added
                                     ? 'Memorising ${reference.label}: '
-                                          'practise it under Memory in '
+                                          'practise it under Learn in '
                                           'your library'
                                     : 'No longer memorising '
                                           '${reference.label}',
