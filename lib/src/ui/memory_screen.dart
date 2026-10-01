@@ -3,6 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
+import '../data/learn_voice.dart';
 import '../data/marks.dart';
 import '../data/read_aloud.dart';
 import '../model/bible.dart';
@@ -43,8 +44,13 @@ class _MemoryScreenState extends State<MemoryScreen> {
   int _done = 0;
 
   /// The voice, where there is one.
-  ReadAloud? _voice;
-  bool get _canListen => _voice?.engine.isAvailable ?? false;
+  LearnVoice? _voice;
+  bool get _canListen => _voice?.isAvailable ?? false;
+
+  /// Whether the voice speaks of its own accord: the verse as it appears,
+  /// a tile as it is tapped, the verse again once checked.
+  bool get _autoSpeak =>
+      _canListen && AppScope.of(context).settings.learnAutoSpeak;
 
   // The exercise under way.
   Reference? _reference;
@@ -82,21 +88,15 @@ class _MemoryScreenState extends State<MemoryScreen> {
 
     final bible = scope.library.bible;
     if (bible != null) {
-      final voice = ReadAloud(
+      _voice = LearnVoice(
         engine: createSpeechEngine(),
-        chapterFor: (reference) =>
-            bible.bookByCode(reference.bookCode)?.chapter(reference.chapter),
-        nextChapter: (_) => null,
-      );
-      voice.addListener(_voiceChanged);
-      _voice = voice;
+        language: bible.translation.language,
+        rate: scope.settings.speechRate,
+        voice: scope.settings.speechVoice,
+      )..addListener(_voiceChanged);
     }
-    _begin(reading, bible);
+    _begin(reading, bible, autoSpeak: scope.settings.learnAutoSpeak);
   }
-
-  /// Whether the voice has been told how to sound. Done when it is first
-  /// wanted, since for OpenWord's own voice that means loading its model.
-  bool _voiceConfigured = false;
 
   void _voiceChanged() {
     if (mounted) setState(() {});
@@ -105,7 +105,6 @@ class _MemoryScreenState extends State<MemoryScreen> {
   @override
   void dispose() {
     _voice?.removeListener(_voiceChanged);
-    _voice?.stop();
     _voice?.dispose();
     _typed.dispose();
     super.dispose();
@@ -120,8 +119,9 @@ class _MemoryScreenState extends State<MemoryScreen> {
         '';
   }
 
-  /// Sets the exercise for the verse at the head of the queue.
-  void _begin(ReadingStore reading, Bible? bible) {
+  /// Sets the exercise for the verse at the head of the queue, and has it
+  /// spoken where it is shown or is to be heard.
+  void _begin(ReadingStore reading, Bible? bible, {required bool autoSpeak}) {
     _round++;
     _outcome = null;
     _hinted = false;
@@ -137,8 +137,13 @@ class _MemoryScreenState extends State<MemoryScreen> {
     _tiles = _shuffled(tiles);
     _cloze = _text.isEmpty ? null : Cloze.make(_text, _random);
     _filled = List<String?>.filled(_cloze?.blanks.length ?? 0, null);
-    if (_exercise == MemoryExercise.listenArrange && _text.isNotEmpty) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _speak());
+    final heard = _exercise == MemoryExercise.listenArrange;
+    if (_text.isNotEmpty &&
+        _canListen &&
+        (heard || (autoSpeak && _exercise.showsText))) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _voice?.say(_text);
+      });
     }
   }
 
@@ -153,24 +158,29 @@ class _MemoryScreenState extends State<MemoryScreen> {
     return out.reversed.toList();
   }
 
-  void _speak() {
+  /// Says the verse, or stops it if it is being said; slowly when asked.
+  void _speak({bool slow = false}) {
     final voice = _voice;
-    final reference = _reference;
-    if (voice == null || reference == null || !_canListen) return;
-    if (voice.isPlaying) {
+    if (voice == null || !_canListen || _text.isEmpty) return;
+    if (voice.isSpeaking && !slow) {
       voice.stop();
       return;
     }
-    if (!_voiceConfigured) {
-      _voiceConfigured = true;
-      final scope = AppScope.of(context);
-      voice.configure(
-        language: scope.library.bible?.translation.language ?? 'en',
-        rate: scope.settings.speechRate,
-        voice: scope.settings.speechVoice,
-      );
-    }
-    voice.play(reference, only: {reference.verse!});
+    voice.say(_text, slow: slow);
+  }
+
+  /// A tile tapped is heard, the way a word tile is in a language app.
+  void _place(int i) {
+    setState(() => _placed.add(i));
+    if (_autoSpeak) _voice?.say(_tiles[i]);
+  }
+
+  void _fill(String word) {
+    setState(() {
+      final at = _filled.indexOf(null);
+      if (at >= 0) _filled[at] = word;
+    });
+    if (_autoSpeak) _voice?.say(word);
   }
 
   bool get _answered => switch (_exercise) {
@@ -195,6 +205,8 @@ class _MemoryScreenState extends State<MemoryScreen> {
     _reading.reviewMemory(reference, remembered: outcome == _Outcome.right);
     _reading.recordPractice();
     setState(() => _outcome = outcome);
+    // The verse is heard whole once it is answered, right or not.
+    if (_autoSpeak) _voice?.say(_text);
   }
 
   /// Goes on to the next verse; one not answered is asked again before
@@ -207,14 +219,26 @@ class _MemoryScreenState extends State<MemoryScreen> {
       _queue.add(reference);
     }
     final scope = AppScope.of(context);
-    setState(() => _begin(scope.reading, scope.library.bible));
+    setState(
+      () => _begin(
+        scope.reading,
+        scope.library.bible,
+        autoSpeak: scope.settings.learnAutoSpeak,
+      ),
+    );
   }
 
   /// Skips a verse this translation has no text for.
   void _skip() {
     _queue.removeAt(0);
     final scope = AppScope.of(context);
-    setState(() => _begin(scope.reading, scope.library.bible));
+    setState(
+      () => _begin(
+        scope.reading,
+        scope.library.bible,
+        autoSpeak: scope.settings.learnAutoSpeak,
+      ),
+    );
   }
 
   @override
@@ -226,6 +250,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
       appBar: AppBar(
         title: const Text('Practise'),
         actions: [
+          if (_canListen) const AutoSpeakButton(),
           if (reference != null)
             IconButton(
               icon: const Icon(Icons.menu_book_rounded),
@@ -261,14 +286,12 @@ class _MemoryScreenState extends State<MemoryScreen> {
               outcome: _outcome,
               remaining: _queue.length,
               answered: _answered,
-              speaking: _voice?.isPlaying ?? false,
+              speaking: _voice?.isSpeaking ?? false,
               onSpeak: _canListen ? _speak : null,
-              onPlace: (i) => setState(() => _placed.add(i)),
+              onSpeakSlowly: _canListen ? () => _speak(slow: true) : null,
+              onPlace: _place,
               onUnplace: (at) => setState(() => _placed.removeAt(at)),
-              onFill: (word) => setState(() {
-                final at = _filled.indexOf(null);
-                if (at >= 0) _filled[at] = word;
-              }),
+              onFill: _fill,
               onUnfill: (blank) => setState(() => _filled[blank] = null),
               onTyped: () => setState(() {}),
               onHint: () => setState(() => _hinted = true),
@@ -296,6 +319,7 @@ class _Exercise extends StatelessWidget {
     required this.answered,
     required this.speaking,
     required this.onSpeak,
+    required this.onSpeakSlowly,
     required this.onPlace,
     required this.onUnplace,
     required this.onFill,
@@ -322,6 +346,7 @@ class _Exercise extends StatelessWidget {
   final bool answered;
   final bool speaking;
   final VoidCallback? onSpeak;
+  final VoidCallback? onSpeakSlowly;
   final ValueChanged<int> onPlace;
   final ValueChanged<int> onUnplace;
   final ValueChanged<String> onFill;
@@ -366,13 +391,10 @@ class _Exercise extends StatelessWidget {
               ),
             ),
             if (onSpeak != null)
-              IconButton.filledTonal(
-                tooltip: speaking ? 'Stop' : 'Hear the verse',
-                isSelected: speaking,
-                icon: Icon(
-                  speaking ? Icons.stop_rounded : Icons.volume_up_rounded,
-                ),
-                onPressed: onSpeak,
+              SpeakButtons(
+                speaking: speaking,
+                onSpeak: onSpeak!,
+                onSpeakSlowly: onSpeakSlowly!,
               ),
           ],
         ),
@@ -952,6 +974,60 @@ class StreakBadge extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The speaker and its slower twin, as a language app has them: hear
+/// it, and hear it slowly.
+class SpeakButtons extends StatelessWidget {
+  const SpeakButtons({
+    super.key,
+    required this.speaking,
+    required this.onSpeak,
+    required this.onSpeakSlowly,
+  });
+
+  final bool speaking;
+  final VoidCallback onSpeak;
+  final VoidCallback onSpeakSlowly;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      IconButton.filledTonal(
+        tooltip: speaking ? 'Stop' : 'Hear the verse',
+        isSelected: speaking,
+        icon: Icon(speaking ? Icons.stop_rounded : Icons.volume_up_rounded),
+        onPressed: onSpeak,
+      ),
+      IconButton.outlined(
+        tooltip: 'Hear it slowly',
+        icon: const Icon(Icons.slow_motion_video_rounded),
+        onPressed: onSpeakSlowly,
+      ),
+    ],
+  );
+}
+
+/// Switches whether the learning screens speak of their own accord.
+class AutoSpeakButton extends StatelessWidget {
+  const AutoSpeakButton({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final settings = AppScope.of(context).settings;
+    return AnimatedBuilder(
+      animation: settings,
+      builder: (context, _) {
+        final on = settings.learnAutoSpeak;
+        return IconButton(
+          tooltip: on ? 'Reading aloud: on' : 'Reading aloud: off',
+          icon: Icon(on ? Icons.volume_up_outlined : Icons.volume_off_outlined),
+          onPressed: () => settings.learnAutoSpeak = !on,
+        );
+      },
     );
   }
 }

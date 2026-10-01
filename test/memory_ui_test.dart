@@ -320,11 +320,59 @@ void main() {
     speech.finish();
     await tester.pumpAndSettle();
 
+    // Slowly: the same words at a slower pace.
+    await tester.tap(find.byTooltip('Hear it slowly'));
+    await tester.pumpAndSettle();
+    expect(speech.said, hasLength(3));
+    expect(speech.rates.last, lessThan(speech.rates.first));
+    speech.finish();
+    await tester.pumpAndSettle();
+
+    // Each tile tapped is heard, then the verse whole once checked.
+    final tiles = VerseTiles.of(text);
     await arrange(tester, text);
+    expect(speech.said.sublist(3), tiles);
     await tester.tap(find.widgetWithText(FilledButton, 'Check'));
     await tester.pumpAndSettle();
     expect(find.text('Nicely done.'), findsOneWidget);
+    expect(speech.said.last, contains('Let there be light'));
     expect(harness.reading.memoryFor(verse)!.rung, 3);
+  });
+
+  testWidgets('a shown verse is read as it opens, unless reading is off', (
+    tester,
+  ) async {
+    final speech = FakeSpeech(pauses: true);
+    createSpeechEngine = () => speech;
+    final harness = await pumpReader(tester);
+    harness.reading.toggleMemorise(verse);
+    await openPractice(tester, verse);
+    expect(find.text('Put it together'), findsOneWidget);
+    expect(speech.said, hasLength(1));
+    expect(speech.said.single, contains('Let there be light'));
+    speech.finish();
+    await tester.pumpAndSettle();
+
+    // Switched off: tiles and the verse go unspoken, the button still works.
+    await tester.tap(find.byTooltip('Reading aloud: on'));
+    await tester.pumpAndSettle();
+    expect(harness.settings.learnAutoSpeak, isFalse);
+    expect(find.byTooltip('Reading aloud: off'), findsOneWidget);
+    await arrange(tester, text);
+    expect(speech.said, hasLength(1));
+    await tester.tap(find.widgetWithText(FilledButton, 'Check'));
+    await tester.pumpAndSettle();
+    expect(speech.said, hasLength(1));
+    await tester.tap(find.byTooltip('Hear the verse'));
+    await tester.pumpAndSettle();
+    expect(speech.said, hasLength(2));
+    speech.finish();
+    await tester.pumpAndSettle();
+
+    // Back on: the next verse is read as it opens, in the Settings too.
+    await tester.tap(find.byTooltip('Reading aloud: off'));
+    await tester.pumpAndSettle();
+    expect(harness.settings.learnAutoSpeak, isTrue);
   });
 
   testWidgets('a verse can be opened in the reader from a session', (

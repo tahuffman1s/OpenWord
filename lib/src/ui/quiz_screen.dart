@@ -3,8 +3,10 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
+import '../data/learn_voice.dart';
+import '../data/read_aloud.dart';
 import '../model/quiz.dart';
-import 'memory_screen.dart' show StreakBadge;
+import 'memory_screen.dart' show AutoSpeakButton, SpeakButtons, StreakBadge;
 import 'widgets/scripture_text.dart';
 
 /// A round of questions drawn from the translation being read. Pops with
@@ -31,10 +33,77 @@ class _QuizScreenState extends State<QuizScreen> {
   final List<QuizQuestion> _missed = [];
   int _right = 0;
 
+  /// The voice, where there is one.
+  LearnVoice? _voice;
+  bool get _canListen => _voice?.isAvailable ?? false;
+
   @override
   void initState() {
     super.initState();
+    final scope = context.getInheritedWidgetOfExactType<AppScope>()!;
+    final bible = scope.library.bible;
+    if (bible != null) {
+      _voice =
+          LearnVoice(
+            engine: createSpeechEngine(),
+            language: bible.translation.language,
+            rate: scope.settings.speechRate,
+            voice: scope.settings.speechVoice,
+          )..addListener(() {
+            if (mounted) setState(() {});
+          });
+    }
     _draw();
+    _speakPrompt();
+  }
+
+  @override
+  void dispose() {
+    _voice?.dispose();
+    super.dispose();
+  }
+
+  /// What the question has to be heard: its Scripture, where it shows
+  /// any.
+  String get _promptText {
+    if (_index >= _questions.length) return '';
+    final question = _questions[_index];
+    return question.kind == QuizKind.finishVerse
+        ? question.prompt.substring(0, question.prompt.length - 2)
+        : question.prompt;
+  }
+
+  /// The whole verse, once a Finish the verse question is answered.
+  String get _answerText {
+    final question = _questions[_index];
+    return question.kind == QuizKind.finishVerse
+        ? '$_promptText ${question.correct}'
+        : _promptText;
+  }
+
+  bool get _autoSpeak =>
+      _canListen && AppScope.of(context).settings.learnAutoSpeak;
+
+  /// Reads the question's Scripture as it appears, where that is wanted.
+  void _speakPrompt() {
+    final scope = context.getInheritedWidgetOfExactType<AppScope>()!;
+    if (!_canListen || !scope.settings.learnAutoSpeak) return;
+    final text = _promptText;
+    if (text.isEmpty) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _voice?.say(text);
+    });
+  }
+
+  void _speak({bool slow = false}) {
+    final voice = _voice;
+    if (voice == null || !_canListen) return;
+    if (voice.isSpeaking && !slow) {
+      voice.stop();
+      return;
+    }
+    final text = _chosen == null ? _promptText : _answerText;
+    if (text.isNotEmpty) voice.say(text, slow: slow);
   }
 
   void _draw() {
@@ -67,6 +136,10 @@ class _QuizScreenState extends State<QuizScreen> {
         _missed.add(question);
       }
     });
+    // Finishing a verse ends with the whole of it heard.
+    if (_autoSpeak && question.kind == QuizKind.finishVerse) {
+      _voice?.say(_answerText);
+    }
   }
 
   static int _streakNow(BuildContext context) {
@@ -81,7 +154,10 @@ class _QuizScreenState extends State<QuizScreen> {
     });
     // A round finished is a day's learning done.
     if (_index >= _questions.length) {
+      _voice?.stop();
       AppScope.of(context).reading.recordPractice();
+    } else {
+      _speakPrompt();
     }
   }
 
@@ -92,6 +168,7 @@ class _QuizScreenState extends State<QuizScreen> {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.kind.label),
+        actions: [if (_canListen) const AutoSpeakButton()],
         bottom: _questions.isEmpty
             ? null
             : PreferredSize(
@@ -112,7 +189,10 @@ class _QuizScreenState extends State<QuizScreen> {
               total: _questions.length,
               missed: _missed,
               streak: _streakNow(context),
-              onAgain: () => setState(_draw),
+              onAgain: () => setState(() {
+                _draw();
+                _speakPrompt();
+              }),
             )
           : _Question(
               key: ValueKey(_index),
@@ -123,6 +203,11 @@ class _QuizScreenState extends State<QuizScreen> {
               onChoose: _choose,
               onNext: _next,
               isLast: _index == _questions.length - 1,
+              speaking: _voice?.isSpeaking ?? false,
+              onSpeak: _canListen && _promptText.isNotEmpty ? _speak : null,
+              onSpeakSlowly: _canListen && _promptText.isNotEmpty
+                  ? () => _speak(slow: true)
+                  : null,
             ),
     );
   }
@@ -137,6 +222,9 @@ class _Question extends StatelessWidget {
     required this.onChoose,
     required this.onNext,
     required this.isLast,
+    required this.speaking,
+    required this.onSpeak,
+    required this.onSpeakSlowly,
     super.key,
   });
 
@@ -147,6 +235,9 @@ class _Question extends StatelessWidget {
   final ValueChanged<int> onChoose;
   final VoidCallback onNext;
   final bool isLast;
+  final bool speaking;
+  final VoidCallback? onSpeak;
+  final VoidCallback? onSpeakSlowly;
 
   @override
   Widget build(BuildContext context) {
@@ -167,7 +258,19 @@ class _Question extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 4),
-        Text(question.stem, style: theme.textTheme.titleLarge),
+        Row(
+          children: [
+            Expanded(
+              child: Text(question.stem, style: theme.textTheme.titleLarge),
+            ),
+            if (onSpeak != null)
+              SpeakButtons(
+                speaking: speaking,
+                onSpeak: onSpeak!,
+                onSpeakSlowly: onSpeakSlowly!,
+              ),
+          ],
+        ),
         if (question.prompt.isNotEmpty) ...[
           const SizedBox(height: 16),
           Container(

@@ -95,8 +95,12 @@ no network entitlement.
   blanks are filled, then it is put together unseen — heard first, in the
   app's own voice — and then written out, a slip of a letter forgiven. A
   wrong answer drops the verse to the bottom and asks it again before the
-  session ends. Days in a row with learning done make a streak, shown as a
-  flame. A dot on the library button says something is due.
+  session ends. The voice runs through it all, as in a language app: the
+  verse read as it appears, each tile heard as it is tapped, the verse
+  read whole once checked, and a button to hear it slowly; a switch turns
+  the automatic reading off. Days in a row with learning done make a
+  streak, shown as a flame. A dot on the library button says something is
+  due.
 - **Test yourself.** Rounds of ten questions drawn from the translation you
   are reading, never the same round twice: *Which book?* shows a verse and
   asks where it is from; *Finish the verse* shows the first half and asks

@@ -5,7 +5,10 @@ import 'package:openword/src/model/quiz.dart';
 import 'package:openword/src/ui/quiz_screen.dart';
 import 'package:openword/src/ui/reader_screen.dart';
 
+import 'package:openword/src/data/read_aloud.dart';
+
 import 'fixtures.dart';
+import 'read_aloud_test.dart' show FakeSpeech;
 import 'reader_screen_test.dart' show appBarText, pumpReader;
 
 Finder libraryButton() =>
@@ -42,6 +45,48 @@ String bookOfShownVerse(WidgetTester tester, Bible fixture) {
 }
 
 void main() {
+  final original = createSpeechEngine;
+  setUp(() => createSpeechEngine = () => FakeSpeech(available: false));
+  tearDown(() => createSpeechEngine = original);
+
+  testWidgets('with a voice, the verse asked about is read out', (
+    tester,
+  ) async {
+    final speech = FakeSpeech(pauses: true);
+    createSpeechEngine = () => speech;
+    final fixture = parseFixture();
+    await pumpReader(tester);
+    await pushQuiz(tester, QuizKind.whichBook);
+
+    final right = bookOfShownVerse(tester, fixture);
+    expect(speech.said, hasLength(1));
+    final prompt = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((t) => t.data)
+        .whereType<String>()
+        .firstWhere((t) => speech.said.single.contains(t.substring(0, 10)));
+    expect(prompt, isNotEmpty);
+    speech.finish();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Hear the verse'));
+    await tester.pumpAndSettle();
+    expect(speech.said, hasLength(2));
+    speech.finish();
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text(right));
+    await tester.pumpAndSettle();
+    expect(find.text('Right.'), findsOneWidget);
+    // Which book? has nothing more to say once answered.
+    expect(speech.said, hasLength(2));
+
+    // Books in order shows no Scripture, so nothing speaks there.
+    await tester.tap(find.byTooltip('Reading aloud: on'));
+    await tester.pumpAndSettle();
+    expect(find.byTooltip('Reading aloud: off'), findsOneWidget);
+  });
+
   testWidgets('the Learn tab offers the four rounds and memory verses', (
     tester,
   ) async {

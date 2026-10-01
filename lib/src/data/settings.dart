@@ -54,6 +54,7 @@ class Settings extends ChangeNotifier {
   static const _kSpeechPace = 'speechPace';
   static const _kOldSpeechRate = 'speechRate';
   static const _kSpeechVoice = 'speechVoice';
+  static const _kLearnAutoSpeak = 'learnAutoSpeak';
 
   /// Fallback palette seeds offered where the platform has no Material You
   /// palette of its own (desktop, web, older Android, iOS).
@@ -112,6 +113,12 @@ class Settings extends ChangeNotifier {
   }
 
   set speechRate(double value) => _write(_kSpeechPace, value);
+
+  /// Whether practice and the rounds speak of their own accord: a verse as
+  /// it appears, a tile as it is tapped, the verse again once answered.
+  /// The speaker button works either way.
+  bool get learnAutoSpeak => _prefs.getBool(_kLearnAutoSpeak) ?? true;
+  set learnAutoSpeak(bool value) => _write(_kLearnAutoSpeak, value);
 
   /// The voice chosen for reading aloud, by the name it is kept by, or
   /// null for the first.

@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **The voice throughout learning.** Practice and the rounds now speak
+  the way a language app does, in the app's own voice: a verse is read
+  as it appears where it is shown, each tile is heard as it is tapped,
+  and the verse is read whole once an answer is checked. *Which book?*
+  reads the verse it asks about and *Finish the verse* reads the half it
+  shows, then the whole once answered. Beside the speaker is *Hear it
+  slowly*, at two thirds of the pace. A button on each screen, and a
+  switch under *Learning* in Settings, turns the automatic reading off;
+  the speaker button works either way. Not on the web, which has no
+  voice.
+
 ## 1.25.0
 
 ### Added

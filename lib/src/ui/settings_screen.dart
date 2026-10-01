@@ -11,6 +11,7 @@ import '../data/library.dart';
 import '../data/book_intros.dart';
 import '../data/cross_references.dart';
 import '../data/marks.dart';
+import '../data/neural_voices.dart';
 import '../data/originals.dart';
 import '../data/settings.dart';
 import '../data/translations.dart';
@@ -183,6 +184,19 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 onChanged: (value) => settings.showDeuterocanon = value,
               ),
+              if (neuralVoices.isSupported) ...[
+                const _Header('Learning'),
+                SwitchListTile(
+                  value: settings.learnAutoSpeak,
+                  title: const Text('Read aloud in practice'),
+                  subtitle: const Text(
+                    'A verse is spoken as it appears, a tile as it is '
+                    'tapped, and the verse again once an answer is '
+                    'checked. The speaker button works either way.',
+                  ),
+                  onChanged: (value) => settings.learnAutoSpeak = value,
+                ),
+              ],
               const _Header('Translation'),
               for (final translation in library.available)
                 RadioGroup<String>(
