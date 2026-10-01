@@ -7,6 +7,7 @@ import '../model/bible.dart';
 import '../model/book_meta.dart';
 import '../model/memory_verse.dart';
 import '../model/reading_plan.dart';
+import '../model/streak.dart';
 import 'plan_progress.dart';
 
 /// Everything a reader has attached to one verse: a bookmark, a highlight
@@ -116,6 +117,7 @@ class ReadingStore extends ChangeNotifier {
   static const _kHistory = 'history';
   static const _kPlans = 'plans';
   static const _kMemory = 'memory';
+  static const _kStreak = 'streak';
   static const _historyLimit = 20;
 
   /// Number of colours in the highlight palette.
@@ -130,6 +132,8 @@ class ReadingStore extends ChangeNotifier {
 
   /// Verses being learnt by heart, in the order they were added.
   final Map<String, MemoryVerse> _memory = {};
+
+  Streak _streak = Streak.none;
 
   /// What "today" is. A test sets it; the app reads the clock.
   final DateTime Function() _clock;
@@ -157,6 +161,13 @@ class ReadingStore extends ChangeNotifier {
     if (plans != null) _decodePlansInto(plans, _plans);
     final memory = _prefs.getString(_kMemory);
     if (memory != null) _decodeMemoryInto(memory, _memory);
+    _streak = _decodeStreak(_prefs.getString(_kStreak)) ?? Streak.none;
+  }
+
+  static Streak? _decodeStreak(Object? raw) {
+    final decoded = raw is String ? jsonDecode(raw) : raw;
+    if (decoded is! Map) return null;
+    return Streak.fromJson(decoded.cast<String, Object?>());
   }
 
   static int _decodeMemoryInto(Object? raw, Map<String, MemoryVerse> into) {
@@ -489,6 +500,21 @@ class ReadingStore extends ChangeNotifier {
     _persistMemory();
   }
 
+  // --- streak ----------------------------------------------------------
+
+  /// Days in a row with learning done.
+  Streak get streak => _streak;
+
+  /// Counts today as a day with learning done: a verse answered, or a
+  /// round finished. Once a day is enough; calling it again does nothing.
+  void recordPractice() {
+    final next = _streak.extendedOn(today);
+    if (next == _streak) return;
+    _streak = next;
+    _prefs.setString(_kStreak, jsonEncode(next.toJson()));
+    notifyListeners();
+  }
+
   void _persistMemory() {
     _prefs.setString(
       _kMemory,
@@ -560,22 +586,28 @@ class ReadingStore extends ChangeNotifier {
       'plans': [for (final progress in _plans.values) progress.toJson()],
     if (_memory.isNotEmpty)
       'memory': [for (final verse in _memory.values) verse.toJson()],
+    if (_streak.last != null) 'streak': _streak.toJson(),
   });
 
   /// Whether there is anything a backup would hold.
   bool get hasBackupContent =>
-      _marks.isNotEmpty || _plans.isNotEmpty || _memory.isNotEmpty;
+      _marks.isNotEmpty ||
+      _plans.isNotEmpty ||
+      _memory.isNotEmpty ||
+      _streak.last != null;
 
   /// Merges exported JSON back in, keeping whichever copy of a verse was
   /// touched more recently. Existing marks are never dropped.
   ///
   /// A reading plan is merged the same way: the copy touched more recently
   /// wins, since a plan's ticks only make sense together. So is a verse
-  /// being learnt, with its place on the ladder.
+  /// being learnt, with its place on the ladder. Of two streaks the one
+  /// practised more recently is kept, and the better best of the two.
   ImportResult import(String raw) {
     final incoming = <String, Mark>{};
     final incomingPlans = <String, PlanProgress>{};
     final incomingMemory = <String, MemoryVerse>{};
+    Streak? incomingStreak;
     try {
       final marks = _decodeInto(raw, incoming);
       final decoded = jsonDecode(raw);
@@ -585,7 +617,8 @@ class ReadingStore extends ChangeNotifier {
       final memory = decoded is Map
           ? _decodeMemoryInto(decoded['memory'], incomingMemory)
           : 0;
-      if (marks == 0 && plans == 0 && memory == 0) {
+      if (decoded is Map) incomingStreak = _decodeStreak(decoded['streak']);
+      if (marks == 0 && plans == 0 && memory == 0 && incomingStreak == null) {
         return const ImportResult.failed();
       }
     } on Object {
@@ -593,6 +626,23 @@ class ReadingStore extends ChangeNotifier {
     }
     var added = 0;
     var updated = 0;
+    if (incomingStreak case final theirs? when theirs.last != null) {
+      final mine = _streak;
+      final newer = mine.last == null || theirs.last!.isAfter(mine.last!)
+          ? theirs
+          : mine;
+      final merged = Streak(
+        count: newer.count,
+        best: theirs.best > mine.best ? theirs.best : mine.best,
+        last: newer.last,
+      );
+      if (merged != mine) {
+        _streak = merged;
+        _prefs.setString(_kStreak, jsonEncode(merged.toJson()));
+        updated++;
+        notifyListeners();
+      }
+    }
     var memoryChanged = false;
     for (final verse in incomingMemory.values) {
       final existing = _memory[verse.key];

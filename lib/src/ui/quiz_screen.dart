@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../app_scope.dart';
 import '../model/quiz.dart';
+import 'memory_screen.dart' show StreakBadge;
 import 'widgets/scripture_text.dart';
 
 /// A round of questions drawn from the translation being read. Pops with
@@ -68,10 +69,21 @@ class _QuizScreenState extends State<QuizScreen> {
     });
   }
 
-  void _next() => setState(() {
-    _index++;
-    _chosen = null;
-  });
+  static int _streakNow(BuildContext context) {
+    final reading = AppScope.of(context).reading;
+    return reading.streak.currentOn(reading.today);
+  }
+
+  void _next() {
+    setState(() {
+      _index++;
+      _chosen = null;
+    });
+    // A round finished is a day's learning done.
+    if (_index >= _questions.length) {
+      AppScope.of(context).reading.recordPractice();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -99,6 +111,7 @@ class _QuizScreenState extends State<QuizScreen> {
               right: _right,
               total: _questions.length,
               missed: _missed,
+              streak: _streakNow(context),
               onAgain: () => setState(_draw),
             )
           : _Question(
@@ -311,12 +324,16 @@ class _Result extends StatelessWidget {
     required this.right,
     required this.total,
     required this.missed,
+    required this.streak,
     required this.onAgain,
   });
 
   final int right;
   final int total;
   final List<QuizQuestion> missed;
+
+  /// Days in a row with learning done, this round counted.
+  final int streak;
   final VoidCallback onAgain;
 
   String get _remark => right == total
@@ -347,6 +364,10 @@ class _Result extends StatelessWidget {
           textAlign: TextAlign.center,
           style: theme.textTheme.titleMedium,
         ),
+        if (streak > 0) ...[
+          const SizedBox(height: 16),
+          Center(child: StreakBadge(days: streak, large: true)),
+        ],
         const SizedBox(height: 24),
         Row(
           children: [

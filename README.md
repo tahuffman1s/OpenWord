@@ -90,9 +90,13 @@ no network entitlement.
   ladder: it is asked for today, then after a day, three days, a week, a
   fortnight, a month, two and four — up a rung each time you have it, back
   to the bottom when you do not. The library's *Learn* tab practises what
-  is due: read the verse over, see only the first letter of each word, or
-  nothing but the reference, then show it and say whether you had it. A dot
-  on the library button says something is due; nothing is timed or scored.
+  is due, and each practice is an exercise the rung calls for, checked: a
+  new verse is put together from tiles with the text in view, then its
+  blanks are filled, then it is put together unseen — heard first, in the
+  app's own voice — and then written out, a slip of a letter forgiven. A
+  wrong answer drops the verse to the bottom and asks it again before the
+  session ends. Days in a row with learning done make a streak, shown as a
+  flame. A dot on the library button says something is due.
 - **Test yourself.** Rounds of ten questions drawn from the translation you
   are reading, never the same round twice: *Which book?* shows a verse and
   asks where it is from; *Finish the verse* shows the first half and asks

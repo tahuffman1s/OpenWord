@@ -3,6 +3,23 @@
 ## Unreleased
 
 ### Added
+- **Practice that asks, and checks.** A verse on the ladder is no longer
+  taken on trust: each practice sets an exercise its rung calls for and
+  marks the answer. A new verse is put together from tiles with the text
+  in view; then its blanks are filled from a bank of words; then it is
+  put together unseen — heard first, where the device has a voice — and
+  then written out, with a slip of a letter forgiven. A right answer
+  climbs a rung; a wrong one, or *Show me*, drops to the bottom and the
+  verse comes round again before the session ends. *Hint* shows the
+  first letters without costing anything.
+- **Hear the verse.** Practice has a speaker button that reads the verse
+  in the app's own voice, as *Listen* does; *Tap what you hear* plays it
+  as the exercise opens.
+- **A streak.** Days in a row with learning done — a verse answered, or a
+  round finished — shown as a flame on the *Learn* tab and at the end of
+  a session or a round, with the best run kept. A day missed ends it;
+  nothing nags. The streak goes into the backup and the better of two is
+  kept on restore.
 - **Test yourself.** The library's *Learn* tab offers rounds of ten
   questions drawn from the translation being read, never the same round
   twice. *Which book?* shows a verse and asks which book it is from, with
@@ -15,6 +32,9 @@
   shown.
 
 ### Changed
+- **The practice prompts are gone**, replaced by the exercises above: a
+  verse is read over, hinted or asked bare by what it is put to, not by
+  a choice at the top of the screen.
 - **Memory is now Learn.** The library tab that held the verses being
   memorised holds the rounds as well, with the memory verses beneath them.
 
