@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.25.0
 
 ### Added
 - **Practice that asks, and checks.** A verse on the ladder is no longer
