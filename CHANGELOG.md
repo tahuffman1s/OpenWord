@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Android Auto.** OpenWord is a media app to the car. Its screen lists
+  *Continue listening*, which takes up where listening left off down to
+  the word, *Today’s reading* from any plan under way, *Recent chapters*,
+  and every book and chapter under *Books*, grouped by testament; a
+  chapter plays from the car with no screen of the app open, and goes on
+  to the next. "Play Psalm 23" works through the car's assistant, and a
+  request it cannot place takes up where listening left off. A plan
+  chapter heard to its end in the car is ticked off like one heard in the
+  app. The phone's own screen, when it is opened, takes the voice over.
+
 ## 1.26.0
 
 ### Added

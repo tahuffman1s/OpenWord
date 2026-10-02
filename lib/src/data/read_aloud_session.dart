@@ -2,11 +2,16 @@ import 'package:audio_service/audio_service.dart';
 import 'package:flutter/foundation.dart';
 
 import '../model/bible.dart';
+import 'car.dart';
 import 'read_aloud.dart';
 
 /// Reading aloud as the system sees it: a media session, so it can go on
 /// with the screen off and be paused or stepped from the lock screen, a
 /// headset's buttons, or a car.
+///
+/// A car does more than press buttons: Android Auto browses what there
+/// is to hear and asks for a chapter by its id or by what the driver
+/// said, with no screen of the app's open. [car] is what answers it.
 ///
 /// On Android that is a foreground service with a media notification; on
 /// iOS and macOS the Now Playing controls; in a browser the Media Session
@@ -24,6 +29,14 @@ class ReadAloudHandler extends BaseAudioHandler {
 
   ReadAloud? _voice;
   String Function() _describe;
+
+  /// How to answer a car when no reader screen has bound a voice. Set by
+  /// the app once it has its stores; null leaves the browser empty.
+  CarAccess? car;
+
+  /// A voice this handler made for a car, to be let go of when a reader
+  /// screen brings its own.
+  ReadAloud? _ownVoice;
 
   /// Draws a chapter's cover for the lock screen, where there is one.
   Future<Uri?> Function(Reference chapter)? _artwork;
@@ -46,10 +59,106 @@ class ReadAloudHandler extends BaseAudioHandler {
       _art.clear();
     }
     if (identical(voice, _voice)) return;
-    _voice?.removeListener(_publish);
+    final before = _voice;
+    before?.removeListener(_publish);
+    // A voice reading for a car gives way to the reader's own, rather
+    // than both speaking at once.
+    if (before != null && identical(before, _ownVoice)) {
+      before.stop();
+      before.dispose();
+      _ownVoice = null;
+    }
     _voice = voice;
     voice.addListener(_publish);
     _publish();
+  }
+
+  /// The voice to read with for a car: the reader's own where a screen
+  /// has bound one, and otherwise one made for the purpose.
+  Future<ReadAloud?> _voiceForCar() async {
+    if (_voice != null) return _voice;
+    final access = car;
+    if (access == null) return null;
+    final voice = await access.voice();
+    if (voice == null) return null;
+    final library = await access.library();
+    _ownVoice = voice;
+    bind(voice, () => library?.bible.translation.name ?? '');
+    return voice;
+  }
+
+  // --- what a car browses --------------------------------------------
+
+  @override
+  Future<List<MediaItem>> getChildren(
+    String parentMediaId, [
+    Map<String, dynamic>? options,
+  ]) async {
+    final library = await car?.library();
+    return library?.children(parentMediaId) ?? const [];
+  }
+
+  @override
+  Future<MediaItem?> getMediaItem(String mediaId) async {
+    final library = await car?.library();
+    return library?.item(mediaId);
+  }
+
+  @override
+  Future<void> playFromMediaId(
+    String mediaId, [
+    Map<String, dynamic>? extras,
+  ]) async {
+    final library = await car?.library();
+    if (library == null) return;
+    if (mediaId == CarLibrary.resumeId) {
+      await _resume(library);
+      return;
+    }
+    final from = library.referenceFor(mediaId);
+    if (from == null) return;
+    await _playFrom(from);
+  }
+
+  /// Takes listening up where it left off, down to the word.
+  Future<void> _resume(CarLibrary library) async {
+    final place = library.resumePlace;
+    if (place == null) return;
+    final voice = await _voiceForCar();
+    voice?.play(place.verse, offset: place.offset, fromTop: place.fromTop);
+  }
+
+  /// "Play Psalm 23": what the driver said, or where listening left off
+  /// when it names nothing.
+  @override
+  Future<void> playFromSearch(
+    String query, [
+    Map<String, dynamic>? extras,
+  ]) async {
+    final library = await car?.library();
+    if (library == null) return;
+    final from = library.referenceForSearch(query);
+    if (from == null) {
+      await _resume(library);
+      return;
+    }
+    await _playFrom(from);
+  }
+
+  @override
+  Future<List<MediaItem>> search(
+    String query, [
+    Map<String, dynamic>? extras,
+  ]) async {
+    final library = await car?.library();
+    final found = library?.referenceForSearch(query);
+    if (library == null || found == null) return const [];
+    return [library.item('chapter/${found.bookCode}/${found.chapter}')!];
+  }
+
+  Future<void> _playFrom(Reference from) async {
+    final voice = await _voiceForCar();
+    voice?.play(from);
   }
 
   /// What the lock screen shows and offers, from the state of the voice.
@@ -212,6 +321,13 @@ Future<ReadAloudHandler?> _startPlatformSession() async {
         // screen, so resuming from there would otherwise fail.
         androidStopForegroundOnPause: false,
         androidNotificationIcon: 'drawable/ic_read_aloud',
+        // How a car should lay the browse tree out: lists, not grids,
+        // since a chapter has no picture worth a tile.
+        androidBrowsableRootExtras: <String, dynamic>{
+          'android.media.browse.CONTENT_STYLE_SUPPORTED': true,
+          'android.media.browse.CONTENT_STYLE_BROWSABLE_HINT': 1,
+          'android.media.browse.CONTENT_STYLE_PLAYABLE_HINT': 1,
+        },
       ),
     ).timeout(const Duration(seconds: 20));
   } on Object catch (error) {

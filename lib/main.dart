@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'src/app_scope.dart';
+import 'src/data/car.dart';
 import 'src/data/library.dart';
 import 'src/data/marks.dart';
 import 'src/data/read_aloud_session.dart';
@@ -35,8 +36,18 @@ Future<void> main() async {
     ),
   );
   // The media session for reading aloud with the screen off, set up as the
-  // app starts, the way its plugin expects. Nothing waits on it.
-  unawaited(prepareReadAloudSession());
+  // app starts, the way its plugin expects. Nothing waits on it. A car
+  // may be what started the app, with no screen of it open, so the
+  // session is given what it needs to list and read on its own.
+  unawaited(
+    prepareReadAloudSession().then((session) {
+      session?.car = carAccessFor(
+        library: library,
+        reading: reading,
+        settings: settings,
+      );
+    }),
+  );
 }
 
 /// Finds the directory imported translations live in.

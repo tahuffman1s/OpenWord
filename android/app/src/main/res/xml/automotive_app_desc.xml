@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android Auto: OpenWord reads Scripture aloud, so it is a media app
+     to the car. The browse tree and playback come from the media session
+     the reading-aloud service already runs. -->
+<automotiveApp>
+    <uses name="media"/>
+</automotiveApp>

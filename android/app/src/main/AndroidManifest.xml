@@ -40,6 +40,12 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Android Auto: OpenWord is a media app the car can browse and
+             play from, through the same service that keeps reading aloud
+             going in the background. -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc"/>
         <!-- Reading aloud, as the system sees it: the service that keeps it
              going in the background, and the receiver for a headset's or
              a car's media buttons. -->

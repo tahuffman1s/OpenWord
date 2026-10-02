@@ -67,7 +67,10 @@ no network entitlement.
   been closed. Started from a reading plan it reads the rest of that day and
   stops, and a plan chapter heard to its end is ticked off. It goes on with
   the screen off: the lock screen, a headset and a car pause it and step it
-  verse by verse. The voice is [KittenTTS](https://github.com/KittenML/KittenTTS),
+  verse by verse. **Android Auto** lists it as a media app: *Continue
+  listening*, today's plan reading, recent chapters and every book and
+  chapter, playable from the car's screen or by asking for "Psalm 23", with
+  no screen of the app open. The voice is [KittenTTS](https://github.com/KittenML/KittenTTS),
   an open neural model with eight speakers, bundled with the app and run
   with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); it speaks
   English. Not on the web, which cannot run it.
