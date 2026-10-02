@@ -8,6 +8,7 @@ import 'package:openword/src/ui/reader_screen.dart';
 import 'package:openword/src/data/read_aloud.dart';
 
 import 'fixtures.dart';
+import 'memory_ui_test.dart' show reveal;
 import 'read_aloud_test.dart' show FakeSpeech;
 import 'reader_screen_test.dart' show appBarText, pumpReader;
 
@@ -95,13 +96,14 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Learn'));
     await tester.pumpAndSettle();
-    expect(find.text('Test yourself'), findsOneWidget);
+    await reveal(tester, find.text('Test yourself'));
     for (final kind in QuizKind.values) {
-      expect(find.text(kind.label), findsOneWidget);
+      await reveal(tester, find.text(kind.label));
     }
-    expect(find.text('Memory verses'), findsOneWidget);
+    await reveal(tester, find.text('Memory verses'));
     expect(find.textContaining('choose Memorise'), findsOneWidget);
 
+    await reveal(tester, find.text('Books in order'));
     await tester.tap(find.text('Books in order'));
     await tester.pumpAndSettle();
     expect(find.byType(QuizScreen), findsOneWidget);
@@ -163,6 +165,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Learn'));
     await tester.pumpAndSettle();
+    await reveal(tester, find.text('Which book?'));
     await tester.tap(find.text('Which book?'));
     await tester.pumpAndSettle();
 

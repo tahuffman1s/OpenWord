@@ -3,6 +3,29 @@
 ## Unreleased
 
 ### Added
+- **Points, levels and a daily goal.** Every right answer earns XP — 10
+  for a verse on the ladder and more the higher it stands, 5 for a
+  question — with a bonus for three, five and ten right in a row and
+  20 on top for a perfect round. Points add up to a level, quick to come
+  at first and slower later, and towards a daily goal of your choosing:
+  gentle, steady, keen or intense. The *Learn* tab opens on a ring for
+  the day, the level and its bar, the streak, and the last seven days as
+  bars against the goal.
+- **Badges.** Twelve to win, each once: the first step, a week and a
+  month of fire, ten verses on the ladder, a verse known after a month
+  away and five of them, a perfect round, a verse written out, one put
+  together from hearing it, a hundred right answers, a week of goals met,
+  and the fifth level. The Learn tab shows them won and still to win,
+  with what wins each.
+- **Streak freezes.** Every seventh day kept up earns a freeze, two at
+  most, and a freeze is spent unasked the first time a day is missed, so
+  one bad day does not undo a month. Shown as snowflakes beside the
+  streak.
+- **The end of a session says how it went.** Points earned, right out of
+  answered, the best run of right answers, the goal if this is what met
+  it, a new level, any badge won, and the streak — under a shower of
+  confetti when there is something to celebrate. Rounds end the same
+  way. A right answer taps back, a wrong one thumps.
 - **The voice throughout learning.** Practice and the rounds now speak
   the way a language app does, in the app's own voice: a verse is read
   as it appears where it is shown, each tile is heard as it is tapped,

@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../model/bible.dart';
+import '../model/achievements.dart';
 import '../model/book_meta.dart';
+import '../model/learn_progress.dart';
 import '../model/memory_verse.dart';
 import '../model/reading_plan.dart';
 import '../model/streak.dart';
@@ -118,6 +120,7 @@ class ReadingStore extends ChangeNotifier {
   static const _kPlans = 'plans';
   static const _kMemory = 'memory';
   static const _kStreak = 'streak';
+  static const _kProgress = 'progress';
   static const _historyLimit = 20;
 
   /// Number of colours in the highlight palette.
@@ -134,6 +137,7 @@ class ReadingStore extends ChangeNotifier {
   final Map<String, MemoryVerse> _memory = {};
 
   Streak _streak = Streak.none;
+  LearnProgress _progress = LearnProgress.none;
 
   /// What "today" is. A test sets it; the app reads the clock.
   final DateTime Function() _clock;
@@ -162,6 +166,14 @@ class ReadingStore extends ChangeNotifier {
     final memory = _prefs.getString(_kMemory);
     if (memory != null) _decodeMemoryInto(memory, _memory);
     _streak = _decodeStreak(_prefs.getString(_kStreak)) ?? Streak.none;
+    _progress =
+        _decodeProgress(_prefs.getString(_kProgress)) ?? LearnProgress.none;
+  }
+
+  static LearnProgress? _decodeProgress(Object? raw) {
+    final decoded = raw is String ? jsonDecode(raw) : raw;
+    if (decoded is! Map) return null;
+    return LearnProgress.fromJson(decoded.cast<String, Object?>());
   }
 
   static Streak? _decodeStreak(Object? raw) {
@@ -515,6 +527,95 @@ class ReadingStore extends ChangeNotifier {
     notifyListeners();
   }
 
+  // --- points and badges -----------------------------------------------
+
+  /// Points earned, the level, the day's goal and the badges won.
+  LearnProgress get progress => _progress;
+
+  /// Verses on the ladder that have been recalled after a month away.
+  int get versesLearnt => _memory.values.where((v) => v.isLearnt).length;
+
+  /// Records what an answer or a round earned: the points go on today's
+  /// count, today counts towards the streak, and any badge whose
+  /// condition now holds is won. Returns the badges newly won.
+  List<Achievement> recordLearning({
+    required int xp,
+    bool? right,
+    bool perfectRound = false,
+    bool scribed = false,
+    bool heard = false,
+  }) {
+    final now = today;
+    _progress = _progress.earned(
+      xp,
+      now,
+      right: right,
+      perfectRound: perfectRound,
+      scribed: scribed,
+      heard: heard,
+    );
+    recordPractice();
+    final won = <Achievement>[];
+    for (final achievement in Achievement.values) {
+      if (_progress.badges.containsKey(achievement.id)) continue;
+      final earned = achievement.earnedBy(
+        progress: _progress,
+        streak: _streak.currentOn(now),
+        versesOnLadder: _memory.length,
+        versesLearnt: versesLearnt,
+        today: now,
+      );
+      if (!earned) continue;
+      _progress = _progress.awarded(achievement.id, now);
+      won.add(achievement);
+    }
+    _persistProgress();
+    return won;
+  }
+
+  void setDailyGoal(DailyGoal goal) {
+    if (goal == _progress.goal) return;
+    _progress = _progress.copyWith(goal: goal);
+    _persistProgress();
+  }
+
+  void _persistProgress() {
+    _prefs.setString(_kProgress, jsonEncode(_progress.toJson()));
+    notifyListeners();
+  }
+
+  /// Two copies of the progress put together: each day's points the
+  /// higher of the two, the totals likewise, and every badge either has,
+  /// from the earlier day it was won.
+  static LearnProgress _mergeProgress(
+    LearnProgress mine,
+    LearnProgress theirs,
+  ) {
+    int most(int a, int b) => a > b ? a : b;
+    final daily = {...mine.daily};
+    for (final entry in theirs.daily.entries) {
+      daily[entry.key] = most(daily[entry.key] ?? 0, entry.value);
+    }
+    final badges = {...mine.badges};
+    for (final entry in theirs.badges.entries) {
+      final have = badges[entry.key];
+      if (have == null || entry.value.isBefore(have)) {
+        badges[entry.key] = entry.value;
+      }
+    }
+    return LearnProgress(
+      xp: most(mine.xp, theirs.xp),
+      daily: daily,
+      right: most(mine.right, theirs.right),
+      wrong: most(mine.wrong, theirs.wrong),
+      perfectRounds: most(mine.perfectRounds, theirs.perfectRounds),
+      scribed: most(mine.scribed, theirs.scribed),
+      heard: most(mine.heard, theirs.heard),
+      goal: mine.goal,
+      badges: badges,
+    );
+  }
+
   void _persistMemory() {
     _prefs.setString(
       _kMemory,
@@ -587,6 +688,7 @@ class ReadingStore extends ChangeNotifier {
     if (_memory.isNotEmpty)
       'memory': [for (final verse in _memory.values) verse.toJson()],
     if (_streak.last != null) 'streak': _streak.toJson(),
+    if (_progress.xp > 0) 'progress': _progress.toJson(),
   });
 
   /// Whether there is anything a backup would hold.
@@ -594,7 +696,8 @@ class ReadingStore extends ChangeNotifier {
       _marks.isNotEmpty ||
       _plans.isNotEmpty ||
       _memory.isNotEmpty ||
-      _streak.last != null;
+      _streak.last != null ||
+      _progress.xp > 0;
 
   /// Merges exported JSON back in, keeping whichever copy of a verse was
   /// touched more recently. Existing marks are never dropped.
@@ -608,6 +711,7 @@ class ReadingStore extends ChangeNotifier {
     final incomingPlans = <String, PlanProgress>{};
     final incomingMemory = <String, MemoryVerse>{};
     Streak? incomingStreak;
+    LearnProgress? incomingProgress;
     try {
       final marks = _decodeInto(raw, incoming);
       final decoded = jsonDecode(raw);
@@ -617,8 +721,15 @@ class ReadingStore extends ChangeNotifier {
       final memory = decoded is Map
           ? _decodeMemoryInto(decoded['memory'], incomingMemory)
           : 0;
-      if (decoded is Map) incomingStreak = _decodeStreak(decoded['streak']);
-      if (marks == 0 && plans == 0 && memory == 0 && incomingStreak == null) {
+      if (decoded is Map) {
+        incomingStreak = _decodeStreak(decoded['streak']);
+        incomingProgress = _decodeProgress(decoded['progress']);
+      }
+      if (marks == 0 &&
+          plans == 0 &&
+          memory == 0 &&
+          incomingStreak == null &&
+          incomingProgress == null) {
         return const ImportResult.failed();
       }
     } on Object {
@@ -626,6 +737,15 @@ class ReadingStore extends ChangeNotifier {
     }
     var added = 0;
     var updated = 0;
+    if (incomingProgress case final theirs?) {
+      final merged = _mergeProgress(_progress, theirs);
+      if (merged != _progress) {
+        _progress = merged;
+        _prefs.setString(_kProgress, jsonEncode(merged.toJson()));
+        updated++;
+        notifyListeners();
+      }
+    }
     if (incomingStreak case final theirs? when theirs.last != null) {
       final mine = _streak;
       final newer = mine.last == null || theirs.last!.isAfter(mine.last!)
@@ -635,6 +755,7 @@ class ReadingStore extends ChangeNotifier {
         count: newer.count,
         best: theirs.best > mine.best ? theirs.best : mine.best,
         last: newer.last,
+        freezes: newer.freezes,
       );
       if (merged != mine) {
         _streak = merged;

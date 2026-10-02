@@ -1,14 +1,19 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_scope.dart';
 import '../data/learn_voice.dart';
 import '../data/marks.dart';
 import '../data/read_aloud.dart';
+import '../model/achievements.dart';
 import '../model/bible.dart';
+import '../model/learn_progress.dart';
 import '../model/memory_exercise.dart';
 import '../model/memory_verse.dart';
+import 'learn_progress_card.dart' show AchievementIcon;
+import 'widgets/confetti.dart';
 import 'widgets/scripture_text.dart';
 
 /// Practising the verses being learnt by heart: the ones due today, one
@@ -42,6 +47,20 @@ class _MemoryScreenState extends State<MemoryScreen> {
   late final int _total;
   late final Random _random;
   int _done = 0;
+
+  // The session's tally: points, the run of right answers, and badges.
+  int _sessionXp = 0;
+  int _combo = 0;
+  int _bestCombo = 0;
+  int _rightCount = 0;
+  int _answeredCount = 0;
+  final List<Achievement> _won = [];
+  late final bool _goalMetBefore;
+  late final int _levelBefore;
+
+  /// What the last answer earned, for the verdict.
+  int _lastXp = 0;
+  int _lastBonus = 0;
 
   /// The voice, where there is one.
   LearnVoice? _voice;
@@ -85,6 +104,8 @@ class _MemoryScreenState extends State<MemoryScreen> {
         if (verse.reference != first) verse.reference,
     ];
     _total = _queue.length;
+    _goalMetBefore = reading.progress.goalMetOn(reading.today);
+    _levelBefore = reading.progress.level;
 
     final bible = scope.library.bible;
     if (bible != null) {
@@ -202,8 +223,33 @@ class _MemoryScreenState extends State<MemoryScreen> {
 
   void _settle(_Outcome outcome) {
     final reference = _reference!;
-    _reading.reviewMemory(reference, remembered: outcome == _Outcome.right);
-    _reading.recordPractice();
+    final reading = _reading;
+    final right = outcome == _Outcome.right;
+    final rung = reading.memoryFor(reference)?.rung ?? 0;
+    reading.reviewMemory(reference, remembered: right);
+    _answeredCount++;
+    if (right) {
+      _rightCount++;
+      _combo++;
+      if (_combo > _bestCombo) _bestCombo = _combo;
+      _lastBonus = Xp.comboBonus(_combo);
+      _lastXp = Xp.memoryRight(rung) + _lastBonus;
+      HapticFeedback.mediumImpact();
+    } else {
+      _combo = 0;
+      _lastBonus = 0;
+      _lastXp = 0;
+      HapticFeedback.heavyImpact();
+    }
+    _sessionXp += _lastXp;
+    _won.addAll(
+      reading.recordLearning(
+        xp: _lastXp,
+        right: right,
+        scribed: right && _exercise == MemoryExercise.typeOut,
+        heard: right && _exercise == MemoryExercise.listenArrange,
+      ),
+    );
     setState(() => _outcome = outcome);
     // The verse is heard whole once it is answered, right or not.
     if (_autoSpeak) _voice?.say(_text);
@@ -269,7 +315,19 @@ class _MemoryScreenState extends State<MemoryScreen> {
               ),
       ),
       body: reference == null || verse == null
-          ? _Finished(total: _total, reading: _reading)
+          ? _Finished(
+              total: _total,
+              reading: _reading,
+              xp: _sessionXp,
+              right: _rightCount,
+              answered: _answeredCount,
+              bestCombo: _bestCombo,
+              won: _won,
+              goalMetNow:
+                  !_goalMetBefore &&
+                  _reading.progress.goalMetOn(_reading.today),
+              levelledUp: _reading.progress.level > _levelBefore,
+            )
           : _text.isEmpty
           ? _NoText(reference: reference, onSkip: _skip)
           : _Exercise(
@@ -284,6 +342,9 @@ class _MemoryScreenState extends State<MemoryScreen> {
               typed: _typed,
               hinted: _hinted,
               outcome: _outcome,
+              xp: _lastXp,
+              bonus: _lastBonus,
+              combo: _combo,
               remaining: _queue.length,
               answered: _answered,
               speaking: _voice?.isSpeaking ?? false,
@@ -315,6 +376,9 @@ class _Exercise extends StatelessWidget {
     required this.typed,
     required this.hinted,
     required this.outcome,
+    required this.xp,
+    required this.bonus,
+    required this.combo,
     required this.remaining,
     required this.answered,
     required this.speaking,
@@ -342,6 +406,11 @@ class _Exercise extends StatelessWidget {
   final TextEditingController typed;
   final bool hinted;
   final _Outcome? outcome;
+
+  /// What the answer earned, the combo bonus within it, and the run.
+  final int xp;
+  final int bonus;
+  final int combo;
   final int remaining;
   final bool answered;
   final bool speaking;
@@ -525,6 +594,9 @@ class _Exercise extends StatelessWidget {
             verse: verse,
             text: text,
             style: scripture,
+            xp: xp,
+            bonus: bonus,
+            combo: combo,
           ),
           const SizedBox(height: 12),
           FilledButton.icon(
@@ -744,12 +816,18 @@ class _Verdict extends StatelessWidget {
     required this.verse,
     required this.text,
     required this.style,
+    required this.xp,
+    required this.bonus,
+    required this.combo,
   });
 
   final _Outcome outcome;
   final MemoryVerse verse;
   final String text;
   final TextStyle style;
+  final int xp;
+  final int bonus;
+  final int combo;
 
   @override
   Widget build(BuildContext context) {
@@ -780,16 +858,28 @@ class _Verdict extends StatelessWidget {
                     : scheme.onErrorContainer,
               ),
               const SizedBox(width: 8),
-              Text(
-                heading,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: right
-                      ? scheme.onPrimaryContainer
-                      : scheme.onErrorContainer,
+              Expanded(
+                child: Text(
+                  heading,
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: right
+                        ? scheme.onPrimaryContainer
+                        : scheme.onErrorContainer,
+                  ),
                 ),
               ),
+              if (right) XpChip(xp: xp),
             ],
           ),
+          if (right && bonus > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              '$combo in a row! +$bonus XP',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: scheme.onPrimaryContainer,
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           if (!right)
             Text(text, style: style.copyWith(color: scheme.onErrorContainer)),
@@ -853,16 +943,39 @@ class _NoText extends StatelessWidget {
   }
 }
 
-/// The end of a session, or a session with nothing in it.
+/// The end of a session, or a session with nothing in it: what it
+/// earned, how it went, the streak, and anything won along the way.
 class _Finished extends StatelessWidget {
-  const _Finished({required this.total, required this.reading});
+  const _Finished({
+    required this.total,
+    required this.reading,
+    this.xp = 0,
+    this.right = 0,
+    this.answered = 0,
+    this.bestCombo = 0,
+    this.won = const [],
+    this.goalMetNow = false,
+    this.levelledUp = false,
+  });
 
   final int total;
   final ReadingStore reading;
+  final int xp;
+  final int right;
+  final int answered;
+  final int bestCombo;
+  final List<Achievement> won;
+
+  /// Whether this session is what met today's goal.
+  final bool goalMetNow;
+  final bool levelledUp;
+
+  bool get _celebrate => goalMetNow || levelledUp || won.isNotEmpty;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     final verses = reading.memoryVerses;
     final today = reading.today;
     MemoryVerse? next;
@@ -885,44 +998,110 @@ class _Finished extends StatelessWidget {
       detail = next == null ? '' : _nextLine(next, today);
     }
     final streak = reading.streak.currentOn(today);
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.psychology_rounded,
-              size: 56,
-              color: theme.colorScheme.primary,
-            ),
-            const SizedBox(height: 16),
+    final progress = reading.progress;
+    return Confetti(
+      play: _celebrate,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        children: [
+          Icon(Icons.psychology_rounded, size: 56, color: scheme.primary),
+          const SizedBox(height: 16),
+          Text(
+            heading,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleLarge,
+          ),
+          if (detail.isNotEmpty) ...[
+            const SizedBox(height: 8),
             Text(
-              heading,
+              detail,
               textAlign: TextAlign.center,
-              style: theme.textTheme.titleLarge,
-            ),
-            if (detail.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                detail,
-                textAlign: TextAlign.center,
-                style: theme.textTheme.bodyMedium?.copyWith(
-                  color: theme.colorScheme.onSurfaceVariant,
-                ),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: scheme.onSurfaceVariant,
               ),
-            ],
-            if (streak > 0) ...[
-              const SizedBox(height: 16),
-              StreakBadge(days: streak, large: true),
-            ],
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
             ),
           ],
-        ),
+          if (answered > 0) ...[
+            const SizedBox(height: 20),
+            Row(
+              children: [
+                Expanded(
+                  child: StatTile(
+                    key: const Key('stat/xp'),
+                    label: 'Earned',
+                    value: '+$xp XP',
+                    icon: Icons.bolt_rounded,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: StatTile(
+                    label: 'Right',
+                    value: '$right of $answered',
+                    icon: Icons.check_circle_outline_rounded,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: StatTile(
+                    label: 'Best run',
+                    value: bestCombo == 0 ? '—' : '$bestCombo in a row',
+                    icon: Icons.trending_up_rounded,
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (goalMetNow) ...[
+            const SizedBox(height: 16),
+            GoodNews(
+              icon: Icons.emoji_events_rounded,
+              text: 'Today’s goal met: ${progress.goal.xp} XP.',
+            ),
+          ],
+          if (levelledUp) ...[
+            const SizedBox(height: 10),
+            GoodNews(
+              icon: Icons.star_rounded,
+              text: 'Level ${progress.level}!',
+            ),
+          ],
+          for (final badge in won) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                AchievementIcon(achievement: badge, won: true),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Badge won: ${badge.title}',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      Text(
+                        badge.description,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (streak > 0) ...[
+            const SizedBox(height: 16),
+            Center(child: StreakBadge(days: streak, large: true)),
+          ],
+          const SizedBox(height: 24),
+          FilledButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Done'),
+          ),
+        ],
       ),
     );
   }
@@ -931,6 +1110,114 @@ class _Finished extends StatelessWidget {
     final days = next.daysUntilDueOn(today);
     final when = days <= 1 ? 'tomorrow' : 'in $days days';
     return 'Next up: ${next.reference.label}, $when.';
+  }
+}
+
+/// A number worth a glance, with its name under it.
+class StatTile extends StatelessWidget {
+  const StatTile({
+    super.key,
+    required this.label,
+    required this.value,
+    required this.icon,
+  });
+
+  final String label;
+  final String value;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: scheme.primary),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          Text(
+            label,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: scheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A line of good news, set apart.
+class GoodNews extends StatelessWidget {
+  const GoodNews({super.key, required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: scheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: scheme.onTertiaryContainer),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              style: theme.textTheme.titleSmall?.copyWith(
+                color: scheme.onTertiaryContainer,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Points earned, as a small chip.
+class XpChip extends StatelessWidget {
+  const XpChip({super.key, required this.xp});
+
+  final int xp;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: scheme.primary,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '+$xp XP',
+        style: theme.textTheme.labelLarge?.copyWith(
+          color: scheme.onPrimary,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
   }
 }
 

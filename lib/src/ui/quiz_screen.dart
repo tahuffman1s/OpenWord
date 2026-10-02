@@ -1,12 +1,18 @@
 import 'dart:math';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app_scope.dart';
 import '../data/learn_voice.dart';
 import '../data/read_aloud.dart';
+import '../model/achievements.dart';
+import '../model/learn_progress.dart';
 import '../model/quiz.dart';
-import 'memory_screen.dart' show AutoSpeakButton, SpeakButtons, StreakBadge;
+import 'learn_progress_card.dart' show AchievementIcon;
+import 'memory_screen.dart'
+    show AutoSpeakButton, GoodNews, SpeakButtons, StatTile, StreakBadge, XpChip;
+import 'widgets/confetti.dart';
 import 'widgets/scripture_text.dart';
 
 /// A round of questions drawn from the translation being read. Pops with
@@ -32,6 +38,16 @@ class _QuizScreenState extends State<QuizScreen> {
   int? _chosen;
   final List<QuizQuestion> _missed = [];
   int _right = 0;
+
+  // The round's tally.
+  int _xp = 0;
+  int _combo = 0;
+  int _lastXp = 0;
+  int _lastBonus = 0;
+  bool _perfectBonus = false;
+  final List<Achievement> _won = [];
+  bool _goalMetBefore = false;
+  int _levelBefore = 1;
 
   /// The voice, where there is one.
   LearnVoice? _voice;
@@ -123,19 +139,37 @@ class _QuizScreenState extends State<QuizScreen> {
     _chosen = null;
     _missed.clear();
     _right = 0;
+    _xp = 0;
+    _combo = 0;
+    _lastXp = 0;
+    _lastBonus = 0;
+    _perfectBonus = false;
+    _won.clear();
+    _goalMetBefore = scope.reading.progress.goalMetOn(scope.reading.today);
+    _levelBefore = scope.reading.progress.level;
   }
 
   void _choose(int option) {
     if (_chosen != null) return;
     final question = _questions[_index];
-    setState(() {
-      _chosen = option;
-      if (option == question.answer) {
-        _right++;
-      } else {
-        _missed.add(question);
-      }
-    });
+    final reading = AppScope.of(context).reading;
+    final right = option == question.answer;
+    if (right) {
+      _right++;
+      _combo++;
+      _lastBonus = Xp.comboBonus(_combo);
+      _lastXp = Xp.quizRight + _lastBonus;
+      HapticFeedback.mediumImpact();
+    } else {
+      _missed.add(question);
+      _combo = 0;
+      _lastBonus = 0;
+      _lastXp = 0;
+      HapticFeedback.heavyImpact();
+    }
+    _xp += _lastXp;
+    _won.addAll(reading.recordLearning(xp: _lastXp, right: right));
+    setState(() => _chosen = option);
     // Finishing a verse ends with the whole of it heard.
     if (_autoSpeak && question.kind == QuizKind.finishVerse) {
       _voice?.say(_answerText);
@@ -152,10 +186,21 @@ class _QuizScreenState extends State<QuizScreen> {
       _index++;
       _chosen = null;
     });
-    // A round finished is a day's learning done.
+    // A round finished is a day's learning done, and a perfect one earns
+    // a bonus on top.
     if (_index >= _questions.length) {
       _voice?.stop();
-      AppScope.of(context).reading.recordPractice();
+      final reading = AppScope.of(context).reading;
+      if (_right == _questions.length) {
+        _perfectBonus = true;
+        _xp += Xp.perfectRound;
+        _won.addAll(
+          reading.recordLearning(xp: Xp.perfectRound, perfectRound: true),
+        );
+      } else {
+        reading.recordPractice();
+      }
+      setState(() {});
     } else {
       _speakPrompt();
     }
@@ -189,6 +234,15 @@ class _QuizScreenState extends State<QuizScreen> {
               total: _questions.length,
               missed: _missed,
               streak: _streakNow(context),
+              xp: _xp,
+              perfectBonus: _perfectBonus,
+              won: _won,
+              goalMetNow:
+                  !_goalMetBefore &&
+                  AppScope.of(context).reading.progress
+                      .goalMetOn(AppScope.of(context).reading.today),
+              levelledUp:
+                  AppScope.of(context).reading.progress.level > _levelBefore,
               onAgain: () => setState(() {
                 _draw();
                 _speakPrompt();
@@ -203,6 +257,9 @@ class _QuizScreenState extends State<QuizScreen> {
               onChoose: _choose,
               onNext: _next,
               isLast: _index == _questions.length - 1,
+              xp: _lastXp,
+              bonus: _lastBonus,
+              combo: _combo,
               speaking: _voice?.isSpeaking ?? false,
               onSpeak: _canListen && _promptText.isNotEmpty ? _speak : null,
               onSpeakSlowly: _canListen && _promptText.isNotEmpty
@@ -222,6 +279,9 @@ class _Question extends StatelessWidget {
     required this.onChoose,
     required this.onNext,
     required this.isLast,
+    required this.xp,
+    required this.bonus,
+    required this.combo,
     required this.speaking,
     required this.onSpeak,
     required this.onSpeakSlowly,
@@ -235,6 +295,11 @@ class _Question extends StatelessWidget {
   final ValueChanged<int> onChoose;
   final VoidCallback onNext;
   final bool isLast;
+
+  /// What the answer earned, the combo bonus within it, and the run.
+  final int xp;
+  final int bonus;
+  final int combo;
   final bool speaking;
   final VoidCallback? onSpeak;
   final VoidCallback? onSpeakSlowly;
@@ -304,12 +369,26 @@ class _Question extends StatelessWidget {
           ),
         if (answered) ...[
           const SizedBox(height: 8),
-          Text(
-            right ? 'Right.' : 'Not that one.',
-            style: theme.textTheme.titleMedium?.copyWith(
-              color: right ? scheme.primary : scheme.error,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  right ? 'Right.' : 'Not that one.',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    color: right ? scheme.primary : scheme.error,
+                  ),
+                ),
+              ),
+              if (right) XpChip(xp: xp),
+            ],
           ),
+          if (right && bonus > 0)
+            Text(
+              '$combo in a row! +$bonus XP',
+              style: theme.textTheme.labelLarge?.copyWith(
+                color: scheme.primary,
+              ),
+            ),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -428,6 +507,11 @@ class _Result extends StatelessWidget {
     required this.total,
     required this.missed,
     required this.streak,
+    required this.xp,
+    required this.perfectBonus,
+    required this.won,
+    required this.goalMetNow,
+    required this.levelledUp,
     required this.onAgain,
   });
 
@@ -437,7 +521,17 @@ class _Result extends StatelessWidget {
 
   /// Days in a row with learning done, this round counted.
   final int streak;
+
+  /// What the round earned, and whether the perfect bonus is in it.
+  final int xp;
+  final bool perfectBonus;
+  final List<Achievement> won;
+  final bool goalMetNow;
+  final bool levelledUp;
   final VoidCallback onAgain;
+
+  bool get _celebrate =>
+      perfectBonus || goalMetNow || levelledUp || won.isNotEmpty;
 
   String get _remark => right == total
       ? 'Every one.'
@@ -450,77 +544,150 @@ class _Result extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
-      children: [
-        Text(
-          '$right of $total',
-          textAlign: TextAlign.center,
-          style: theme.textTheme.displaySmall?.copyWith(
-            color: theme.colorScheme.primary,
-            fontWeight: FontWeight.w700,
+    final scheme = theme.colorScheme;
+    final progress = AppScope.of(context).reading.progress;
+    return Confetti(
+      play: _celebrate,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 32),
+        children: [
+          Text(
+            '$right of $total',
+            textAlign: TextAlign.center,
+            style: theme.textTheme.displaySmall?.copyWith(
+              color: theme.colorScheme.primary,
+              fontWeight: FontWeight.w700,
+            ),
           ),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          _remark,
-          textAlign: TextAlign.center,
-          style: theme.textTheme.titleMedium,
-        ),
-        if (streak > 0) ...[
-          const SizedBox(height: 16),
-          Center(child: StreakBadge(days: streak, large: true)),
-        ],
-        const SizedBox(height: 24),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.check_rounded),
-                label: const Text('Done'),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: onAgain,
-                icon: const Icon(Icons.replay_rounded),
-                label: const Text('Again'),
-              ),
-            ),
-          ],
-        ),
-        if (missed.isNotEmpty) ...[
-          const SizedBox(height: 28),
-          Text('To read again', style: theme.textTheme.titleMedium),
           const SizedBox(height: 4),
           Text(
-            'The ones that got away, each a tap from the passage.',
-            style: theme.textTheme.bodyMedium?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
+            _remark,
+            textAlign: TextAlign.center,
+            style: theme.textTheme.titleMedium,
           ),
-          const SizedBox(height: 8),
-          for (final question in missed)
-            Material(
-              type: MaterialType.transparency,
-              child: ListTile(
-                contentPadding: EdgeInsets.zero,
-                leading: const Icon(Icons.menu_book_rounded),
-                title: Text(question.reference.label),
-                subtitle: Text(
-                  question.prompt.isEmpty
-                      ? question.stem
-                      : '${question.stem} ${question.correct}',
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: StatTile(
+                  key: const Key('stat/xp'),
+                  label: perfectBonus ? 'Earned, with bonus' : 'Earned',
+                  value: '+$xp XP',
+                  icon: Icons.bolt_rounded,
                 ),
-                onTap: () => Navigator.of(context).pop(question.reference),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: StatTile(
+                  label: 'Right',
+                  value: '${(100 * right / total).round()}%',
+                  icon: Icons.check_circle_outline_rounded,
+                ),
+              ),
+            ],
+          ),
+          if (perfectBonus) ...[
+            const SizedBox(height: 12),
+            GoodNews(
+              icon: Icons.workspace_premium_rounded,
+              text: 'Perfect round: +${Xp.perfectRound} XP on top.',
+            ),
+          ],
+          if (goalMetNow) ...[
+            const SizedBox(height: 10),
+            GoodNews(
+              icon: Icons.emoji_events_rounded,
+              text: 'Today’s goal met: ${progress.goal.xp} XP.',
+            ),
+          ],
+          if (levelledUp) ...[
+            const SizedBox(height: 10),
+            GoodNews(
+              icon: Icons.star_rounded,
+              text: 'Level ${progress.level}!',
+            ),
+          ],
+          for (final badge in won) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                AchievementIcon(achievement: badge, won: true),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Badge won: ${badge.title}',
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      Text(
+                        badge.description,
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurfaceVariant,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (streak > 0) ...[
+            const SizedBox(height: 16),
+            Center(child: StreakBadge(days: streak, large: true)),
+          ],
+          const SizedBox(height: 24),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).pop(),
+                  icon: const Icon(Icons.check_rounded),
+                  label: const Text('Done'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onAgain,
+                  icon: const Icon(Icons.replay_rounded),
+                  label: const Text('Again'),
+                ),
+              ),
+            ],
+          ),
+          if (missed.isNotEmpty) ...[
+            const SizedBox(height: 28),
+            Text('To read again', style: theme.textTheme.titleMedium),
+            const SizedBox(height: 4),
+            Text(
+              'The ones that got away, each a tap from the passage.',
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
               ),
             ),
+            const SizedBox(height: 8),
+            for (final question in missed)
+              Material(
+                type: MaterialType.transparency,
+                child: ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: const Icon(Icons.menu_book_rounded),
+                  title: Text(question.reference.label),
+                  subtitle: Text(
+                    question.prompt.isEmpty
+                        ? question.stem
+                        : '${question.stem} ${question.correct}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  onTap: () => Navigator.of(context).pop(question.reference),
+                ),
+              ),
+          ],
         ],
-      ],
+      ),
     );
   }
 }

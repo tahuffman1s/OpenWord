@@ -99,8 +99,11 @@ no network entitlement.
   verse read as it appears, each tile heard as it is tapped, the verse
   read whole once checked, and a button to hear it slowly; a switch turns
   the automatic reading off. Days in a row with learning done make a
-  streak, shown as a flame. A dot on the library button says something is
-  due.
+  streak, shown as a flame, and every seventh day earns a freeze that
+  forgives a missed one. Right answers earn points, with bonuses for runs
+  of them and for perfect rounds; points make levels and a daily goal of
+  your choosing, and twelve badges mark the milestones. A dot on the
+  library button says something is due.
 - **Test yourself.** Rounds of ten questions drawn from the translation you
   are reading, never the same round twice: *Which book?* shows a verse and
   asks where it is from; *Finish the verse* shows the first half and asks

@@ -5,6 +5,7 @@ import '../data/marks.dart';
 import '../model/bible.dart';
 import '../model/memory_verse.dart';
 import '../model/quiz.dart';
+import 'learn_progress_card.dart';
 import 'memory_screen.dart';
 import 'quiz_screen.dart';
 import 'theme.dart';
@@ -225,39 +226,10 @@ class _LearnTab extends StatelessWidget {
         return byDue != 0 ? byDue : a.added.compareTo(b.added);
       });
 
-    final streak = reading.streak;
-    final days = streak.currentOn(today);
-    final streakLine = streak.practisedOn(today)
-        ? 'Practised today.'
-        : days > 0
-        ? 'Practise today to keep it going.'
-        : streak.best > 0
-        ? 'Practise today to start a new streak. Best so far: '
-              '${streak.best} ${streak.best == 1 ? 'day' : 'days'}.'
-        : 'Practise on two days running to start a streak.';
-
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-          child: Row(
-            children: [
-              if (days > 0) ...[
-                StreakBadge(days: days),
-                const SizedBox(width: 12),
-              ],
-              Expanded(
-                child: Text(
-                  streakLine,
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: theme.colorScheme.onSurfaceVariant,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        LearnProgressCard(reading: reading),
         const Divider(height: 8),
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
