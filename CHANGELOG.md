@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.26.0
 
 ### Added
 - **Points, levels and a daily goal.** Every right answer earns XP — 10
