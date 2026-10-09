@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.28.0
 
 ### Changed
 - **The library is built around learning.** It opens on *Learn*: a line
