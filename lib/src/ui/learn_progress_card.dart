@@ -6,7 +6,93 @@ import '../model/learn_progress.dart';
 import '../model/streak.dart';
 import 'memory_screen.dart' show StreakBadge;
 
-/// The top of the Learn tab: the level and the points towards the next,
+/// A single row for the top of the Learn tab: today's goal as a small
+/// ring, how far it is, the streak and its freezes.
+class GoalStrip extends StatelessWidget {
+  const GoalStrip({super.key, required this.reading});
+
+  final ReadingStore reading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final progress = reading.progress;
+    final streak = reading.streak;
+    final today = reading.today;
+    final days = streak.currentOn(today);
+    final earned = progress.xpOn(today);
+    final goal = progress.goal;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+      child: Row(
+        children: [
+          InkWell(
+            key: const Key('goal/strip'),
+            borderRadius: BorderRadius.circular(32),
+            onTap: () => showDailyGoalSheet(context, reading),
+            child: SizedBox(
+              width: 52,
+              height: 52,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox.expand(
+                    child: CircularProgressIndicator(
+                      value: (earned / goal.xp).clamp(0.0, 1.0),
+                      strokeWidth: 6,
+                      strokeCap: StrokeCap.round,
+                      backgroundColor: scheme.surfaceContainerHighest,
+                    ),
+                  ),
+                  Icon(
+                    progress.goalMetOn(today)
+                        ? Icons.check_rounded
+                        : Icons.bolt_rounded,
+                    size: 20,
+                    color: scheme.primary,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  progress.goalMetOn(today)
+                      ? 'Today’s goal met'
+                      : '$earned of ${goal.xp} XP today',
+                  style: theme.textTheme.titleMedium,
+                ),
+                Text(
+                  streak.practisedOn(today)
+                      ? 'Practised today.'
+                      : days > 0
+                      ? 'Practise today to keep your streak.'
+                      : 'Practise on two days running to start a streak.',
+                  style: theme.textTheme.bodySmall?.copyWith(
+                    color: scheme.onSurfaceVariant,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (days > 0) StreakBadge(days: days),
+          if (streak.freezes > 0) ...[
+            const SizedBox(width: 6),
+            for (var i = 0; i < streak.freezes; i++)
+              Icon(Icons.ac_unit_rounded, size: 18, color: scheme.tertiary),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The top of the Progress tab: the level and the points towards the next,
 /// today's goal as a ring, the streak and its freezes, a week of points
 /// as bars, and the badges, won and still to win.
 class LearnProgressCard extends StatelessWidget {

@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+- **The library is built around learning.** It opens on *Learn*: a line
+  for today's goal and the streak, then one button — *Today's lesson*,
+  the verses due followed by five questions, with about how long it
+  takes — then the verses being learnt, and the rounds as chips. A
+  reader with nothing on the ladder is offered verses worth knowing by
+  heart — John 3:16, Psalm 23:1, Romans 8:28 and two dozen more, grouped
+  by what they are for — each a tap from the ladder; *Add* beside the
+  list opens the whole set. *Progress* holds the level, the week, the
+  badges and the numbers behind them. *Saved* holds bookmarks,
+  highlights, notes and recent chapters behind one row of choices. The
+  reader's button for it all is a mortar board now.
+
 ## 1.27.0
 
 ### Added

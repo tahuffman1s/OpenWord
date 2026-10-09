@@ -113,9 +113,12 @@ no network entitlement.
   how it goes on; *Books in order* asks which book comes before or after
   another; or a bit of everything. A wrong answer shows the right one, and
   every answer, and every question missed, is a tap from its passage.
-- **Your library** in one place: bookmarks, highlights, notes, the verses you
-  are learning and the chapters you have been reading, each a tap away from
-  the text.
+- **Your library, learning first.** It opens on today's lesson — the verses
+  due and a short round, one button — with the verses you are learning
+  beneath it and suggestions worth knowing by heart when there are none.
+  *Progress* holds the level, the week and the badges; *Saved* holds
+  bookmarks, highlights, notes and the chapters you have been reading, each
+  a tap away from the text.
 - **Search** the whole Bible, one testament or the book you are in, with an
   optional whole-word match, results grouped by book and the match emphasised
   in context.

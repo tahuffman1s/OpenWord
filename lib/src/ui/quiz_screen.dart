@@ -19,9 +19,17 @@ import 'widgets/scripture_text.dart';
 /// a reference when the reader asks to open a passage, and with nothing
 /// otherwise.
 class QuizScreen extends StatefulWidget {
-  const QuizScreen({super.key, required this.kind, this.seed});
+  const QuizScreen({
+    super.key,
+    required this.kind,
+    this.seed,
+    this.count = questionsPerRound,
+  });
 
   final QuizKind kind;
+
+  /// Questions in the round.
+  final int count;
 
   /// Fixes the draw, for a test; the app leaves it to chance.
   final int? seed;
@@ -134,7 +142,7 @@ class _QuizScreenState extends State<QuizScreen> {
               deuterocanon: scope.settings.showDeuterocanon,
             ),
             random: widget.seed == null ? null : Random(widget.seed),
-          ).make(widget.kind, count: QuizScreen.questionsPerRound);
+          ).make(widget.kind, count: widget.count);
     _index = 0;
     _chosen = null;
     _missed.clear();

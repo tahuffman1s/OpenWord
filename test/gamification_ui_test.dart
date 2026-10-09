@@ -22,19 +22,29 @@ void main() {
   setUp(() => createSpeechEngine = () => FakeSpeech(available: false));
   tearDown(() => createSpeechEngine = original);
 
-  testWidgets('the Learn tab shows level, goal, badges, and sets the goal', (
+  testWidgets('the Learn tab sets the goal; Progress shows level and badges', (
     tester,
   ) async {
     final harness = await pumpReader(tester);
     await tester.tap(libraryButton());
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Learn'));
-    await tester.pumpAndSettle();
 
+    // Learn opens first, with today's goal in one line.
+    expect(find.text('0 of 40 XP today'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('goal/strip')));
+    await tester.pumpAndSettle();
+    expect(find.text('Daily goal'), findsOneWidget);
+    await tester.tap(find.text('Gentle · 20 XP'));
+    await tester.pumpAndSettle();
+    expect(harness.reading.progress.goal, DailyGoal.gentle);
+    expect(find.text('0 of 20 XP today'), findsOneWidget);
+
+    await tester.tap(find.text('Progress'));
+    await tester.pumpAndSettle();
     expect(find.byType(LearnProgressCard), findsOneWidget);
     expect(find.text('Level 1'), findsOneWidget);
-    expect(find.text('of 40 XP'), findsOneWidget);
-    expect(find.text('Today’s goal: steady'), findsOneWidget);
+    expect(find.text('of 20 XP'), findsOneWidget);
+    expect(find.text('Today’s goal: gentle'), findsOneWidget);
     expect(find.text('0 XP · 50 to level 2'), findsOneWidget);
     expect(
       find.text('Badges · 0 of ${Achievement.values.length}'),
@@ -44,14 +54,8 @@ void main() {
       find.byType(AchievementIcon),
       findsNWidgets(Achievement.values.length),
     );
-
-    await tester.tap(find.byKey(const Key('goal')));
-    await tester.pumpAndSettle();
-    expect(find.text('Daily goal'), findsOneWidget);
-    await tester.tap(find.text('Gentle · 20 XP'));
-    await tester.pumpAndSettle();
-    expect(harness.reading.progress.goal, DailyGoal.gentle);
-    expect(find.text('of 20 XP'), findsOneWidget);
+    expect(find.text('In numbers'), findsOneWidget);
+    expect(find.text('Verses learning'), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('badges')));
     await tester.pumpAndSettle();
@@ -100,6 +104,9 @@ void main() {
     await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
     await reveal(tester, find.text('Today’s goal met'), up: true);
+    expect(find.text('Another lesson?'), findsOneWidget);
+    await tester.tap(find.text('Progress'));
+    await tester.pumpAndSettle();
     expect(
       find.text('Badges · 1 of ${Achievement.values.length}'),
       findsOneWidget,

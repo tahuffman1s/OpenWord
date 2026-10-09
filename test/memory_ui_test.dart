@@ -8,8 +8,7 @@ import 'package:openword/src/ui/memory_screen.dart';
 import 'read_aloud_test.dart' show FakeSpeech;
 import 'reader_screen_test.dart' show appBarText, pumpReader, verseNumber;
 
-Finder libraryButton() =>
-    find.byTooltip('Bookmarks, highlights, notes and learning');
+Finder libraryButton() => find.byTooltip('Learn, and what you have saved');
 
 /// Scrolls the Learn tab until [finder] is on screen: the memory verses
 /// sit under the rounds to test yourself with.
@@ -107,8 +106,11 @@ void main() {
       find.text('Practise on two days running to start a streak.'),
       findsOneWidget,
     );
+    expect(
+      find.text('1 verse due · 5 questions · about 2 minutes'),
+      findsOneWidget,
+    );
     await reveal(tester, find.text('Due today'));
-    expect(find.text('1 verse due today'), findsOneWidget);
     expect(find.text('Genesis 1:3'), findsOneWidget);
   });
 
@@ -171,6 +173,7 @@ void main() {
     await tester.pumpAndSettle();
     await reveal(tester, find.text('Practised today.'), up: true);
     expect(find.text('1-day streak'), findsOneWidget);
+    expect(find.text('Tomorrow'), findsOneWidget);
   });
 
   testWidgets('a wrong order drops the verse and asks it again', (

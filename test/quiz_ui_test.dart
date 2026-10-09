@@ -12,8 +12,7 @@ import 'memory_ui_test.dart' show reveal;
 import 'read_aloud_test.dart' show FakeSpeech;
 import 'reader_screen_test.dart' show appBarText, pumpReader;
 
-Finder libraryButton() =>
-    find.byTooltip('Bookmarks, highlights, notes and learning');
+Finder libraryButton() => find.byTooltip('Learn, and what you have saved');
 
 /// Opens a round of [kind] over the reader, with a fixed draw.
 Future<void> pushQuiz(WidgetTester tester, QuizKind kind, {int seed = 1}) {
@@ -96,11 +95,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Learn'));
     await tester.pumpAndSettle();
-    await reveal(tester, find.text('Test yourself'));
+    await reveal(tester, find.text('Quiz yourself'));
     for (final kind in QuizKind.values) {
       await reveal(tester, find.text(kind.label));
     }
-    await reveal(tester, find.text('Memory verses'));
+    await reveal(tester, find.text('Verses you’re learning'));
     expect(find.textContaining('choose Memorise'), findsOneWidget);
 
     await reveal(tester, find.text('Books in order'));
