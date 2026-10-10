@@ -5,10 +5,16 @@ import 'package:openword/src/data/marks.dart';
 import 'package:openword/src/model/bible.dart';
 import 'package:openword/src/model/local_date.dart';
 import 'package:openword/src/model/memory_verse.dart';
+import 'package:openword/src/model/sleep_policy.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(
+    () => SharedPreferences.setMockInitialValues({
+      // These are about the ladder, not the timing of new verses.
+      'sleep': '{"mode":"off"}',
+    }),
+  );
 
   const john = Reference('JHN', 3, 16);
   const psalm = Reference('PSA', 23, 1);
@@ -161,6 +167,14 @@ void main() {
       expect(store.hasMemoryDue, isFalse);
     });
 
+    test('a verse added with the timing off is learnt whenever', () async {
+      final store = await ReadingStore.load(clock: () => monday);
+      expect(store.sleepPolicy.mode, SleepMode.off);
+      store.toggleMemorise(john);
+      expect(store.memoryFor(john)!.arm, isNull);
+      expect(store.memoryDue.single.reference, john);
+    });
+
     test('a whole chapter cannot be memorised', () async {
       final store = await ReadingStore.load(clock: () => monday);
       expect(store.toggleMemorise(const Reference('JHN', 3)), isFalse);
@@ -196,7 +210,8 @@ void main() {
       store.reviewMemory(john, remembered: true); // due in 3 days
       store.toggleMemorise(psalm); // due today
       today = monday.add(const Duration(days: 4));
-      expect(store.memoryDue.map((v) => v.reference), [psalm, john]);
+      // The ladder's due verses come before the ones still to be learnt.
+      expect(store.memoryDue.map((v) => v.reference), [john, psalm]);
     });
 
     test('survives a restart, and remove and restore', () async {

@@ -41,16 +41,21 @@ Future<Harness> pumpReader(
   Map<String, Object> prefs = const {},
   Bible? bible,
   FakeUpdateBackend? updateBackend,
+  // What time it is, for the screens that care; the clock otherwise.
+  DateTime Function()? clock,
   // Settling runs every animation to its end, which is no use to a test
   // about what an animation looks like part way through.
   bool settle = true,
 }) async {
   SharedPreferences.setMockInitialValues({
+    // New verses are learnt whenever, unless a test is about the timing:
+    // a test must not depend on the hour it is run at.
+    'sleep': '{"mode":"off"}',
     ...prefs,
     if (resume != null) 'lastPosition': resume.encode(),
   });
   final settings = await Settings.load();
-  final reading = await ReadingStore.load();
+  final reading = await ReadingStore.load(clock: clock);
   final library = LibraryController(bundle: FixtureBundle(bible: bible));
   await library.load(testTranslation.id);
   // Never the real backend in a test: that would reach for the network.

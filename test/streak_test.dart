@@ -6,7 +6,9 @@ import 'package:openword/src/model/streak.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(
+    () => SharedPreferences.setMockInitialValues({'sleep': '{"mode":"off"}'}),
+  );
 
   final monday = DateTime(2026, 9, 28, 9, 30);
   DateTime days(int n) => monday.add(Duration(days: n));

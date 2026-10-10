@@ -19,7 +19,9 @@ import '../data/updates.dart';
 import '../data/voice_licences.dart';
 import '../model/bib_file.dart';
 import '../model/bible.dart';
+import '../model/sleep_policy.dart';
 import 'import_sheet.dart';
+import 'sleep_sheet.dart';
 import 'update_sheet.dart';
 
 /// Display, reading, translation and backup preferences.
@@ -184,8 +186,23 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 onChanged: (value) => settings.showDeuterocanon = value,
               ),
+              const _Header('Learning'),
+              ListTile(
+                leading: const Icon(Icons.bedtime_outlined),
+                title: const Text('Sleep and new verses'),
+                subtitle: Text(switch (reading.sleepPolicy.mode) {
+                  SleepMode.trial =>
+                    'Measuring it: new verses take turns between night '
+                        'and day. Evening from '
+                        '${hourLabel(reading.sleepPolicy.eveningStart)}.',
+                  SleepMode.nights =>
+                    'Nights only: every new verse is learnt in the '
+                        'evening and asked for next morning.',
+                  SleepMode.off => 'Off: new verses are learnt whenever.',
+                }),
+                onTap: () => showSleepPolicySheet(context, reading),
+              ),
               if (neuralVoices.isSupported) ...[
-                const _Header('Learning'),
                 SwitchListTile(
                   value: settings.learnAutoSpeak,
                   title: const Text('Read aloud in practice'),

@@ -35,7 +35,10 @@ import 'update_sheet.dart';
 import 'display_sheet.dart';
 import 'library_screen.dart';
 import 'navigator_sheet.dart';
+import '../model/quiz.dart';
 import 'plans_screen.dart';
+import 'pretest_card.dart';
+import 'quiz_screen.dart';
 import 'search_screen.dart';
 import 'settings_screen.dart';
 import 'theme.dart';
@@ -638,13 +641,60 @@ class _ReaderScreenState extends State<ReaderScreen> {
     return null;
   }
 
+  /// A plan chapter's questions to guess at before reading and answer
+  /// after, and how each went, by chapter.
+  final Map<String, _Pretest> _pretests = {};
+
+  _Pretest? _pretestFor(Reference chapter) {
+    final key = chapter.withVerse(null).encode();
+    final existing = _pretests[key];
+    if (existing != null) return existing;
+    final hit = _planSlotFor(chapter);
+    if (hit == null || hit.progress.isRead(hit.slot)) return null;
+    final questions = QuizMaker(_bible).makeForChapter(chapter.withVerse(null));
+    if (questions.isEmpty) return null;
+    return _pretests[key] = _Pretest(questions);
+  }
+
+  /// Before the chapter: guess, where there is a plan chapter unread.
+  Widget? _pretestCardFor(Reference chapter) {
+    final pretest = _pretestFor(chapter);
+    if (pretest == null || pretest.after != null) return null;
+    return PretestCard(
+      questions: pretest.questions.length,
+      guessed: pretest.before,
+      onGuess: () => _runPretest(pretest, before: true),
+    );
+  }
+
+  Future<void> _runPretest(_Pretest pretest, {required bool before}) async {
+    final opened = await Navigator.of(context).push<Reference>(
+      MaterialPageRoute(
+        builder: (_) => QuizScreen(
+          kind: QuizKind.finishVerse,
+          questions: pretest.questions,
+          title: before ? 'Guess before you read' : 'After reading',
+          onFinished: (right, _) => setState(() {
+            if (before) {
+              pretest.before = right;
+            } else {
+              pretest.after = right;
+            }
+          }),
+        ),
+      ),
+    );
+    if (opened != null && mounted) _goTo(opened);
+  }
+
   Widget? _planCardFor(Reference chapter) {
     final hit = _planSlotFor(chapter);
     if (hit == null) return null;
     final (:progress, :day, :slot) = hit;
     final next = _nextInDay(progress, day, slot);
     final plan = progress.plan;
-    return PlanChapterCard(
+    final pretest = _pretests[chapter.withVerse(null).encode()];
+    final card = PlanChapterCard(
       planName: plan.name,
       day: day.number,
       read: progress.isRead(slot),
@@ -682,6 +732,18 @@ class _ReaderScreenState extends State<ReaderScreen> {
       },
       onUndo: () => _reading.setPlanSlot(plan.id, slot, read: false),
       onNext: next == null ? null : () => _goTo(next),
+    );
+    if (pretest == null || pretest.before == null) return card;
+    return Column(
+      children: [
+        PosttestCard(
+          questions: pretest.questions.length,
+          guessed: pretest.before!,
+          answered: pretest.after,
+          onAnswer: () => _runPretest(pretest, before: false),
+        ),
+        card,
+      ],
     );
   }
 
@@ -1184,6 +1246,7 @@ class _ReaderScreenState extends State<ReaderScreen> {
                       },
                       onStep: _step,
                       planCard: _planCardFor(reference),
+                      pretestCard: _pretestCardFor(reference),
                       onListen: _canListen && comparison == null
                           ? () => _listenToChapter(reference)
                           : null,
@@ -1228,6 +1291,7 @@ class _ChapterPage extends StatefulWidget {
     required this.hasPrevious,
     required this.hasNext,
     this.planCard,
+    this.pretestCard,
     this.onListen,
     this.listenLabel = 'LISTEN',
     this.speakingVerse,
@@ -1269,6 +1333,10 @@ class _ChapterPage extends StatefulWidget {
   /// Where the chapter is part of a reading plan, the card that ticks it
   /// off; it sits where the reader finishes the chapter.
   final Widget? planCard;
+
+  /// Shown under the chapter's heading: a plan chapter's questions to
+  /// guess at before reading.
+  final Widget? pretestCard;
 
   /// Starts reading the chapter aloud, where the platform can.
   final VoidCallback? onListen;
@@ -1513,7 +1581,14 @@ class _ChapterPageState extends State<_ChapterPage>
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final children = <Widget>[_chapterHeading(theme)];
+    final children = <Widget>[
+      _chapterHeading(theme),
+      if (widget.pretestCard != null)
+        Directionality(
+          textDirection: Directionality.of(this.context),
+          child: widget.pretestCard!,
+        ),
+    ];
 
     if (_comparing) {
       children.add(_compareBody(theme));
@@ -1898,6 +1973,15 @@ class _ChapterPageState extends State<_ChapterPage>
 
 /// The end of a chapter that belongs to a plan: one tap marks it read and
 /// goes on to the next chapter of the day.
+/// A plan chapter's questions and how the guess and the answer went.
+class _Pretest {
+  _Pretest(this.questions);
+
+  final List<QuizQuestion> questions;
+  int? before;
+  int? after;
+}
+
 class PlanChapterCard extends StatelessWidget {
   const PlanChapterCard({
     required this.planName,

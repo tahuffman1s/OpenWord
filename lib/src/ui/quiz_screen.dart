@@ -24,12 +24,25 @@ class QuizScreen extends StatefulWidget {
     required this.kind,
     this.seed,
     this.count = questionsPerRound,
+    this.questions,
+    this.title,
+    this.onFinished,
   });
 
   final QuizKind kind;
 
   /// Questions in the round.
   final int count;
+
+  /// Questions to ask instead of drawing any: a chapter's own, before
+  /// and after it is read.
+  final List<QuizQuestion>? questions;
+
+  /// What the screen is called, where not the kind.
+  final String? title;
+
+  /// Told the score when the round ends.
+  final void Function(int right, int total)? onFinished;
 
   /// Fixes the draw, for a test; the app leaves it to chance.
   final int? seed;
@@ -133,7 +146,9 @@ class _QuizScreenState extends State<QuizScreen> {
   void _draw() {
     final scope = context.getInheritedWidgetOfExactType<AppScope>()!;
     final bible = scope.library.bible;
-    _questions = bible == null
+    _questions = widget.questions != null
+        ? widget.questions!
+        : bible == null
         ? const []
         : QuizMaker(
             bible,
@@ -208,6 +223,7 @@ class _QuizScreenState extends State<QuizScreen> {
       } else {
         reading.recordPractice();
       }
+      widget.onFinished?.call(_right, _questions.length);
       setState(() {});
     } else {
       _speakPrompt();
@@ -220,7 +236,7 @@ class _QuizScreenState extends State<QuizScreen> {
     final finished = _index >= _questions.length;
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.kind.label),
+        title: Text(widget.title ?? widget.kind.label),
         actions: [if (_canListen) const AutoSpeakButton()],
         bottom: _questions.isEmpty
             ? null

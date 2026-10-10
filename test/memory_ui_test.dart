@@ -106,10 +106,7 @@ void main() {
       find.text('Practise on two days running to start a streak.'),
       findsOneWidget,
     );
-    expect(
-      find.text('1 verse due · 5 questions · about 2 minutes'),
-      findsOneWidget,
-    );
+    expect(find.text('1 new · 5 questions · about 2 minutes'), findsOneWidget);
     await reveal(tester, find.text('Due today'));
     expect(find.text('Genesis 1:3'), findsOneWidget);
   });
@@ -197,6 +194,8 @@ void main() {
     for (final tile in VerseTiles.of(text).reversed) {
       await tapTile(tester, tile);
     }
+    await tester.tap(find.text('Guessing'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Check'));
     await tester.pumpAndSettle();
     expect(find.text('Not quite.'), findsOneWidget);
@@ -274,6 +273,8 @@ void main() {
       'god said let there be ligth',
     );
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Fairly sure'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Check'));
     await tester.pumpAndSettle();
     expect(find.text('Nicely done.'), findsOneWidget);
@@ -335,6 +336,8 @@ void main() {
     final tiles = VerseTiles.of(text);
     await arrange(tester, text);
     expect(speech.said.sublist(3), tiles);
+    await tester.tap(find.text('Sure'));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(FilledButton, 'Check'));
     await tester.pumpAndSettle();
     expect(find.text('Nicely done.'), findsOneWidget);

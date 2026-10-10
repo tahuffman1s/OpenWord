@@ -25,6 +25,21 @@ abstract final class Xp {
   };
 }
 
+/// How sure a reader was before answering from memory.
+///
+/// Asked so that the misses made with confidence can be told apart: they
+/// are the ones most readily corrected once shown, and the ones most
+/// likely to come back if they are not.
+enum Confidence {
+  sure('Sure'),
+  fairly('Fairly sure'),
+  guessing('Guessing');
+
+  const Confidence(this.label);
+
+  final String label;
+}
+
 /// How much a day asks for. Like a language app's, the choice is the
 /// reader's and the smallest is meant to be kept.
 enum DailyGoal {
@@ -61,6 +76,8 @@ class LearnProgress {
     this.heard = 0,
     this.goal = DailyGoal.steady,
     this.badges = const {},
+    this.confidence = const {},
+    this.confidentMisses = 0,
   });
 
   static const LearnProgress none = LearnProgress();
@@ -90,6 +107,20 @@ class LearnProgress {
 
   /// Badges won, by id, with the day each was won.
   final Map<String, DateTime> badges;
+
+  /// Answers from memory by how sure the reader was: asked and right.
+  final Map<Confidence, (int asked, int right)> confidence;
+
+  /// Misses made while sure.
+  final int confidentMisses;
+
+  /// How often the reader was right when they said [level], or null
+  /// before anything was asked at that level.
+  double? calibration(Confidence level) {
+    final tally = confidence[level];
+    if (tally == null || tally.$1 == 0) return null;
+    return tally.$2 / tally.$1;
+  }
 
   int get level => levelFor(xp);
 
@@ -139,6 +170,7 @@ class LearnProgress {
     bool perfectRound = false,
     bool scribed = false,
     bool heard = false,
+    Confidence? confidence,
   }) {
     final day = LocalDate.only(today);
     final cutoff = day.subtract(const Duration(days: daysKept));
@@ -155,6 +187,18 @@ class LearnProgress {
       perfectRounds: perfectRound ? perfectRounds + 1 : null,
       scribed: scribed ? this.scribed + 1 : null,
       heard: heard ? this.heard + 1 : null,
+      confidence: confidence == null || right == null
+          ? null
+          : {
+              ...this.confidence,
+              confidence: (
+                (this.confidence[confidence]?.$1 ?? 0) + 1,
+                (this.confidence[confidence]?.$2 ?? 0) + (right ? 1 : 0),
+              ),
+            },
+      confidentMisses: confidence == Confidence.sure && right == false
+          ? confidentMisses + 1
+          : null,
     );
   }
 
@@ -171,6 +215,8 @@ class LearnProgress {
     int? heard,
     DailyGoal? goal,
     Map<String, DateTime>? badges,
+    Map<Confidence, (int, int)>? confidence,
+    int? confidentMisses,
   }) => LearnProgress(
     xp: xp ?? this.xp,
     daily: daily ?? this.daily,
@@ -181,6 +227,8 @@ class LearnProgress {
     heard: heard ?? this.heard,
     goal: goal ?? this.goal,
     badges: badges ?? this.badges,
+    confidence: confidence ?? this.confidence,
+    confidentMisses: confidentMisses ?? this.confidentMisses,
   );
 
   Map<String, Object?> toJson() => {
@@ -199,6 +247,12 @@ class LearnProgress {
       for (final entry in badges.entries)
         entry.key: LocalDate.format(entry.value),
     },
+    if (confidence.isNotEmpty)
+      'conf': {
+        for (final entry in confidence.entries)
+          entry.key.name: [entry.value.$1, entry.value.$2],
+      },
+    if (confidentMisses > 0) 'sureMisses': confidentMisses,
   };
 
   static LearnProgress? fromJson(Map<String, Object?> json) {
@@ -211,6 +265,7 @@ class LearnProgress {
 
     final rawDaily = json['daily'];
     final rawBadges = json['badges'];
+    final rawConf = json['conf'];
     final goal = json['goal'];
     return LearnProgress(
       xp: xp,
@@ -233,6 +288,14 @@ class LearnProgress {
             if (entry.key case final String id)
               if (LocalDate.parse(entry.value) case final day?) id: day,
       },
+      confidence: {
+        if (rawConf is Map)
+          for (final level in Confidence.values)
+            if (rawConf[level.name] case final List tally)
+              if (tally.length == 2 && tally[0] is int && tally[1] is int)
+                level: (tally[0] as int, tally[1] as int),
+      },
+      confidentMisses: count('sureMisses'),
     );
   }
 
@@ -247,7 +310,9 @@ class LearnProgress {
       other.scribed == scribed &&
       other.heard == heard &&
       other.goal == goal &&
-      mapEquals(other.badges, badges);
+      mapEquals(other.badges, badges) &&
+      mapEquals(other.confidence, confidence) &&
+      other.confidentMisses == confidentMisses;
 
   @override
   int get hashCode => Object.hash(xp, right, wrong, goal, badges.length);

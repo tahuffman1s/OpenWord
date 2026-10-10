@@ -10,6 +10,7 @@ import '../data/read_aloud.dart';
 import '../model/achievements.dart';
 import '../model/bible.dart';
 import '../model/learn_progress.dart';
+import '../model/sleep_policy.dart';
 import '../model/memory_exercise.dart';
 import '../model/memory_verse.dart';
 import 'learn_progress_card.dart' show AchievementIcon;
@@ -61,6 +62,21 @@ class _MemoryScreenState extends State<MemoryScreen> {
   /// What the last answer earned, for the verdict.
   int _lastXp = 0;
   int _lastBonus = 0;
+
+  /// How sure the reader said they were, where asked.
+  Confidence? _confidence;
+
+  /// Whether this exercise is a verse's first recall after learning, so
+  /// that the trial's question is asked before going on.
+  bool _firstRecall = false;
+
+  /// The trial's question, answered; null while it waits.
+  bool? _slept;
+
+  /// The stage and timing of the verse as the exercise began, for what
+  /// the verdict says comes next.
+  MemoryStage _stageBefore = MemoryStage.waiting;
+  TrialArm? _armBefore;
 
   /// The voice, where there is one.
   LearnVoice? _voice;
@@ -146,6 +162,8 @@ class _MemoryScreenState extends State<MemoryScreen> {
     _round++;
     _outcome = null;
     _hinted = false;
+    _confidence = null;
+    _slept = null;
     _placed.clear();
     _typed.clear();
     final reference = _queue.isEmpty ? null : _queue.first;
@@ -153,7 +171,20 @@ class _MemoryScreenState extends State<MemoryScreen> {
     if (reference == null) return;
     _text = _textOf(bible, reference);
     final verse = reading.memoryFor(reference);
-    _exercise = MemoryExercise.forRung(verse?.rung ?? 0, canListen: _canListen);
+    _stageBefore = verse?.stage ?? MemoryStage.waiting;
+    _armBefore = verse?.arm;
+    _firstRecall = verse?.awaitsFirstRecall ?? false;
+    // A verse not yet learnt is copied out; its first recall is asked
+    // bare, the same way for every verse, so the trial compares like
+    // with like; after that the rung decides.
+    _exercise = switch (_stageBefore) {
+      MemoryStage.waiting => MemoryExercise.arrangeShown,
+      MemoryStage.introduced => MemoryExercise.arrange,
+      MemoryStage.onLadder => MemoryExercise.forRung(
+        verse?.rung ?? 0,
+        canListen: _canListen,
+      ),
+    };
     final tiles = VerseTiles.of(_text);
     _tiles = _shuffled(tiles);
     _cloze = _text.isEmpty ? null : Cloze.make(_text, _random);
@@ -210,6 +241,12 @@ class _MemoryScreenState extends State<MemoryScreen> {
     _ => _placed.length == _tiles.length,
   };
 
+  /// Whether the reader is asked how sure they are: only when answering
+  /// from memory, where the question means something.
+  bool get _asksConfidence => !_exercise.showsText;
+
+  bool get _canCheck => _answered && (!_asksConfidence || _confidence != null);
+
   void _check() {
     final right = switch (_exercise) {
       MemoryExercise.fillBlanks => _cloze!.check(_filled),
@@ -226,7 +263,12 @@ class _MemoryScreenState extends State<MemoryScreen> {
     final reading = _reading;
     final right = outcome == _Outcome.right;
     final rung = reading.memoryFor(reference)?.rung ?? 0;
-    reading.reviewMemory(reference, remembered: right);
+    final sure = _asksConfidence && _confidence == Confidence.sure;
+    // A first recall is recorded once the reader has said whether they
+    // slept, for the trial; everything else is recorded now.
+    if (!_firstRecall) {
+      reading.reviewMemory(reference, remembered: right, sure: sure);
+    }
     _answeredCount++;
     if (right) {
       _rightCount++;
@@ -248,11 +290,24 @@ class _MemoryScreenState extends State<MemoryScreen> {
         right: right,
         scribed: right && _exercise == MemoryExercise.typeOut,
         heard: right && _exercise == MemoryExercise.listenArrange,
+        confidence: _asksConfidence ? _confidence : null,
       ),
     );
     setState(() => _outcome = outcome);
     // The verse is heard whole once it is answered, right or not.
     if (_autoSpeak) _voice?.say(_text);
+  }
+
+  /// The trial's question answered: the first recall is recorded with it.
+  void _answerSlept(bool slept) {
+    final reference = _reference!;
+    _reading.reviewMemory(
+      reference,
+      remembered: _outcome == _Outcome.right,
+      slept: slept,
+      sure: _asksConfidence && _confidence == Confidence.sure,
+    );
+    setState(() => _slept = slept);
   }
 
   /// Goes on to the next verse; one not answered is asked again before
@@ -346,7 +401,16 @@ class _MemoryScreenState extends State<MemoryScreen> {
               bonus: _lastBonus,
               combo: _combo,
               remaining: _queue.length,
-              answered: _answered,
+              answered: _canCheck,
+              asksConfidence: _asksConfidence,
+              confidence: _confidence,
+              onConfidence: (c) => setState(() => _confidence = c),
+              firstRecall: _firstRecall,
+              slept: _slept,
+              onSlept: _answerSlept,
+              stageBefore: _stageBefore,
+              armBefore: _armBefore,
+              policy: _reading.sleepPolicy,
               speaking: _voice?.isSpeaking ?? false,
               onSpeak: _canListen ? _speak : null,
               onSpeakSlowly: _canListen ? () => _speak(slow: true) : null,
@@ -381,6 +445,15 @@ class _Exercise extends StatelessWidget {
     required this.combo,
     required this.remaining,
     required this.answered,
+    required this.asksConfidence,
+    required this.confidence,
+    required this.onConfidence,
+    required this.firstRecall,
+    required this.slept,
+    required this.onSlept,
+    required this.stageBefore,
+    required this.armBefore,
+    required this.policy,
     required this.speaking,
     required this.onSpeak,
     required this.onSpeakSlowly,
@@ -413,6 +486,18 @@ class _Exercise extends StatelessWidget {
   final int combo;
   final int remaining;
   final bool answered;
+  final bool asksConfidence;
+  final Confidence? confidence;
+  final ValueChanged<Confidence> onConfidence;
+
+  /// Whether this is the verse's first recall, which ends with the
+  /// trial's question.
+  final bool firstRecall;
+  final bool? slept;
+  final ValueChanged<bool> onSlept;
+  final MemoryStage stageBefore;
+  final TrialArm? armBefore;
+  final SleepPolicy policy;
   final bool speaking;
   final VoidCallback? onSpeak;
   final VoidCallback? onSpeakSlowly;
@@ -566,6 +651,22 @@ class _Exercise extends StatelessWidget {
             ),
           ),
         const SizedBox(height: 20),
+        if (!_over && asksConfidence) ...[
+          Text('How sure are you?', style: theme.textTheme.labelLarge),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            children: [
+              for (final level in Confidence.values)
+                ChoiceChip(
+                  label: Text(level.label),
+                  selected: confidence == level,
+                  onSelected: (_) => onConfidence(level),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+        ],
         if (!_over)
           Row(
             children: [
@@ -597,10 +698,19 @@ class _Exercise extends StatelessWidget {
             xp: xp,
             bonus: bonus,
             combo: combo,
+            sureMiss:
+                asksConfidence &&
+                confidence == Confidence.sure &&
+                outcome != _Outcome.right,
+            nextWait: _nextWaitLine(),
           ),
+          if (firstRecall) ...[
+            const SizedBox(height: 12),
+            _SleptQuestion(answer: slept, onAnswer: onSlept),
+          ],
           const SizedBox(height: 12),
           FilledButton.icon(
-            onPressed: onContinue,
+            onPressed: firstRecall && slept == null ? null : onContinue,
             icon: const Icon(Icons.arrow_forward_rounded),
             label: const Text('Continue'),
           ),
@@ -620,6 +730,29 @@ class _Exercise extends StatelessWidget {
       if (cloze.bank[j] == word) earlier++;
     }
     return earlier < inBlanks;
+  }
+
+  /// When the verse comes round again, from where it stood when the
+  /// exercise began.
+  String _nextWaitLine() {
+    if (outcome != _Outcome.right) {
+      return 'Back to the first rung; asked again today.';
+    }
+    if (stageBefore == MemoryStage.waiting) {
+      return switch (armBefore) {
+        TrialArm.night when policy.mode != SleepMode.off =>
+          'Learnt tonight. Asked for tomorrow morning, after you have '
+              'slept on it.',
+        TrialArm.day when policy.mode != SleepMode.off =>
+          'Learnt. Asked for again in about ${SleepPolicy.dayGapHours} '
+              'hours, before this evening.',
+        _ => 'Asked again tomorrow.',
+      };
+    }
+    final rung = verse.rung - 1;
+    final wait =
+        MemoryVerse.intervals[rung.clamp(0, MemoryVerse.intervals.length - 1)];
+    return wait == 1 ? 'Asked again tomorrow.' : 'Asked again in $wait days.';
   }
 
   static String _standing(MemoryVerse verse, int remaining) {
@@ -819,6 +952,8 @@ class _Verdict extends StatelessWidget {
     required this.xp,
     required this.bonus,
     required this.combo,
+    required this.sureMiss,
+    required this.nextWait,
   });
 
   final _Outcome outcome;
@@ -828,6 +963,10 @@ class _Verdict extends StatelessWidget {
   final int xp;
   final int bonus;
   final int combo;
+
+  /// A miss the reader was sure of: the kind that, corrected now, sticks.
+  final bool sureMiss;
+  final String nextWait;
 
   @override
   Widget build(BuildContext context) {
@@ -884,10 +1023,20 @@ class _Verdict extends StatelessWidget {
           if (!right)
             Text(text, style: style.copyWith(color: scheme.onErrorContainer)),
           if (!right) const SizedBox(height: 8),
+          if (sureMiss) ...[
+            Text(
+              'You were sure of it. A miss like that, once corrected, is '
+              'the kind that sticks: it comes round again before the '
+              'session ends.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onErrorContainer,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
           Text(
-            right
-                ? _nextWait(verse)
-                : 'Back to the first rung; asked again today.',
+            nextWait,
             style: theme.textTheme.bodySmall?.copyWith(
               color: right
                   ? scheme.onPrimaryContainer
@@ -898,14 +1047,52 @@ class _Verdict extends StatelessWidget {
       ),
     );
   }
+}
 
-  /// [verse] is as it stood before the answer: the wait is the one its
-  /// rung set.
-  static String _nextWait(MemoryVerse verse) {
-    final rung = verse.rung - 1;
-    final wait =
-        MemoryVerse.intervals[rung.clamp(0, MemoryVerse.intervals.length - 1)];
-    return wait == 1 ? 'Asked again tomorrow.' : 'Asked again in $wait days.';
+/// The trial's one question after a first recall.
+class _SleptQuestion extends StatelessWidget {
+  const _SleptQuestion({required this.answer, required this.onAnswer});
+
+  final bool? answer;
+  final ValueChanged<bool> onAnswer;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      key: const Key('slept'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Have you slept since you learnt this verse?',
+            style: theme.textTheme.titleSmall,
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            children: [
+              ChoiceChip(
+                label: const Text('Yes, I slept'),
+                selected: answer == true,
+                onSelected: (_) => onAnswer(true),
+              ),
+              ChoiceChip(
+                label: const Text('Not yet'),
+                selected: answer == false,
+                onSelected: (_) => onAnswer(false),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

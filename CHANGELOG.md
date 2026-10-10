@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Sleep on a new verse, and find out whether it helps.** A night's
+  sleep soon after learning helps a memory settle: in studies, material
+  learnt in the evening and asked for next morning is relearnt faster
+  and kept longer. New verses are now timed against sleep. Each one is
+  allotted, at random, to be learnt in the evening with its first recall
+  next morning, or learnt by day with its first recall a few hours on;
+  the lesson card says *Learn a new verse tonight* in the evening and
+  *Recall last night's verses* in the morning, and tells of verses
+  waiting for their time. After a first recall the app asks one thing:
+  whether you have slept since learning it. Once five verses of each
+  kind are in, *Progress* reports, for you, how often verses slept on
+  were recalled right against verses asked the same day, and a week on.
+  Settings → *Sleep and new verses* chooses measuring it, nights only,
+  or off, and when evening and morning are. Verses already on the ladder
+  carry on as before.
+- **How sure are you?** Answering from memory now begins with a word on
+  how sure you are: sure, fairly sure, or guessing. A miss made while
+  sure is the kind most readily corrected once shown, and most likely to
+  come back if it is not, so the verdict says so and the verse comes
+  round again before the session ends. *Progress* shows how often you
+  were right at each degree of sureness, and how many sure misses there
+  have been.
+- **Guess before you read.** A plan chapter not yet read opens with a
+  card offering two of its verses to finish before reading; guessing at
+  what is about to be read makes it stick, even when the guess is wrong.
+  The same two questions wait at the chapter's end, and the card then
+  shows the two scores side by side.
+
 ## 1.28.0
 
 ### Changed

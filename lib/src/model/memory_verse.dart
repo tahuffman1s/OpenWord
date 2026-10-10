@@ -4,6 +4,56 @@ import 'bible.dart';
 import 'book_meta.dart';
 import 'local_date.dart';
 
+/// Which timing a new verse was allotted: learnt in the evening with its
+/// first recall next morning, or learnt by day with its recall a few
+/// hours on.
+enum TrialArm { night, day }
+
+/// Where a verse is on its way onto the ladder.
+enum MemoryStage {
+  /// Added, not yet learnt.
+  waiting,
+
+  /// Learnt once, its first recall still to come.
+  introduced,
+
+  /// First recall done: on the ladder proper.
+  onLadder,
+}
+
+/// One recall that the trial records: when, whether it was right, and
+/// whether the reader had slept since the verse was learnt.
+@immutable
+class TrialRecall {
+  const TrialRecall({required this.at, required this.right, this.slept});
+
+  final DateTime at;
+  final bool right;
+
+  /// Whether a night's sleep came between the learning and this recall,
+  /// as the reader said; null where the question was not asked.
+  final bool? slept;
+
+  Map<String, Object?> toJson() => {
+    'at': at.millisecondsSinceEpoch,
+    'right': right,
+    if (slept != null) 'slept': slept,
+  };
+
+  static TrialRecall? fromJson(Object? raw) {
+    if (raw is! Map) return null;
+    final at = raw['at'];
+    final right = raw['right'];
+    if (at is! int || right is! bool) return null;
+    final slept = raw['slept'];
+    return TrialRecall(
+      at: DateTime.fromMillisecondsSinceEpoch(at),
+      right: right,
+      slept: slept is bool ? slept : null,
+    );
+  }
+}
+
 /// One verse a reader is learning by heart, and when it is next due.
 ///
 /// The schedule is a Leitner ladder: a verse starts on the bottom rung and
@@ -21,7 +71,16 @@ class MemoryVerse {
     required this.updated,
     this.rung = 0,
     this.recalled = 0,
+    this.arm,
+    this.introduced,
+    this.recallAt,
+    this.firstRecall,
+    this.laterRecall,
+    this.confidentMisses = 0,
   });
+
+  /// Days after learning at which a recall counts as the later one.
+  static const int laterRecallDays = 6;
 
   /// Days to wait after a successful recall on each rung, bottom first.
   static const List<int> intervals = [1, 3, 7, 14, 30, 60, 120];
@@ -46,26 +105,87 @@ class MemoryVerse {
   /// Times it has been recalled, ever.
   final int recalled;
 
+  /// The timing this verse was allotted when added, or null for none.
+  final TrialArm? arm;
+
+  /// When it was first learnt: the moment its first exercise was done.
+  final DateTime? introduced;
+
+  /// From when its first recall is offered.
+  final DateTime? recallAt;
+
+  /// Its first recall, once made, and its first recall six days or more
+  /// after learning, once made.
+  final TrialRecall? firstRecall;
+  final TrialRecall? laterRecall;
+
+  /// Times it was missed while the reader was sure of it.
+  final int confidentMisses;
+
   String get key => reference.encode();
+
+  MemoryStage get stage => firstRecall != null || recalled > 0
+      ? MemoryStage.onLadder
+      : introduced != null
+      ? MemoryStage.introduced
+      : MemoryStage.waiting;
+
+  /// Whether the next practice is the first recall after learning.
+  bool get awaitsFirstRecall => stage == MemoryStage.introduced;
 
   bool get isLearnt => rung >= learntRung;
 
   bool isDueOn(DateTime today) => !due.isAfter(LocalDate.only(today));
 
+  /// Whether the first recall is offered at [now]: from [recallAt] on.
+  bool recallOfferedAt(DateTime now) =>
+      awaitsFirstRecall && recallAt != null && !now.isBefore(recallAt!);
+
   /// Days until the verse is due, negative when it is overdue.
   int daysUntilDueOn(DateTime today) =>
       due.difference(LocalDate.only(today)).inDays;
 
-  /// A new verse, due today.
-  factory MemoryVerse.start(Reference reference, DateTime today) {
+  /// A new verse, due today, allotted to [arm].
+  factory MemoryVerse.start(
+    Reference reference,
+    DateTime today, {
+    TrialArm? arm,
+  }) {
     final day = LocalDate.only(today);
     return MemoryVerse(
       reference: reference,
       added: day,
       due: day,
       updated: DateTime.now(),
+      arm: arm,
     );
   }
+
+  /// The verse once first learnt at [at]: a rung up, its first recall
+  /// offered from [recallAt].
+  MemoryVerse introducedAt(DateTime at, DateTime recallAt) => copyWith(
+    rung: 1,
+    due: LocalDate.only(recallAt),
+    introduced: at,
+    recallAt: recallAt,
+  );
+
+  /// The verse after its first recall at [at], and after a later one.
+  MemoryVerse firstRecalled(DateTime at, {required bool right, bool? slept}) =>
+      reviewed(remembered: right, today: at).copyWith(
+        firstRecall: TrialRecall(at: at, right: right, slept: slept),
+      );
+
+  MemoryVerse laterRecalled(DateTime at, {required bool right}) => copyWith(
+    laterRecall: TrialRecall(at: at, right: right),
+  );
+
+  /// Whether a review at [at] is the later recall the trial waits for.
+  bool isLaterRecallAt(DateTime at) =>
+      introduced != null &&
+      laterRecall == null &&
+      firstRecall != null &&
+      at.difference(introduced!).inDays >= laterRecallDays;
 
   /// The verse after a practice: up a rung and due after that rung's
   /// interval when it was recalled, back to the bottom and due today when
@@ -88,6 +208,11 @@ class MemoryVerse {
     int? rung,
     int? recalled,
     DateTime? updated,
+    DateTime? introduced,
+    DateTime? recallAt,
+    TrialRecall? firstRecall,
+    TrialRecall? laterRecall,
+    int? confidentMisses,
   }) => MemoryVerse(
     reference: reference,
     added: added,
@@ -95,6 +220,12 @@ class MemoryVerse {
     updated: updated ?? DateTime.now(),
     rung: rung ?? this.rung,
     recalled: recalled ?? this.recalled,
+    arm: arm,
+    introduced: introduced ?? this.introduced,
+    recallAt: recallAt ?? this.recallAt,
+    firstRecall: firstRecall ?? this.firstRecall,
+    laterRecall: laterRecall ?? this.laterRecall,
+    confidentMisses: confidentMisses ?? this.confidentMisses,
   );
 
   Map<String, Object?> toJson() => {
@@ -106,6 +237,12 @@ class MemoryVerse {
     't': updated.millisecondsSinceEpoch,
     if (rung > 0) 'rung': rung,
     if (recalled > 0) 'recalled': recalled,
+    if (arm != null) 'arm': arm!.name,
+    if (introduced != null) 'introduced': introduced!.millisecondsSinceEpoch,
+    if (recallAt != null) 'recallAt': recallAt!.millisecondsSinceEpoch,
+    if (firstRecall != null) 'first': firstRecall!.toJson(),
+    if (laterRecall != null) 'later': laterRecall!.toJson(),
+    if (confidentMisses > 0) 'sureMisses': confidentMisses,
   };
 
   static MemoryVerse? fromJson(Map<String, Object?> json) {
@@ -121,6 +258,10 @@ class MemoryVerse {
     if (added == null || due == null) return null;
     final rung = json['rung'];
     final recalled = json['recalled'];
+    final arm = json['arm'];
+    final introduced = json['introduced'];
+    final recallAt = json['recallAt'];
+    final sureMisses = json['sureMisses'];
     return MemoryVerse(
       reference: Reference(book, chapter, verse),
       added: added,
@@ -130,6 +271,21 @@ class MemoryVerse {
       ),
       rung: rung is int && rung > 0 ? rung : 0,
       recalled: recalled is int && recalled > 0 ? recalled : 0,
+      arm: arm is String
+          ? TrialArm.values.cast<TrialArm?>().firstWhere(
+              (a) => a!.name == arm,
+              orElse: () => null,
+            )
+          : null,
+      introduced: introduced is int
+          ? DateTime.fromMillisecondsSinceEpoch(introduced)
+          : null,
+      recallAt: recallAt is int
+          ? DateTime.fromMillisecondsSinceEpoch(recallAt)
+          : null,
+      firstRecall: TrialRecall.fromJson(json['first']),
+      laterRecall: TrialRecall.fromJson(json['later']),
+      confidentMisses: sureMisses is int && sureMisses > 0 ? sureMisses : 0,
     );
   }
 }

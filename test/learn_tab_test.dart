@@ -58,10 +58,7 @@ void main() {
     // Learning now: the list, with the one added, and Add for the rest.
     expect(find.text('Genesis 1:1'), findsOneWidget);
     expect(find.text('Due today'), findsOneWidget);
-    expect(
-      find.text('1 verse due · 5 questions · about 2 minutes'),
-      findsOneWidget,
-    );
+    expect(find.text('1 new · 5 questions · about 2 minutes'), findsOneWidget);
 
     await tester.tap(find.widgetWithText(TextButton, 'Add'));
     await tester.pumpAndSettle();

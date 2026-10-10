@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../app_scope.dart';
 import '../data/marks.dart';
 import '../model/bible.dart';
+import '../model/learn_progress.dart';
+import '../model/sleep_policy.dart';
 import 'learn_progress_card.dart';
 import 'learn_tab.dart';
 import 'theme.dart';
@@ -64,6 +66,7 @@ class _ProgressTab extends StatelessWidget {
     final theme = Theme.of(context);
     final progress = reading.progress;
     final streak = reading.streak;
+    final report = reading.sleepTrialReport;
     final stats = <(String, String)>[
       ('Points', '${progress.xp} XP'),
       ('Level', '${progress.level}'),
@@ -73,11 +76,59 @@ class _ProgressTab extends StatelessWidget {
       ('Best streak', '${streak.best} ${streak.best == 1 ? 'day' : 'days'}'),
       ('Perfect rounds', '${progress.perfectRounds}'),
       ('Streak freezes', '${streak.freezes}'),
+      ('Sure, and wrong', '${progress.confidentMisses}'),
+    ];
+    final calibration = [
+      for (final level in Confidence.values)
+        if (progress.calibration(level) case final rate?)
+          (level, rate, progress.confidence[level]!.$1),
     ];
     return ListView(
       padding: const EdgeInsets.only(bottom: 24),
       children: [
         LearnProgressCard(reading: reading),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+          child: Text('Sleeping on it', style: theme.textTheme.titleMedium),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: _TrialCard(report: report, reading: reading),
+        ),
+        if (calibration.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+            child: Text(
+              'How well you know what you know',
+              style: theme.textTheme.titleMedium,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+            child: Text(
+              'When answering from memory, how often you were right at each '
+              'degree of sureness. A sure miss is the one most worth a '
+              'second look.',
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+            ),
+          ),
+          for (final (level, rate, asked) in calibration)
+            ListTile(
+              dense: true,
+              leading: Icon(switch (level) {
+                Confidence.sure => Icons.sentiment_very_satisfied_rounded,
+                Confidence.fairly => Icons.sentiment_satisfied_rounded,
+                Confidence.guessing => Icons.sentiment_neutral_rounded,
+              }, color: theme.colorScheme.primary),
+              title: Text(level.label),
+              subtitle: Text(
+                'Right ${(rate * 100).round()}% of the time, '
+                '$asked ${asked == 1 ? 'answer' : 'answers'}',
+              ),
+            ),
+        ],
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text('In numbers', style: theme.textTheme.titleMedium),
@@ -125,6 +176,61 @@ class _ProgressTab extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// What the sleep trial has found, or how far it has to go.
+class _TrialCard extends StatelessWidget {
+  const _TrialCard({required this.report, required this.reading});
+
+  final SleepTrialReport report;
+  final ReadingStore reading;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    final policy = reading.sleepPolicy;
+    final String line;
+    if (report.hasEnough) {
+      final slept = (report.sleptRate * 100).round();
+      final awake = (report.awakeRate * 100).round();
+      final later = report.hasLater
+          ? ' A week on, ${(report.sleptLaterRate * 100).round()}% against '
+                '${(report.awakeLaterRate * 100).round()}%.'
+          : '';
+      line =
+          'For you, verses slept on were recalled right the first time '
+          '$slept% of the time (${report.sleptAsked} verses), against $awake% '
+          'for verses asked the same day (${report.awakeAsked}).$later';
+    } else if (policy.mode == SleepMode.off) {
+      line =
+          'Switched off. Turn it on in Settings to time new verses against '
+          'sleep and see whether it helps you.';
+    } else {
+      line =
+          'Too soon to say: ${report.sleptAsked} of '
+          '${SleepTrialReport.minimum} verses slept on, '
+          '${report.awakeAsked} of ${SleepTrialReport.minimum} asked the '
+          'same day. Keep learning; the answer comes.';
+    }
+    return Container(
+      key: const Key('trial'),
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.bedtime_rounded, color: scheme.primary),
+          const SizedBox(width: 12),
+          Expanded(child: Text(line, style: theme.textTheme.bodyMedium)),
+        ],
+      ),
     );
   }
 }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,7 @@ import '../model/book_meta.dart';
 import '../model/learn_progress.dart';
 import '../model/memory_verse.dart';
 import '../model/reading_plan.dart';
+import '../model/sleep_policy.dart';
 import '../model/streak.dart';
 import 'plan_progress.dart';
 
@@ -108,7 +110,7 @@ class ImportResult {
 
 /// Marks, reading position and history, persisted with [SharedPreferences].
 class ReadingStore extends ChangeNotifier {
-  ReadingStore._(this._prefs, this._clock) {
+  ReadingStore._(this._prefs, this._clock, this._random) {
     _load();
   }
 
@@ -121,6 +123,7 @@ class ReadingStore extends ChangeNotifier {
   static const _kMemory = 'memory';
   static const _kStreak = 'streak';
   static const _kProgress = 'progress';
+  static const _kSleep = 'sleep';
   static const _historyLimit = 20;
 
   /// Number of colours in the highlight palette.
@@ -142,11 +145,19 @@ class ReadingStore extends ChangeNotifier {
   /// What "today" is. A test sets it; the app reads the clock.
   final DateTime Function() _clock;
 
-  static Future<ReadingStore> load({DateTime Function()? clock}) async =>
-      ReadingStore._(
-        await SharedPreferences.getInstance(),
-        clock ?? DateTime.now,
-      );
+  /// Allots new verses to a night or a day; a test fixes it.
+  final Random _random;
+
+  SleepPolicy _sleep = SleepPolicy.standard;
+
+  static Future<ReadingStore> load({
+    DateTime Function()? clock,
+    Random? random,
+  }) async => ReadingStore._(
+    await SharedPreferences.getInstance(),
+    clock ?? DateTime.now,
+    random ?? Random(),
+  );
 
   DateTime get today => _clock();
 
@@ -168,6 +179,13 @@ class ReadingStore extends ChangeNotifier {
     _streak = _decodeStreak(_prefs.getString(_kStreak)) ?? Streak.none;
     _progress =
         _decodeProgress(_prefs.getString(_kProgress)) ?? LearnProgress.none;
+    final sleep = _prefs.getString(_kSleep);
+    if (sleep != null) {
+      final decoded = jsonDecode(sleep);
+      if (decoded is Map) {
+        _sleep = SleepPolicy.fromJson(decoded.cast<String, Object?>());
+      }
+    }
   }
 
   static LearnProgress? _decodeProgress(Object? raw) {
@@ -465,18 +483,65 @@ class ReadingStore extends ChangeNotifier {
 
   bool isMemorising(Reference reference) => memoryFor(reference) != null;
 
-  /// Verses due for practice today, the longest waiting first, then in the
-  /// order they were added.
+  /// Whether [verse] is offered for practice at [now]: a first recall
+  /// once its time has come, a verse on the ladder on its day, and a
+  /// verse still to be learnt when the sleep policy says so.
+  bool isOffered(MemoryVerse verse, DateTime now) => switch (verse.stage) {
+    MemoryStage.introduced => verse.recallOfferedAt(now),
+    MemoryStage.onLadder => verse.isDueOn(now),
+    MemoryStage.waiting =>
+      verse.isDueOn(now) && _sleep.offersLearning(verse.arm, now),
+  };
+
+  /// Verses offered for practice now: first recalls first, then the
+  /// ladder's due verses, longest waiting first, then the new ones.
   List<MemoryVerse> get memoryDue {
     final now = today;
-    final due = _memory.values.where((verse) => verse.isDueOn(now)).toList()
-      ..sort((a, b) => a.due.compareTo(b.due));
+    int rank(MemoryVerse v) => switch (v.stage) {
+      MemoryStage.introduced => 0,
+      MemoryStage.onLadder => 1,
+      MemoryStage.waiting => 2,
+    };
+    final due = _memory.values.where((verse) => isOffered(verse, now)).toList()
+      ..sort((a, b) {
+        final byRank = rank(a).compareTo(rank(b));
+        return byRank != 0 ? byRank : a.due.compareTo(b.due);
+      });
     return List.unmodifiable(due);
   }
 
-  /// Whether any verse is waiting to be practised today: what the
-  /// library button carries a dot for.
-  bool get hasMemoryDue => _memory.values.any((verse) => verse.isDueOn(today));
+  /// Verses still to be learnt that the sleep policy holds back for now:
+  /// a night verse by day, a day verse too late in the day.
+  List<MemoryVerse> get memoryHeldBack {
+    final now = today;
+    return List.unmodifiable([
+      for (final verse in _memory.values)
+        if (verse.stage == MemoryStage.waiting &&
+            verse.isDueOn(now) &&
+            !_sleep.offersLearning(verse.arm, now))
+          verse,
+    ]);
+  }
+
+  /// Whether any verse is waiting to be practised now: what the library
+  /// button carries a dot for.
+  bool get hasMemoryDue {
+    final now = today;
+    return _memory.values.any((verse) => isOffered(verse, now));
+  }
+
+  /// How the app times a new verse against sleep.
+  SleepPolicy get sleepPolicy => _sleep;
+
+  void setSleepPolicy(SleepPolicy policy) {
+    if (policy == _sleep) return;
+    _sleep = policy;
+    _prefs.setString(_kSleep, jsonEncode(policy.toJson()));
+    notifyListeners();
+  }
+
+  /// What the trial has found about this reader so far.
+  SleepTrialReport get sleepTrialReport => SleepTrialReport.of(_memory.values);
 
   /// Starts learning a verse, or stops if it is being learnt already.
   /// Returns true when the verse was added.
@@ -487,17 +552,56 @@ class ReadingStore extends ChangeNotifier {
       _persistMemory();
       return false;
     }
-    _memory[key] = MemoryVerse.start(reference, today);
+    _memory[key] = MemoryVerse.start(
+      reference,
+      today,
+      arm: _sleep.armForNew(_random),
+    );
     _persistMemory();
     return true;
   }
 
-  /// Records a practice: the verse moves up the ladder when it was
-  /// recalled and back to the bottom when it was not.
-  void reviewMemory(Reference reference, {required bool remembered}) {
+  /// Records a practice. A verse learnt for the first time is set its
+  /// first recall by the sleep policy; a first recall is recorded for
+  /// the trial, with whether the reader [slept] since; and from then on
+  /// the verse moves up the ladder when recalled and back to the bottom
+  /// when not. A review six days or more after learning is kept as the
+  /// later recall. A miss made while [sure] is counted.
+  void reviewMemory(
+    Reference reference, {
+    required bool remembered,
+    bool? slept,
+    bool sure = false,
+  }) {
     final verse = memoryFor(reference);
     if (verse == null) return;
-    _memory[verse.key] = verse.reviewed(remembered: remembered, today: today);
+    final now = today;
+    var next = switch (verse.stage) {
+      // A verse with no timing — added before this, or with it off —
+      // climbs the ladder as it always did, with no trial to record.
+      MemoryStage.waiting when verse.arm == null || remembered == false =>
+        verse.reviewed(remembered: remembered, today: now),
+      MemoryStage.waiting => verse.introducedAt(
+        now,
+        _sleep.recallAfter(now, verse.arm),
+      ),
+      MemoryStage.introduced => verse.firstRecalled(
+        now,
+        right: remembered,
+        slept: slept,
+      ),
+      MemoryStage.onLadder => verse.reviewed(
+        remembered: remembered,
+        today: now,
+      ),
+    };
+    if (next.isLaterRecallAt(now) && verse.stage == MemoryStage.onLadder) {
+      next = next.laterRecalled(now, right: remembered);
+    }
+    if (sure && !remembered) {
+      next = next.copyWith(confidentMisses: next.confidentMisses + 1);
+    }
+    _memory[verse.key] = next;
     _persistMemory();
   }
 
@@ -544,6 +648,7 @@ class ReadingStore extends ChangeNotifier {
     bool perfectRound = false,
     bool scribed = false,
     bool heard = false,
+    Confidence? confidence,
   }) {
     final now = today;
     _progress = _progress.earned(
@@ -553,6 +658,7 @@ class ReadingStore extends ChangeNotifier {
       perfectRound: perfectRound,
       scribed: scribed,
       heard: heard,
+      confidence: confidence,
     );
     recordPractice();
     final won = <Achievement>[];
@@ -613,6 +719,21 @@ class ReadingStore extends ChangeNotifier {
       heard: most(mine.heard, theirs.heard),
       goal: mine.goal,
       badges: badges,
+      confidence: {
+        for (final level in Confidence.values)
+          if (mine.confidence[level] ?? theirs.confidence[level] case final _?)
+            level: (
+              most(
+                mine.confidence[level]?.$1 ?? 0,
+                theirs.confidence[level]?.$1 ?? 0,
+              ),
+              most(
+                mine.confidence[level]?.$2 ?? 0,
+                theirs.confidence[level]?.$2 ?? 0,
+              ),
+            ),
+      },
+      confidentMisses: most(mine.confidentMisses, theirs.confidentMisses),
     );
   }
 
@@ -689,6 +810,7 @@ class ReadingStore extends ChangeNotifier {
       'memory': [for (final verse in _memory.values) verse.toJson()],
     if (_streak.last != null) 'streak': _streak.toJson(),
     if (_progress.xp > 0) 'progress': _progress.toJson(),
+    'sleep': _sleep.toJson(),
   });
 
   /// Whether there is anything a backup would hold.

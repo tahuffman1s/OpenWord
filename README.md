@@ -81,6 +81,9 @@ no network entitlement.
   one of four styles, with the words, the reference and the translation,
   shared through the system share sheet (saved as a file on Linux, which has
   none). A single verse's sheet shares it in one tap too.
+- **Guess before you read.** A plan chapter not yet read offers two of its
+  verses to finish before reading, and the same two after, since guessing
+  at what is about to be read makes it stick.
 - **Reading plans that wait for you.** Six plans, from the Gospels in 30
   days to the whole Bible in a year, with the Old and New Testament side by
   side or Psalms and Proverbs by the month. Days are even in length rather
@@ -92,7 +95,12 @@ no network entitlement.
 - **Learn a verse by heart.** *Memorise* on a verse's sheet puts it on a
   ladder: it is asked for today, then after a day, three days, a week, a
   fortnight, a month, two and four — up a rung each time you have it, back
-  to the bottom when you do not. The library's *Learn* tab practises what
+  to the bottom when you do not. New verses are timed against sleep,
+  since a night's sleep soon after learning helps a memory settle: some
+  are learnt in the evening and asked for next morning, some by day and
+  asked for hours later, and the app reports which you recall better.
+  Answering from memory begins with how sure you are, so a confident miss
+  can be caught and corrected. The library's *Learn* tab practises what
   is due, and each practice is an exercise the rung calls for, checked: a
   new verse is put together from tiles with the text in view, then its
   blanks are filled, then it is put together unseen — heard first, in the

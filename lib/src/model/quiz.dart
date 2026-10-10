@@ -106,6 +106,30 @@ class QuizMaker {
     return questions;
   }
 
+  /// Questions about one chapter, for guessing at before it is read and
+  /// answering again after: its verses finished, as many as it has long
+  /// enough, up to [count]. The wrong endings come from the whole
+  /// translation, so a reader who has not read the chapter has only
+  /// sense to go on.
+  List<QuizQuestion> makeForChapter(Reference chapter, {int count = 2}) {
+    final book = bible.bookByCode(chapter.bookCode);
+    final text = book?.chapter(chapter.chapter);
+    if (book == null || text == null) return const [];
+    final candidates = [
+      for (var verse = 1; verse <= text.verseCount; verse++)
+        if (!text.isOmitted(verse))
+          if (text.verseText(verse) case final t
+              when t.length >= minFinishLength)
+            (reference: Reference(book.code, text.number, verse), text: t),
+    ]..shuffle(_random);
+    final questions = <QuizQuestion>[];
+    for (final verse in candidates.take(count)) {
+      final question = _finishVerseFor(verse);
+      if (question != null) questions.add(question);
+    }
+    return questions;
+  }
+
   // --- which book? -----------------------------------------------------
 
   QuizQuestion? _whichBook() {
@@ -138,6 +162,10 @@ class QuizMaker {
   QuizQuestion? _finishVerse() {
     final verse = _randomVerse(minFinishLength);
     if (verse == null) return null;
+    return _finishVerseFor(verse);
+  }
+
+  QuizQuestion? _finishVerseFor(({Reference reference, String text}) verse) {
     final split = splitPoint(verse.text);
     final ending = verse.text.substring(split).trim();
     final endings = <String>[];

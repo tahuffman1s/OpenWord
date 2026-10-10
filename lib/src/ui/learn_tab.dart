@@ -4,6 +4,7 @@ import '../data/marks.dart';
 import '../model/bible.dart';
 import '../model/memory_verse.dart';
 import '../model/quiz.dart';
+import '../model/sleep_policy.dart';
 import '../model/suggested_verses.dart';
 import 'learn_progress_card.dart';
 import 'memory_screen.dart';
@@ -58,7 +59,12 @@ class LearnTab extends StatelessWidget {
     final scheme = theme.colorScheme;
     final today = reading.today;
     final verses = reading.memoryVerses;
-    final due = reading.memoryDue.length;
+    final offered = reading.memoryDue;
+    final due = offered.length;
+    final recalls = offered.where((v) => v.awaitsFirstRecall).length;
+    final fresh = offered.where((v) => v.stage == MemoryStage.waiting).length;
+    final heldBack = reading.memoryHeldBack.length;
+    final policy = reading.sleepPolicy;
     final ordered = [...verses]
       ..sort((a, b) {
         final byDue = a.due.compareTo(b.due);
@@ -79,6 +85,11 @@ class LearnTab extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
           child: _LessonCard(
             due: due,
+            recalls: recalls,
+            fresh: fresh,
+            heldBack: heldBack,
+            evening: policy.mode != SleepMode.off && policy.isEvening(today),
+            morning: policy.mode != SleepMode.off && policy.isMorning(today),
             goalMet: reading.progress.goalMetOn(today),
             onStart: bible == null ? null : () => _startLesson(context),
           ),
@@ -188,20 +199,48 @@ class LearnTab extends StatelessWidget {
 class _LessonCard extends StatelessWidget {
   const _LessonCard({
     required this.due,
+    required this.recalls,
+    required this.fresh,
+    required this.heldBack,
+    required this.evening,
+    required this.morning,
     required this.goalMet,
     required this.onStart,
   });
 
   final int due;
+
+  /// Of [due], first recalls of verses learnt last time, and verses
+  /// still to be learnt.
+  final int recalls;
+  final int fresh;
+
+  /// New verses the sleep policy keeps for the evening, or for tomorrow.
+  final int heldBack;
+  final bool evening;
+  final bool morning;
   final bool goalMet;
   final VoidCallback? onStart;
+
+  String get _title {
+    if (morning && recalls > 0) return 'Recall last night’s verses';
+    if (evening && fresh > 0) {
+      return fresh == 1
+          ? 'Learn a new verse tonight'
+          : 'Learn $fresh new verses tonight';
+    }
+    return goalMet ? 'Another lesson?' : 'Today’s lesson';
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
+    final ladder = due - recalls - fresh;
     final parts = [
-      if (due > 0) due == 1 ? '1 verse due' : '$due verses due',
+      if (recalls > 0) recalls == 1 ? '1 to recall' : '$recalls to recall',
+      if (ladder > 0) ladder == 1 ? '1 verse due' : '$ladder verses due',
+      if (fresh > 0) fresh == 1 ? '1 new' : '$fresh new',
       '${LearnTab.lessonQuestions} questions',
     ];
     final minutes = ((due * 20 + LearnTab.lessonQuestions * 10) / 60).ceil();
@@ -221,7 +260,7 @@ class _LessonCard extends StatelessWidget {
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  goalMet ? 'Another lesson?' : 'Today’s lesson',
+                  _title,
                   style: theme.textTheme.titleLarge?.copyWith(
                     color: scheme.onPrimaryContainer,
                   ),
@@ -237,6 +276,23 @@ class _LessonCard extends StatelessWidget {
               color: scheme.onPrimaryContainer,
             ),
           ),
+          if (heldBack > 0) ...[
+            const SizedBox(height: 4),
+            Text(
+              evening
+                  ? (heldBack == 1
+                        ? '1 new verse waits for tomorrow, to be learnt by day.'
+                        : '$heldBack new verses wait for tomorrow, to be '
+                              'learnt by day.')
+                  : (heldBack == 1
+                        ? '1 new verse waits for this evening, to be slept on.'
+                        : '$heldBack new verses wait for this evening, to be '
+                              'slept on.'),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: scheme.onPrimaryContainer,
+              ),
+            ),
+          ],
           const SizedBox(height: 14),
           SizedBox(
             width: double.infinity,

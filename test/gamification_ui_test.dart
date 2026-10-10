@@ -54,9 +54,10 @@ void main() {
       find.byType(AchievementIcon),
       findsNWidgets(Achievement.values.length),
     );
-    expect(find.text('In numbers'), findsOneWidget);
+    await reveal(tester, find.text('In numbers'));
     expect(find.text('Verses learning'), findsOneWidget);
 
+    await reveal(tester, find.byKey(const Key('badges')), up: true);
     await tester.tap(find.byKey(const Key('badges')));
     await tester.pumpAndSettle();
     expect(find.text('First step'), findsOneWidget);
