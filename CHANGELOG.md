@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.29.0
 
 ### Added
 - **Sleep on a new verse, and find out whether it helps.** A night's
