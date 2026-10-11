@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 1.30.0
 
 ### Added
 - **Meet a verse before you build it.** A verse learnt for the first time
