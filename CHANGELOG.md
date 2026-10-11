@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **Meet a verse before you build it.** A verse learnt for the first time
+  now opens with where it sits — its heading and chapter — the text,
+  read out if there is a voice, and a box for a word of your own on what
+  it is about. Meaning first is what makes words stay, and the word is
+  yours: whenever the verse is asked for bare, *Your word for it* is the
+  cue you are given, not the first letters.
+- **Long verses are built up clause by clause.** A verse of fourteen
+  words or more is first put together as its opening clause, then the
+  first two clauses, and so on to the whole, each step rehearsing the
+  last; *Build it up · 2 of 4* says where you are, and a wrong step is
+  simply asked once more.
+- **Your memory, measured.** *Progress* now says how long you keep a
+  verse against the common run, and that the gaps between recalls have
+  been set to match.
+
+### Changed
+- **The ladder is now a memory model.** Each verse carries a stability —
+  how many days it stays recallable — and a difficulty, and is asked for
+  when its chance of recall is reckoned to have fallen to nine in ten,
+  rather than on a fixed row of days. A recall grows the stability by
+  more the easier the verse, by more again when the verse was left late
+  and recalled against the odds, and by less when the answer came slowly;
+  a miss keeps a quarter of it and marks the verse harder. The waits run
+  a day, two, five, twelve, a month, two, five, and then a year at most,
+  so the old ceiling of four months is gone and a verse long known is
+  still met now and then. Verses already on the ladder carry their rung
+  over. The gaps are also scaled to the reader: a recall made long after
+  the verse fell due says you keep verses better than reckoned, and a
+  miss made while the chance was still high says the reverse, and the
+  whole schedule moves a little each time.
+- **Easiest first.** A session's due verses now come in order of how
+  likely they are to be recalled, the surest first, so it warms up before
+  the hard ones; verses still to be learnt come last, as before.
+
 ## 1.29.0
 
 ### Added

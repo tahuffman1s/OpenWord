@@ -109,6 +109,22 @@ void main() {
     });
   });
 
+  test('says how the reader keeps verses, from the recall factor', () {
+    expect(const LearnProgress().keeping, contains('about as long as most'));
+    expect(
+      const LearnProgress(recallFactor: 1.2).keeping,
+      contains('longer than most'),
+    );
+    expect(
+      const LearnProgress(recallFactor: 0.8).keeping,
+      contains('sooner than from most'),
+    );
+    final copy = LearnProgress.fromJson(
+      const LearnProgress(recallFactor: 1.2).toJson(),
+    );
+    expect(copy!.recallFactor, 1.2);
+  });
+
   test('round-trips through JSON', () {
     final progress = LearnProgress.none
         .earned(16, monday, right: true, scribed: true)

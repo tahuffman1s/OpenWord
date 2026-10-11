@@ -7,7 +7,7 @@ import 'package:openword/src/ui/memory_screen.dart';
 import 'package:openword/src/ui/quiz_screen.dart';
 
 import 'fixtures.dart';
-import 'memory_ui_test.dart' show arrange, libraryButton;
+import 'memory_ui_test.dart' show arrange, libraryButton, meetVerse;
 import 'read_aloud_test.dart' show FakeSpeech;
 import 'reader_screen_test.dart' show appBarText, pumpReader;
 
@@ -80,6 +80,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(MemoryScreen), findsOneWidget);
+    await meetVerse(tester);
     await arrange(tester, text);
     await tester.tap(find.widgetWithText(FilledButton, 'Check'));
     await tester.pumpAndSettle();

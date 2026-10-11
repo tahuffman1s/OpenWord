@@ -43,10 +43,105 @@ void main() {
         day = LocalDate.only(day).add(Duration(days: waits.last));
         expect(verse.isDueOn(day), isTrue);
       }
-      // 1, 3, 7, 14, 30, 60, 120 — and then 120 again, and again: the top
-      // rung keeps its wait rather than running off the ladder.
-      expect(waits, [...MemoryVerse.intervals, 120, 120]);
+      // A day, then a little over double each time, to the year that is
+      // the most a verse is left; the old 120-day ceiling is gone.
+      expect(waits, [1, 2, 5, 12, 28, 69, 170, 365, 365]);
       expect(verse.isLearnt, isTrue);
+      expect(verse.stability, MemoryVerse.maxStability);
+    });
+
+    test('the chance of recall falls with the days', () {
+      final verse = MemoryVerse.start(john, monday)
+          .reviewed(remembered: true, today: monday)
+          .reviewed(
+            remembered: true,
+            today: monday.add(const Duration(days: 1)),
+          );
+      final recalled = monday.add(const Duration(days: 1));
+      expect(verse.retrievability(recalled), greaterThan(0.95));
+      // Nine in ten when it comes due; lower the longer it is left.
+      final due = recalled.add(Duration(days: verse.nextWaitDays));
+      expect(verse.retrievability(verse.due), closeTo(0.9, 0.02));
+      expect(
+        verse.retrievability(due.add(const Duration(days: 30))),
+        lessThan(0.5),
+      );
+    });
+
+    test('a miss costs most of the stability and marks the verse harder', () {
+      var verse = MemoryVerse.start(john, monday);
+      for (var i = 0; i < 5; i++) {
+        verse = verse.reviewed(remembered: true, today: monday);
+      }
+      final before = verse.stability!;
+      final missed = verse.reviewed(remembered: false, today: monday);
+      expect(missed.stability, before * 0.25);
+      expect(missed.difficulty, greaterThan(verse.difficulty));
+      // Harder: the next wait grows by less than it would have.
+      final retry = missed.reviewed(remembered: true, today: monday);
+      expect(retry.nextWaitDays, lessThan(verse.nextWaitDays));
+    });
+
+    test('a slow answer, a late one, and the reader all set the wait', () {
+      final verse = MemoryVerse.start(john, monday)
+          .reviewed(remembered: true, today: monday)
+          .reviewed(remembered: true, today: monday);
+      final quick = verse.reviewed(remembered: true, today: monday);
+      final slow = verse.reviewed(
+        remembered: true,
+        today: monday,
+        seconds: 60,
+        words: 8,
+      );
+      expect(slow.stability, lessThan(quick.stability!));
+      // Recalled a month late, when the chance had fallen: worth more.
+      final late = verse.reviewed(
+        remembered: true,
+        today: monday.add(const Duration(days: 30)),
+      );
+      expect(late.stability, greaterThan(quick.stability!));
+      // A reader who keeps verses well waits longer; one who does not, less.
+      final keeper = verse.reviewed(
+        remembered: true,
+        today: monday,
+        personal: 1.3,
+      );
+      final forgetter = verse.reviewed(
+        remembered: true,
+        today: monday,
+        personal: 0.8,
+      );
+      expect(keeper.stability, greaterThan(quick.stability!));
+      expect(forgetter.stability, lessThan(quick.stability!));
+    });
+
+    test('a verse from the old ladder carries its rung over', () {
+      final old = MemoryVerse.fromJson({
+        'b': 'JHN',
+        'c': 3,
+        'v': 16,
+        'added': '2026-09-01',
+        'due': '2026-09-28',
+        'rung': 4,
+        'recalled': 4,
+      })!;
+      expect(old.stability, isNull);
+      // Rung 4 waited 14 days; the next recall starts from there.
+      expect(old.nextWaitDays, 14);
+      final next = old.reviewed(remembered: true, today: monday);
+      expect(next.stability, 14);
+      expect(next.daysUntilDueOn(monday), 14);
+    });
+
+    test('the hook rides through JSON', () {
+      final verse = MemoryVerse.start(john, monday).withHook('  love ');
+      expect(verse.hook, 'love');
+      final copy = MemoryVerse.fromJson(
+        jsonDecode(jsonEncode(verse.toJson())) as Map<String, Object?>,
+      )!;
+      expect(copy.hook, 'love');
+      expect(copy.difficulty, MemoryVerse.defaultDifficulty);
+      expect(MemoryVerse.start(john, monday).toJson(), isNot(contains('hook')));
     });
 
     test('a lapse drops to the bottom and is due again today', () {
@@ -212,6 +307,61 @@ void main() {
       today = monday.add(const Duration(days: 4));
       // The ladder's due verses come before the ones still to be learnt.
       expect(store.memoryDue.map((v) => v.reference), [john, psalm]);
+    });
+
+    test('due verses come easiest first, so the session warms up', () async {
+      var today = monday;
+      final store = await ReadingStore.load(clock: () => today);
+      store.toggleMemorise(john);
+      store.toggleMemorise(psalm);
+      for (var i = 0; i < 3; i++) {
+        store.reviewMemory(john, remembered: true);
+        store.reviewMemory(psalm, remembered: true);
+      }
+      // Both due in five days; the psalm is left a fortnight longer, so its
+      // chance of recall is the lower, and it is asked second.
+      today = monday.add(const Duration(days: 5));
+      store.reviewMemory(john, remembered: true);
+      today = monday.add(const Duration(days: 40));
+      expect(store.memoryDue.map((v) => v.reference), [john, psalm]);
+      expect(
+        store.memoryFor(john)!.retrievability(today),
+        greaterThan(store.memoryFor(psalm)!.retrievability(today)),
+      );
+    });
+
+    test(
+      'a recall against the odds says the reader keeps verses well',
+      () async {
+        var today = monday;
+        final store = await ReadingStore.load(clock: () => today);
+        store.toggleMemorise(john);
+        store.reviewMemory(john, remembered: true);
+        store.reviewMemory(john, remembered: true);
+        expect(store.progress.recallFactor, 1);
+        // Recalled long after it was due: the gaps are stretched a little.
+        today = monday.add(const Duration(days: 60));
+        store.reviewMemory(john, remembered: true);
+        expect(store.progress.recallFactor, closeTo(1.03, 1e-9));
+        // Missed the day after a recall: pulled back in.
+        today = today.add(const Duration(days: 1));
+        store.reviewMemory(john, remembered: false);
+        expect(store.progress.recallFactor, closeTo(1.0, 1e-9));
+        expect(
+          (await ReadingStore.load(clock: () => today)).progress.recallFactor,
+          closeTo(1.0, 1e-9),
+        );
+      },
+    );
+
+    test('a hook is kept with the verse', () async {
+      final store = await ReadingStore.load(clock: () => monday);
+      store.toggleMemorise(john);
+      store.setMemoryHook(john, ' love ');
+      expect(store.memoryFor(john)!.hook, 'love');
+      expect((await ReadingStore.load()).memoryFor(john)!.hook, 'love');
+      store.setMemoryHook(psalm, 'rest');
+      expect(store.memoryFor(psalm), isNull);
     });
 
     test('survives a restart, and remove and restore', () async {

@@ -78,6 +78,7 @@ class LearnProgress {
     this.badges = const {},
     this.confidence = const {},
     this.confidentMisses = 0,
+    this.recallFactor = 1,
   });
 
   static const LearnProgress none = LearnProgress();
@@ -114,6 +115,12 @@ class LearnProgress {
   /// Misses made while sure.
   final int confidentMisses;
 
+  /// How well this reader keeps verses against the common run: 1 is the
+  /// schedule as set, more stretches every wait, less shortens it. Learnt
+  /// from recalls that came when the chance had fallen low, and misses
+  /// that came when it was still high.
+  final double recallFactor;
+
   /// How often the reader was right when they said [level], or null
   /// before anything was asked at that level.
   double? calibration(Confidence level) {
@@ -123,6 +130,17 @@ class LearnProgress {
   }
 
   int get level => levelFor(xp);
+
+  /// What the recall factor says of this reader, in a sentence: how long
+  /// they keep a verse against the common run, and what was done about it.
+  String get keeping => recallFactor < 0.9
+      ? 'Verses slip from you a little sooner than from most, so your '
+            'gaps between recalls have been shortened to match.'
+      : recallFactor > 1.1
+      ? 'You keep a verse longer than most, so your gaps between recalls '
+            'have been stretched to match.'
+      : 'You keep a verse about as long as most people; your gaps between '
+            'recalls are set to match, and move as you go.';
 
   /// Points at which [level] began and the next begins.
   int get levelFloor => xpForLevel(level);
@@ -217,6 +235,7 @@ class LearnProgress {
     Map<String, DateTime>? badges,
     Map<Confidence, (int, int)>? confidence,
     int? confidentMisses,
+    double? recallFactor,
   }) => LearnProgress(
     xp: xp ?? this.xp,
     daily: daily ?? this.daily,
@@ -229,6 +248,7 @@ class LearnProgress {
     badges: badges ?? this.badges,
     confidence: confidence ?? this.confidence,
     confidentMisses: confidentMisses ?? this.confidentMisses,
+    recallFactor: recallFactor ?? this.recallFactor,
   );
 
   Map<String, Object?> toJson() => {
@@ -253,6 +273,7 @@ class LearnProgress {
           entry.key.name: [entry.value.$1, entry.value.$2],
       },
     if (confidentMisses > 0) 'sureMisses': confidentMisses,
+    if (recallFactor != 1) 'keep': recallFactor,
   };
 
   static LearnProgress? fromJson(Map<String, Object?> json) {
@@ -296,6 +317,9 @@ class LearnProgress {
                 level: (tally[0] as int, tally[1] as int),
       },
       confidentMisses: count('sureMisses'),
+      recallFactor: json['keep'] is num
+          ? (json['keep'] as num).toDouble().clamp(0.7, 1.4)
+          : 1,
     );
   }
 
@@ -312,7 +336,8 @@ class LearnProgress {
       other.goal == goal &&
       mapEquals(other.badges, badges) &&
       mapEquals(other.confidence, confidence) &&
-      other.confidentMisses == confidentMisses;
+      other.confidentMisses == confidentMisses &&
+      other.recallFactor == recallFactor;
 
   @override
   int get hashCode => Object.hash(xp, right, wrong, goal, badges.length);

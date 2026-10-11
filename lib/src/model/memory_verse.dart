@@ -56,12 +56,18 @@ class TrialRecall {
 
 /// One verse a reader is learning by heart, and when it is next due.
 ///
-/// The schedule is a Leitner ladder: a verse starts on the bottom rung and
-/// is due at once; each time the reader recalls it the verse climbs a rung
-/// and waits longer — a day, then three, a week, a fortnight, a month, two,
-/// four — and a verse not recalled drops to the bottom and is asked again
-/// the same day. Nothing is timed and nothing is scored; the only question
-/// ever asked is whether the reader had it or not.
+/// Each verse carries a memory of its own: how stable it is, in days
+/// until the chance of recalling it falls to nine in ten, and how hard
+/// it has proved. A recall makes it more stable, by more the easier the
+/// verse and the longer it was left; a miss sets it back and marks it
+/// harder. The due date is where the chance of recall is about to drop
+/// below the target. The rungs remain as the count of recalls in a row,
+/// for what the exercises and the words on screen go by: a new verse
+/// climbs much as it always did, a day, then three, a week, a fortnight,
+/// a month, two, four, but a verse that is easy, or a reader who keeps
+/// things well, moves faster, and the reverse slower. The only question
+/// ever asked is whether the reader had it or not, and how long that
+/// took.
 @immutable
 class MemoryVerse {
   const MemoryVerse({
@@ -77,10 +83,30 @@ class MemoryVerse {
     this.firstRecall,
     this.laterRecall,
     this.confidentMisses = 0,
+    this.stability,
+    this.difficulty = defaultDifficulty,
+    this.hook = '',
   });
 
   /// Days after learning at which a recall counts as the later one.
   static const int laterRecallDays = 6;
+
+  /// How hard a verse is taken to be until it shows otherwise, 0 to 1.
+  static const double defaultDifficulty = 0.3;
+
+  /// The chance of recall a verse is let fall to before it is due.
+  static const double targetRecall = 0.9;
+
+  /// Stability at which a verse counts as learnt: a month.
+  static const double learntStability = 30;
+
+  /// The longest a verse is left between recalls, in days: a year, so a
+  /// verse well known is still met now and then.
+  static const double maxStability = 365;
+
+  /// Seconds a word may take in a right answer before it counts as slow,
+  /// which says the memory is weaker than a right answer alone suggests.
+  static const double slowSecondsPerWord = 2.5;
 
   /// Days to wait after a successful recall on each rung, bottom first.
   static const List<int> intervals = [1, 3, 7, 14, 30, 60, 120];
@@ -122,6 +148,35 @@ class MemoryVerse {
   /// Times it was missed while the reader was sure of it.
   final int confidentMisses;
 
+  /// Days until the chance of recalling the verse falls to nine in ten,
+  /// or null for a verse that has not yet been recalled and so is due
+  /// by the day it was last set.
+  final double? stability;
+
+  /// How hard the verse has proved, 0 easy to 1 hard.
+  final double difficulty;
+
+  /// The reader's own word for what the verse is about, their hook for
+  /// it; empty until given.
+  final String hook;
+
+  /// The chance of recalling the verse at [now], from its stability and
+  /// how long since it was last recalled: nine in ten at one stability's
+  /// worth of days, and falling slowly after.
+  double retrievability(DateTime now) {
+    final s = stability;
+    if (s == null) return 1;
+    final since = now.difference(_lastRecall).inSeconds / 86400;
+    if (since <= 0) return 1;
+    return 1 / (1 + since / (9 * s));
+  }
+
+  /// The day the verse was last recalled: [due] less the wait that the
+  /// stability set.
+  DateTime get _lastRecall => stability == null
+      ? due
+      : due.subtract(Duration(days: stability!.round().clamp(1, 1 << 20)));
+
   String get key => reference.encode();
 
   MemoryStage get stage => firstRecall != null || recalled > 0
@@ -133,7 +188,16 @@ class MemoryVerse {
   /// Whether the next practice is the first recall after learning.
   bool get awaitsFirstRecall => stage == MemoryStage.introduced;
 
-  bool get isLearnt => rung >= learntRung;
+  bool get isLearnt =>
+      rung >= learntRung || (stability ?? 0) >= learntStability;
+
+  /// Days the verse waits after its next recall, as it stands: what the
+  /// screen says comes next.
+  int get nextWaitDays => _waitAfterSuccess(
+    retrievability: 1,
+    slow: false,
+    personal: 1,
+  ).round().clamp(1, 1 << 20);
 
   bool isDueOn(DateTime today) => !due.isAfter(LocalDate.only(today));
 
@@ -187,21 +251,76 @@ class MemoryVerse {
       firstRecall != null &&
       at.difference(introduced!).inDays >= laterRecallDays;
 
-  /// The verse after a practice: up a rung and due after that rung's
-  /// interval when it was recalled, back to the bottom and due today when
-  /// it was not.
-  MemoryVerse reviewed({required bool remembered, required DateTime today}) {
+  /// How many days of stability a recall now would give: the stability
+  /// grown by a factor that is larger the easier the verse, larger again
+  /// when the verse was recalled late, with the chance of recall low
+  /// (the harder retrieval is the better one), smaller when the answer
+  /// came slowly, and scaled by how well this reader keeps things.
+  double _waitAfterSuccess({
+    required double retrievability,
+    required bool slow,
+    required double personal,
+  }) {
+    final current = stability ?? _ladderStability;
+    var growth = 2.2 * (1.3 - difficulty) * personal;
+    if (retrievability < 0.7) growth *= 1.2;
+    if (slow) growth *= 0.7;
+    if (growth < 1.1) growth = 1.1;
+    final grown = stability == null ? current : current * growth;
+    return grown.clamp(0.5, maxStability);
+  }
+
+  /// The stability the old ladder gave a verse on its rung: what a verse
+  /// from before carries over, and what a first recall is worth.
+  double get _ladderStability => rung <= 0
+      ? 1
+      : intervals[(rung - 1).clamp(0, intervals.length - 1)].toDouble();
+
+  /// The verse after a practice. Recalled, it climbs a rung, grows more
+  /// stable and is due when its chance of recall will have fallen to the
+  /// target; missed, it drops to the bottom, loses most of its stability,
+  /// is marked harder and is due today. [seconds] and [words] say how
+  /// long the answer took, and [personal] how well this reader keeps
+  /// verses, 1 being the common run.
+  MemoryVerse reviewed({
+    required bool remembered,
+    required DateTime today,
+    double? seconds,
+    int? words,
+    double personal = 1,
+  }) {
     final day = LocalDate.only(today);
     if (!remembered) {
-      return copyWith(rung: 0, due: day);
+      return copyWith(
+        rung: 0,
+        due: day,
+        stability: stability == null
+            ? null
+            : (stability! * 0.25).clamp(0.5, 1e9),
+        difficulty: (difficulty + 0.15).clamp(0.05, 0.9),
+      );
     }
-    final wait = intervals[rung.clamp(0, intervals.length - 1)];
+    final slow =
+        seconds != null &&
+        words != null &&
+        words > 0 &&
+        seconds / words > slowSecondsPerWord;
+    final grown = _waitAfterSuccess(
+      retrievability: retrievability(today),
+      slow: slow,
+      personal: personal,
+    );
+    final wait = grown.round().clamp(1, 1 << 20);
     return copyWith(
       rung: rung + 1,
       due: day.add(Duration(days: wait)),
       recalled: recalled + 1,
+      stability: grown,
+      difficulty: (difficulty - 0.02).clamp(0.05, 0.9),
     );
   }
+
+  MemoryVerse withHook(String hook) => copyWith(hook: hook.trim());
 
   MemoryVerse copyWith({
     DateTime? due,
@@ -213,6 +332,9 @@ class MemoryVerse {
     TrialRecall? firstRecall,
     TrialRecall? laterRecall,
     int? confidentMisses,
+    double? stability,
+    double? difficulty,
+    String? hook,
   }) => MemoryVerse(
     reference: reference,
     added: added,
@@ -226,6 +348,9 @@ class MemoryVerse {
     firstRecall: firstRecall ?? this.firstRecall,
     laterRecall: laterRecall ?? this.laterRecall,
     confidentMisses: confidentMisses ?? this.confidentMisses,
+    stability: stability ?? this.stability,
+    difficulty: difficulty ?? this.difficulty,
+    hook: hook ?? this.hook,
   );
 
   Map<String, Object?> toJson() => {
@@ -243,6 +368,9 @@ class MemoryVerse {
     if (firstRecall != null) 'first': firstRecall!.toJson(),
     if (laterRecall != null) 'later': laterRecall!.toJson(),
     if (confidentMisses > 0) 'sureMisses': confidentMisses,
+    if (stability != null) 's': stability,
+    if (difficulty != defaultDifficulty) 'd': difficulty,
+    if (hook.isNotEmpty) 'hook': hook,
   };
 
   static MemoryVerse? fromJson(Map<String, Object?> json) {
@@ -262,6 +390,9 @@ class MemoryVerse {
     final introduced = json['introduced'];
     final recallAt = json['recallAt'];
     final sureMisses = json['sureMisses'];
+    final stability = json['s'];
+    final difficulty = json['d'];
+    final hook = json['hook'];
     return MemoryVerse(
       reference: Reference(book, chapter, verse),
       added: added,
@@ -286,6 +417,13 @@ class MemoryVerse {
       firstRecall: TrialRecall.fromJson(json['first']),
       laterRecall: TrialRecall.fromJson(json['later']),
       confidentMisses: sureMisses is int && sureMisses > 0 ? sureMisses : 0,
+      stability: stability is num && stability > 0
+          ? stability.toDouble()
+          : null,
+      difficulty: difficulty is num
+          ? difficulty.toDouble().clamp(0.05, 0.9)
+          : defaultDifficulty,
+      hook: hook is String ? hook : '',
     );
   }
 }

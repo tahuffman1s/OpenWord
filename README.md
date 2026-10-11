@@ -93,9 +93,15 @@ no network entitlement.
   *Done — next: Matthew 2*. Fall two days behind and the plan says so once,
   kindly, with *Pick up from today*; it never marks anything read for you.
 - **Learn a verse by heart.** *Memorise* on a verse's sheet puts it on a
-  ladder: it is asked for today, then after a day, three days, a week, a
-  fortnight, a month, two and four — up a rung each time you have it, back
-  to the bottom when you do not. New verses are timed against sleep,
+  ladder: it is asked for today, and then each time you have it the wait
+  grows — a day, two, five, twelve, a month, two, five, up to a year —
+  timed so that it comes round when your chance of recalling it has
+  fallen to nine in ten, by a model of memory that learns how long you,
+  in particular, keep a verse; a miss drops it to the bottom and marks it
+  harder. A verse is met before it is built: where it sits, the words,
+  and a word of your own for what it is about, which is the cue given
+  when it is asked for bare. A long verse is built up a clause at a
+  time, each step rehearsing the last. New verses are timed against sleep,
   since a night's sleep soon after learning helps a memory settle: some
   are learnt in the evening and asked for next morning, some by day and
   asked for hours later, and the app reports which you recall better.
@@ -106,7 +112,8 @@ no network entitlement.
   blanks are filled, then it is put together unseen — heard first, in the
   app's own voice — and then written out, a slip of a letter forgiven. A
   wrong answer drops the verse to the bottom and asks it again before the
-  session ends. The voice runs through it all, as in a language app: the
+  session ends, and a session asks the surest verses first. The voice
+  runs through it all, as in a language app: the
   verse read as it appears, each tile heard as it is tapped, the verse
   read whole once checked, and a button to hear it slowly; a switch turns
   the automatic reading off. Days in a row with learning done make a

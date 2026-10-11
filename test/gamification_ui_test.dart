@@ -9,7 +9,8 @@ import 'package:openword/src/model/quiz.dart';
 import 'package:openword/src/ui/learn_progress_card.dart';
 import 'package:openword/src/ui/widgets/confetti.dart';
 
-import 'memory_ui_test.dart' show arrange, libraryButton, openPractice, reveal;
+import 'memory_ui_test.dart'
+    show arrange, libraryButton, meetVerse, openPractice, reveal;
 import 'quiz_ui_test.dart' show pushQuiz;
 import 'read_aloud_test.dart' show FakeSpeech;
 import 'reader_screen_test.dart' show pumpReader;
@@ -83,7 +84,8 @@ void main() {
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
 
-    // The second: another 10, and the gentle goal of 20 is met.
+    // The second, met first: another 10, and the gentle goal of 20 is met.
+    await meetVerse(tester, hook: 'empty');
     await arrange(tester, 'The earth was formless and empty.');
     await tester.tap(find.widgetWithText(FilledButton, 'Check'));
     await tester.pumpAndSettle();

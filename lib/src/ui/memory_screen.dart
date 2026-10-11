@@ -9,6 +9,7 @@ import '../data/marks.dart';
 import '../data/read_aloud.dart';
 import '../model/achievements.dart';
 import '../model/bible.dart';
+import '../model/local_date.dart';
 import '../model/learn_progress.dart';
 import '../model/sleep_policy.dart';
 import '../model/memory_exercise.dart';
@@ -78,6 +79,25 @@ class _MemoryScreenState extends State<MemoryScreen> {
   MemoryStage _stageBefore = MemoryStage.waiting;
   TrialArm? _armBefore;
 
+  /// Whether the verse is being met before it is built: read over, set
+  /// in its chapter, and given the reader's own word.
+  bool _meeting = false;
+  final TextEditingController _hook = TextEditingController();
+  final Set<Reference> _met = {};
+
+  /// A long verse is built up a clause at a time: the texts of the
+  /// steps, the step under way, and whether the last check of a step
+  /// short of the whole fell short.
+  List<String> _steps = const [];
+  int _step = 0;
+  bool _stepMissed = false;
+
+  /// The whole verse, where [_text] is the step's part of it.
+  String _whole = '';
+
+  /// When the answering began, for how long it took.
+  DateTime? _startedAt;
+
   /// The voice, where there is one.
   LearnVoice? _voice;
   bool get _canListen => _voice?.isAvailable ?? false;
@@ -144,7 +164,34 @@ class _MemoryScreenState extends State<MemoryScreen> {
     _voice?.removeListener(_voiceChanged);
     _voice?.dispose();
     _typed.dispose();
+    _hook.dispose();
     super.dispose();
+  }
+
+  /// The heading the verse falls under in its chapter, or the chapter's
+  /// name: where the verse sits, in a line.
+  String _contextOf(Bible? bible, Reference reference) {
+    final chapter = bible
+        ?.bookByCode(reference.bookCode)
+        ?.chapter(reference.chapter);
+    final fallback = reference.withVerse(null).label;
+    if (chapter == null) return fallback;
+    String? heading;
+    for (final block in chapter.blocks) {
+      if (block.style == BlockStyle.heading) {
+        final text = block.segments
+            .map((s) => Markup.strip(s.text).trim())
+            .where((t) => t.isNotEmpty)
+            .join(' ');
+        if (text.isNotEmpty) heading = text;
+        continue;
+      }
+      if (!block.style.isVerseText) continue;
+      if (block.segments.any((s) => s.verse == reference.verse)) {
+        return heading == null ? fallback : '$heading · $fallback';
+      }
+    }
+    return fallback;
   }
 
   String _textOf(Bible? bible, Reference reference) {
@@ -169,9 +216,25 @@ class _MemoryScreenState extends State<MemoryScreen> {
     final reference = _queue.isEmpty ? null : _queue.first;
     _reference = reference;
     if (reference == null) return;
-    _text = _textOf(bible, reference);
+    _whole = _textOf(bible, reference);
+    _text = _whole;
     final verse = reading.memoryFor(reference);
     _stageBefore = verse?.stage ?? MemoryStage.waiting;
+    // A verse never yet learnt is met first: read, placed, given a word.
+    _meeting =
+        _stageBefore == MemoryStage.waiting &&
+        (verse?.recalled ?? 0) == 0 &&
+        verse?.introduced == null &&
+        _whole.isNotEmpty &&
+        _met.add(reference);
+    _hook.text = verse?.hook ?? '';
+    _steps = _stageBefore == MemoryStage.waiting
+        ? VerseSteps.of(_whole)
+        : [_whole];
+    _step = 0;
+    _stepMissed = false;
+    if (_steps.length > 1) _text = _steps.first;
+    _startedAt = _meeting ? null : DateTime.now();
     _armBefore = verse?.arm;
     _firstRecall = verse?.awaitsFirstRecall ?? false;
     // A verse not yet learnt is copied out; its first recall is asked
@@ -194,7 +257,7 @@ class _MemoryScreenState extends State<MemoryScreen> {
         _canListen &&
         (heard || (autoSpeak && _exercise.showsText))) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _voice?.say(_text);
+        if (mounted) _voice?.say(_meeting ? _whole : _text);
       });
     }
   }
@@ -213,13 +276,31 @@ class _MemoryScreenState extends State<MemoryScreen> {
   /// Says the verse, or stops it if it is being said; slowly when asked.
   void _speak({bool slow = false}) {
     final voice = _voice;
-    if (voice == null || !_canListen || _text.isEmpty) return;
+    if (voice == null || !_canListen || _whole.isEmpty) return;
     if (voice.isSpeaking && !slow) {
       voice.stop();
       return;
     }
-    voice.say(_text, slow: slow);
+    voice.say(_meeting ? _whole : _text, slow: slow);
   }
+
+  /// The verse met: its word kept, and the building begun.
+  void _finishMeeting() {
+    final reference = _reference!;
+    _reading.setMemoryHook(reference, _hook.text);
+    setState(() {
+      _meeting = false;
+      _startedAt = DateTime.now();
+    });
+    if (_autoSpeak) _voice?.say(_text);
+  }
+
+  /// Seconds the answer took, from the exercise's start.
+  double? get _seconds => _startedAt == null
+      ? null
+      : DateTime.now().difference(_startedAt!).inMilliseconds / 1000;
+
+  int get _words => _whole.split(' ').where((w) => w.isNotEmpty).length;
 
   /// A tile tapped is heard, the way a word tile is in a language app.
   void _place(int i) {
@@ -253,6 +334,19 @@ class _MemoryScreenState extends State<MemoryScreen> {
       MemoryExercise.typeOut => TypedVerse.matches(_typed.text, _text),
       _ => VerseTiles.inOrder([for (final i in _placed) _tiles[i]], _text),
     };
+    // A step short of the whole is not the verse: right, the next clause
+    // is added; wrong, the same step is tried again, with nothing lost.
+    if (_step < _steps.length - 1) {
+      HapticFeedback.selectionClick();
+      setState(() {
+        _stepMissed = !right;
+        if (right) _step++;
+        _text = _steps[_step];
+        _placed.clear();
+        _tiles = _shuffled(VerseTiles.of(_text));
+      });
+      return;
+    }
     _settle(right ? _Outcome.right : _Outcome.wrong);
   }
 
@@ -267,7 +361,13 @@ class _MemoryScreenState extends State<MemoryScreen> {
     // A first recall is recorded once the reader has said whether they
     // slept, for the trial; everything else is recorded now.
     if (!_firstRecall) {
-      reading.reviewMemory(reference, remembered: right, sure: sure);
+      reading.reviewMemory(
+        reference,
+        remembered: right,
+        sure: sure,
+        seconds: _seconds,
+        words: _words,
+      );
     }
     _answeredCount++;
     if (right) {
@@ -306,6 +406,8 @@ class _MemoryScreenState extends State<MemoryScreen> {
       remembered: _outcome == _Outcome.right,
       slept: slept,
       sure: _asksConfidence && _confidence == Confidence.sure,
+      seconds: _seconds,
+      words: _words,
     );
     setState(() => _slept = slept);
   }
@@ -341,6 +443,10 @@ class _MemoryScreenState extends State<MemoryScreen> {
       ),
     );
   }
+
+  /// Days until the verse is next due, as it now stands.
+  int _waitDaysFor(MemoryVerse verse) =>
+      verse.due.difference(LocalDate.only(_reading.today)).inDays;
 
   @override
   Widget build(BuildContext context) {
@@ -385,6 +491,21 @@ class _MemoryScreenState extends State<MemoryScreen> {
             )
           : _text.isEmpty
           ? _NoText(reference: reference, onSkip: _skip)
+          : _meeting
+          ? _Meet(
+              key: ValueKey('meet/$_round'),
+              reference: reference,
+              text: _whole,
+              context: _contextOf(
+                AppScope.of(context).library.bible,
+                reference,
+              ),
+              hook: _hook,
+              speaking: _voice?.isSpeaking ?? false,
+              onSpeak: _canListen ? _speak : null,
+              onSpeakSlowly: _canListen ? () => _speak(slow: true) : null,
+              onContinue: _finishMeeting,
+            )
           : _Exercise(
               key: ValueKey(_round),
               verse: verse,
@@ -411,6 +532,10 @@ class _MemoryScreenState extends State<MemoryScreen> {
               stageBefore: _stageBefore,
               armBefore: _armBefore,
               policy: _reading.sleepPolicy,
+              step: _step,
+              steps: _steps.length,
+              stepMissed: _stepMissed,
+              waitDays: _waitDaysFor(verse),
               speaking: _voice?.isSpeaking ?? false,
               onSpeak: _canListen ? _speak : null,
               onSpeakSlowly: _canListen ? () => _speak(slow: true) : null,
@@ -454,6 +579,10 @@ class _Exercise extends StatelessWidget {
     required this.stageBefore,
     required this.armBefore,
     required this.policy,
+    required this.step,
+    required this.steps,
+    required this.stepMissed,
+    required this.waitDays,
     required this.speaking,
     required this.onSpeak,
     required this.onSpeakSlowly,
@@ -498,6 +627,14 @@ class _Exercise extends StatelessWidget {
   final MemoryStage stageBefore;
   final TrialArm? armBefore;
   final SleepPolicy policy;
+
+  /// Where a long verse's building has got to, of how many steps.
+  final int step;
+  final int steps;
+  final bool stepMissed;
+
+  /// Days until the verse is next due, once answered.
+  final int waitDays;
   final bool speaking;
   final VoidCallback? onSpeak;
   final VoidCallback? onSpeakSlowly;
@@ -553,13 +690,41 @@ class _Exercise extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        Text(exercise.label, style: theme.textTheme.titleMedium),
         Text(
-          exercise.instruction,
+          steps > 1 ? 'Build it up · ${step + 1} of $steps' : exercise.label,
+          style: theme.textTheme.titleMedium,
+        ),
+        Text(
+          steps > 1
+              ? (step == 0
+                    ? 'The first clause. Tap its tiles in order; the next '
+                          'is added each time.'
+                    : step == steps - 1
+                    ? 'The whole verse now.'
+                    : 'So far, and the next clause.')
+              : exercise.instruction,
           style: theme.textTheme.bodyMedium?.copyWith(
             color: scheme.onSurfaceVariant,
           ),
         ),
+        if (stepMissed)
+          Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              'Not quite; once more.',
+              style: theme.textTheme.bodyMedium?.copyWith(color: scheme.error),
+            ),
+          ),
+        if (!exercise.showsText && verse.hook.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Text(
+            'Your word for it: ${verse.hook}',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: scheme.primary,
+              fontStyle: FontStyle.italic,
+            ),
+          ),
+        ],
         if (hinted && !exercise.showsText) ...[
           const SizedBox(height: 8),
           Text(
@@ -749,10 +914,9 @@ class _Exercise extends StatelessWidget {
         _ => 'Asked again tomorrow.',
       };
     }
-    final rung = verse.rung - 1;
-    final wait =
-        MemoryVerse.intervals[rung.clamp(0, MemoryVerse.intervals.length - 1)];
-    return wait == 1 ? 'Asked again tomorrow.' : 'Asked again in $wait days.';
+    return waitDays <= 1
+        ? 'Asked again tomorrow.'
+        : 'Asked again in $waitDays days.';
   }
 
   static String _standing(MemoryVerse verse, int remaining) {
@@ -760,7 +924,7 @@ class _Exercise extends StatelessWidget {
         ? 'Learnt'
         : verse.rung == 0
         ? 'New'
-        : 'Rung ${verse.rung} of ${MemoryVerse.intervals.length}';
+        : 'Rung ${verse.rung}';
     final times = switch (verse.recalled) {
       0 => 'not yet recalled',
       1 => 'recalled once',
@@ -1045,6 +1209,106 @@ class _Verdict extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Meeting a verse before it is built: read over, in the voice where
+/// there is one; set in its chapter; and given the reader's own word for
+/// what it is about, which is theirs to keep and is shown back whenever
+/// the verse is asked for bare. Meaning first: a verse understood is a
+/// verse that stays.
+class _Meet extends StatelessWidget {
+  const _Meet({
+    super.key,
+    required this.reference,
+    required this.text,
+    required this.context,
+    required this.hook,
+    required this.speaking,
+    required this.onSpeak,
+    required this.onSpeakSlowly,
+    required this.onContinue,
+  });
+
+  final Reference reference;
+  final String text;
+
+  /// Where the verse sits: its heading and chapter.
+  final String context;
+  final TextEditingController hook;
+  final bool speaking;
+  final VoidCallback? onSpeak;
+  final VoidCallback? onSpeakSlowly;
+  final VoidCallback onContinue;
+
+  @override
+  Widget build(BuildContext buildContext) {
+    final theme = Theme.of(buildContext);
+    final scheme = theme.colorScheme;
+    final settings = AppScope.of(buildContext).settings;
+    final scripture = ScriptureStyle.of(buildContext, settings).body;
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(reference.label, style: theme.textTheme.headlineSmall),
+                  const SizedBox(height: 4),
+                  Text(
+                    context,
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: scheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (onSpeak != null)
+              SpeakButtons(
+                speaking: speaking,
+                onSpeak: onSpeak!,
+                onSpeakSlowly: onSpeakSlowly!,
+              ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Text('Meet the verse', style: theme.textTheme.titleMedium),
+        Text(
+          'Read it over, aloud if you can. Then say in a word what it is '
+          'about: that word is yours, and it is what you will be given '
+          'when the verse is asked for from memory.',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: scheme.onSurfaceVariant,
+          ),
+        ),
+        const SizedBox(height: 16),
+        _Card(child: Text(text, style: scripture)),
+        const SizedBox(height: 16),
+        TextField(
+          key: const Key('hook'),
+          controller: hook,
+          textCapitalization: TextCapitalization.none,
+          maxLength: 24,
+          decoration: const InputDecoration(
+            labelText: 'In a word, what is it about?',
+            hintText: 'light, trust, rest…',
+            border: OutlineInputBorder(),
+            counterText: '',
+          ),
+          onSubmitted: (_) => onContinue(),
+        ),
+        const SizedBox(height: 16),
+        FilledButton.icon(
+          onPressed: onContinue,
+          icon: const Icon(Icons.arrow_forward_rounded),
+          label: const Text('Build it'),
+        ),
+      ],
     );
   }
 }

@@ -223,3 +223,36 @@ abstract final class TypedVerse {
     return previous[b.length];
   }
 }
+
+/// The clauses a long verse is built from, cumulatively: the first, then
+/// the first two, and so on to the whole, so that each step rehearses
+/// what came before it. A short verse is one step.
+class VerseSteps {
+  const VerseSteps._();
+
+  /// Words from which a verse is built in steps.
+  static const int minWords = 14;
+
+  static List<String> of(String text) {
+    final words = text.split(' ').where((w) => w.isNotEmpty).toList();
+    if (words.length < minWords) return [text];
+    final parts = <String>[];
+    final run = <String>[];
+    for (final word in words) {
+      run.add(word);
+      if (RegExp(r'[,;:.!?]["”’]?$').hasMatch(word) && run.length >= 3) {
+        parts.add(run.join(' '));
+        run.clear();
+      }
+    }
+    if (run.isNotEmpty) {
+      if (run.length < 3 && parts.isNotEmpty) {
+        parts[parts.length - 1] = '${parts.last} ${run.join(' ')}';
+      } else {
+        parts.add(run.join(' '));
+      }
+    }
+    if (parts.length < 3) return [text];
+    return [for (var k = 1; k <= parts.length; k++) parts.take(k).join(' ')];
+  }
+}

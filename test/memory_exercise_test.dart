@@ -4,6 +4,41 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:openword/src/model/memory_exercise.dart';
 
 void main() {
+  group('steps', () {
+    const john =
+        'For God so loved the world, that he gave his only Son, that whoever '
+        'believes in him should not perish, but have eternal life.';
+
+    test('a long verse is built clause by clause, each on the last', () {
+      final steps = VerseSteps.of(john);
+      expect(steps, [
+        'For God so loved the world,',
+        'For God so loved the world, that he gave his only Son,',
+        'For God so loved the world, that he gave his only Son, that '
+            'whoever believes in him should not perish,',
+        john,
+      ]);
+    });
+
+    test('a short verse, or one without clauses, is one step', () {
+      expect(VerseSteps.of('God said, "Let there be light."'), [
+        'God said, "Let there be light."',
+      ]);
+      const run =
+          'one two three four five six seven eight nine ten eleven twelve '
+          'thirteen fourteen fifteen.';
+      expect(VerseSteps.of(run), [run]);
+    });
+
+    test('a stray word or two joins the clause before it', () {
+      const text =
+          'The Lord is my shepherd; I shall not want. He makes me lie down '
+          'in green pastures. Amen.';
+      expect(VerseSteps.of(text).last, text);
+      expect(VerseSteps.of(text), hasLength(3));
+    });
+  });
+
   const john =
       'For God so loved the world, that he gave his only born Son, that '
       'whoever believes in him should not perish, but have eternal life.';

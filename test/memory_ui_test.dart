@@ -30,8 +30,13 @@ Future<void> reveal(
   await tester.pumpAndSettle();
 }
 
-/// Opens the library on Learn and practises [verse].
-Future<void> openPractice(WidgetTester tester, Reference verse) async {
+/// Opens the library on Learn and practises [verse]; a verse met for the
+/// first time is passed through its meeting, unless [meet] is false.
+Future<void> openPractice(
+  WidgetTester tester,
+  Reference verse, {
+  bool meet = true,
+}) async {
   await tester.tap(libraryButton());
   await tester.pumpAndSettle();
   await tester.tap(find.text('Learn'));
@@ -40,6 +45,18 @@ Future<void> openPractice(WidgetTester tester, Reference verse) async {
   await tester.tap(find.text(verse.label));
   await tester.pumpAndSettle();
   expect(find.byType(MemoryScreen), findsOneWidget);
+  if (meet) await meetVerse(tester);
+}
+
+/// Passes a verse's meeting, where one is shown, giving it [hook].
+Future<void> meetVerse(WidgetTester tester, {String hook = ''}) async {
+  final build = find.widgetWithText(FilledButton, 'Build it');
+  if (build.evaluate().isEmpty) return;
+  if (hook.isNotEmpty) {
+    await tester.enterText(find.byKey(const Key('hook')), hook);
+  }
+  await tester.tap(build);
+  await tester.pumpAndSettle();
 }
 
 /// Taps a bank tile reading [text] that is not yet used.
@@ -109,6 +126,43 @@ void main() {
     expect(find.text('1 new · 5 questions · about 2 minutes'), findsOneWidget);
     await reveal(tester, find.text('Due today'));
     expect(find.text('Genesis 1:3'), findsOneWidget);
+  });
+
+  testWidgets('a verse is met first, and its word comes back as a hint', (
+    tester,
+  ) async {
+    final harness = await pumpReader(tester);
+    harness.reading.toggleMemorise(verse);
+    await openPractice(tester, verse, meet: false);
+
+    // Meaning first: where it sits, the words, and a word of your own.
+    expect(find.text('Meet the verse'), findsOneWidget);
+    expect(find.text('The Creation · Genesis 1'), findsOneWidget);
+    expect(find.text(text), findsOneWidget);
+    expect(find.text('Put it together'), findsNothing);
+    await meetVerse(tester, hook: 'light');
+    expect(find.text('Put it together'), findsOneWidget);
+    expect(harness.reading.memoryFor(verse)!.hook, 'light');
+    // Shown, the word is not needed.
+    expect(find.textContaining('Your word for it'), findsNothing);
+    await arrange(tester, text);
+    await tester.tap(find.widgetWithText(FilledButton, 'Check'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nicely done.'), findsOneWidget);
+    await tester.tap(find.text('Continue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+
+    // Asked bare, the word is the cue; met once, it is not met again.
+    harness.reading.reviewMemory(verse, remembered: true);
+    harness.reading.reviewMemory(verse, remembered: true);
+    await reveal(tester, find.text(verse.label));
+    await tester.tap(find.text(verse.label));
+    await tester.pumpAndSettle();
+    expect(find.text('Meet the verse'), findsNothing);
+    expect(find.text('From memory'), findsOneWidget);
+    expect(find.text('Your word for it: light'), findsOneWidget);
   });
 
   testWidgets('a new verse is put together from tiles, and climbs', (
@@ -278,7 +332,7 @@ void main() {
     await tester.tap(find.widgetWithText(FilledButton, 'Check'));
     await tester.pumpAndSettle();
     expect(find.text('Nicely done.'), findsOneWidget);
-    expect(find.text('Asked again in 30 days.'), findsOneWidget);
+    expect(find.text('Asked again in 28 days.'), findsOneWidget);
     expect(harness.reading.memoryFor(verse)!.rung, 5);
     await tester.tap(find.text('Continue'));
     await tester.pumpAndSettle();
@@ -352,10 +406,16 @@ void main() {
     createSpeechEngine = () => speech;
     final harness = await pumpReader(tester);
     harness.reading.toggleMemorise(verse);
-    await openPractice(tester, verse);
-    expect(find.text('Put it together'), findsOneWidget);
+    await openPractice(tester, verse, meet: false);
+    // Met: read out as it is shown; built: read out again.
+    expect(find.text('Meet the verse'), findsOneWidget);
     expect(speech.said, hasLength(1));
     expect(speech.said.single, contains('Let there be light'));
+    speech.finish();
+    await tester.pumpAndSettle();
+    await meetVerse(tester);
+    expect(find.text('Put it together'), findsOneWidget);
+    expect(speech.said, hasLength(2));
     speech.finish();
     await tester.pumpAndSettle();
 
@@ -365,13 +425,13 @@ void main() {
     expect(harness.settings.learnAutoSpeak, isFalse);
     expect(find.byTooltip('Reading aloud: off'), findsOneWidget);
     await arrange(tester, text);
-    expect(speech.said, hasLength(1));
+    expect(speech.said, hasLength(2));
     await tester.tap(find.widgetWithText(FilledButton, 'Check'));
     await tester.pumpAndSettle();
-    expect(speech.said, hasLength(1));
+    expect(speech.said, hasLength(2));
     await tester.tap(find.byTooltip('Hear the verse'));
     await tester.pumpAndSettle();
-    expect(speech.said, hasLength(2));
+    expect(speech.said, hasLength(3));
     speech.finish();
     await tester.pumpAndSettle();
 

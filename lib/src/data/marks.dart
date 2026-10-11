@@ -494,7 +494,8 @@ class ReadingStore extends ChangeNotifier {
   };
 
   /// Verses offered for practice now: first recalls first, then the
-  /// ladder's due verses, longest waiting first, then the new ones.
+  /// ladder's due verses, the likeliest to be recalled first so that a
+  /// session opens on a success, then the new ones.
   List<MemoryVerse> get memoryDue {
     final now = today;
     int rank(MemoryVerse v) => switch (v.stage) {
@@ -505,7 +506,14 @@ class ReadingStore extends ChangeNotifier {
     final due = _memory.values.where((verse) => isOffered(verse, now)).toList()
       ..sort((a, b) {
         final byRank = rank(a).compareTo(rank(b));
-        return byRank != 0 ? byRank : a.due.compareTo(b.due);
+        if (byRank != 0) return byRank;
+        if (a.stage == MemoryStage.onLadder) {
+          final byChance = b
+              .retrievability(now)
+              .compareTo(a.retrievability(now));
+          if (byChance != 0) return byChance;
+        }
+        return a.due.compareTo(b.due);
       });
     return List.unmodifiable(due);
   }
@@ -564,23 +572,35 @@ class ReadingStore extends ChangeNotifier {
   /// Records a practice. A verse learnt for the first time is set its
   /// first recall by the sleep policy; a first recall is recorded for
   /// the trial, with whether the reader [slept] since; and from then on
-  /// the verse moves up the ladder when recalled and back to the bottom
-  /// when not. A review six days or more after learning is kept as the
-  /// later recall. A miss made while [sure] is counted.
+  /// the verse grows more stable when recalled and falls back when not.
+  /// [seconds] is how long the answer took, over [words] of verse. A
+  /// review six days or more after learning is kept as the later recall.
+  /// A miss made while [sure] is counted. Each recall also teaches the
+  /// store how well this reader keeps verses, which stretches or
+  /// shortens every wait a little.
   void reviewMemory(
     Reference reference, {
     required bool remembered,
     bool? slept,
     bool sure = false,
+    double? seconds,
+    int? words,
   }) {
     final verse = memoryFor(reference);
     if (verse == null) return;
     final now = today;
+    final personal = _progress.recallFactor;
     var next = switch (verse.stage) {
       // A verse with no timing — added before this, or with it off —
       // climbs the ladder as it always did, with no trial to record.
       MemoryStage.waiting when verse.arm == null || remembered == false =>
-        verse.reviewed(remembered: remembered, today: now),
+        verse.reviewed(
+          remembered: remembered,
+          today: now,
+          seconds: seconds,
+          words: words,
+          personal: personal,
+        ),
       MemoryStage.waiting => verse.introducedAt(
         now,
         _sleep.recallAfter(now, verse.arm),
@@ -593,8 +613,28 @@ class ReadingStore extends ChangeNotifier {
       MemoryStage.onLadder => verse.reviewed(
         remembered: remembered,
         today: now,
+        seconds: seconds,
+        words: words,
+        personal: personal,
       ),
     };
+    // What the answer said about this reader: a recall when the chance
+    // had fallen low says they keep verses better than the schedule
+    // thought; a miss when it was still high says the reverse.
+    if (verse.stage == MemoryStage.onLadder && verse.stability != null) {
+      final chance = verse.retrievability(now);
+      if (remembered && chance < 0.75) {
+        _progress = _progress.copyWith(
+          recallFactor: (personal + 0.03).clamp(0.7, 1.4),
+        );
+        _persistProgress();
+      } else if (!remembered && chance > 0.9) {
+        _progress = _progress.copyWith(
+          recallFactor: (personal - 0.03).clamp(0.7, 1.4),
+        );
+        _persistProgress();
+      }
+    }
     if (next.isLaterRecallAt(now) && verse.stage == MemoryStage.onLadder) {
       next = next.laterRecalled(now, right: remembered);
     }
@@ -602,6 +642,14 @@ class ReadingStore extends ChangeNotifier {
       next = next.copyWith(confidentMisses: next.confidentMisses + 1);
     }
     _memory[verse.key] = next;
+    _persistMemory();
+  }
+
+  /// Keeps the reader's own word for a verse.
+  void setMemoryHook(Reference reference, String hook) {
+    final verse = memoryFor(reference);
+    if (verse == null || verse.hook == hook.trim()) return;
+    _memory[verse.key] = verse.withHook(hook);
     _persistMemory();
   }
 
@@ -734,6 +782,7 @@ class ReadingStore extends ChangeNotifier {
             ),
       },
       confidentMisses: most(mine.confidentMisses, theirs.confidentMisses),
+      recallFactor: mine.recallFactor,
     );
   }
 

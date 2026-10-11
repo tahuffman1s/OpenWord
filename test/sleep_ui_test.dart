@@ -16,7 +16,8 @@ import 'package:openword/src/ui/memory_screen.dart';
 import 'package:openword/src/ui/pretest_card.dart';
 import 'package:openword/src/ui/quiz_screen.dart';
 
-import 'memory_ui_test.dart' show arrange, libraryButton, openPractice, tapTile;
+import 'memory_ui_test.dart'
+    show arrange, libraryButton, meetVerse, openPractice, reveal, tapTile;
 import 'plans_ui_test.dart' show planPrefs;
 import 'read_aloud_test.dart' show FakeSpeech;
 import 'reader_screen_test.dart' show pumpReader;
@@ -98,6 +99,7 @@ void main() {
 
     await tester.tap(find.text('Start'));
     await tester.pumpAndSettle();
+    await meetVerse(tester);
     expect(find.text('Put it together'), findsOneWidget);
     await arrange(tester, text);
     await tester.tap(find.widgetWithText(FilledButton, 'Check'));
@@ -148,7 +150,11 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('Progress'));
     await tester.pumpAndSettle();
+    expect(find.text('Your memory'), findsOneWidget);
+    expect(find.textContaining('about as long as most people'), findsOneWidget);
+    await reveal(tester, find.text('Sleeping on it'));
     expect(find.text('Sleeping on it'), findsOneWidget);
+    await reveal(tester, find.textContaining('Too soon to say'));
     expect(find.textContaining('Too soon to say: 0 of 5'), findsOneWidget);
     harness.reading.setSleepPolicy(const SleepPolicy(mode: SleepMode.off));
     await tester.pumpAndSettle();

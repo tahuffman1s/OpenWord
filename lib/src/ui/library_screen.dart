@@ -88,6 +88,19 @@ class _ProgressTab extends StatelessWidget {
       children: [
         LearnProgressCard(reading: reading),
         Padding(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+          child: Text('Your memory', style: theme.textTheme.titleMedium),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Text(
+            progress.keeping,
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: theme.colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ),
+        Padding(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
           child: Text('Sleeping on it', style: theme.textTheme.titleMedium),
         ),
