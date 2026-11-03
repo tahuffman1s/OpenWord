@@ -5,12 +5,12 @@
 # that comes multi-arch. Nothing here needs Flutter, which matters because
 # Flutter publishes no arm64 Linux SDK — see Dockerfile.source.
 #
-#   docker build -t openword:1.10.0 --build-arg VERSION=v1.10.0 -f deploy/Dockerfile deploy
+#   docker build -t openword:1.30.0 --build-arg VERSION=v1.30.0 -f deploy/Dockerfile deploy
 
 ARG NGINX_VERSION=1.27-alpine
 
 FROM alpine:3.20 AS fetch
-ARG VERSION=v1.10.0
+ARG VERSION=v1.30.0
 ARG REPO=tahuffman1s/OpenWord
 # The published SHA-256 of the zip, if you want the build to refuse a
 # tampered or truncated download. Leave empty to skip the check.

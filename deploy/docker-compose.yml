@@ -1,11 +1,24 @@
 # OpenWord behind a Cloudflare Tunnel.
 #
-#   cp .env.example .env    # put your tunnel token in it
+# The quickest way in is the installer, which writes .env and runs this:
+#
+#   curl -fsSL https://raw.githubusercontent.com/tahuffman1s/OpenWord/main/deploy/install.sh | bash
+#
+# By hand:
+#
+#   cp .env.example .env    # put your tunnel token in it, or leave it empty
 #   docker compose up -d
 #
 # The web container publishes no port. Nothing but cloudflared can reach it,
-# and cloudflared makes only outbound connections, so the Pi needs no port
-# forwarded and no inbound firewall hole at all.
+# and cloudflared makes only outbound connections, so the machine needs no
+# port forwarded and no inbound firewall hole at all.
+#
+# Exactly one of the two cloudflared services runs, chosen by
+# COMPOSE_PROFILES in .env:
+#
+#   tunnel  a named tunnel on your own domain, from TUNNEL_TOKEN
+#   quick   a throwaway https://<words>.trycloudflare.com address that needs
+#           no Cloudflare account; it changes whenever the container restarts
 
 name: openword
 
@@ -20,12 +33,12 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VERSION: ${OPENWORD_VERSION:-v1.10.0}
-    image: openword-web:${OPENWORD_VERSION:-v1.10.0}
+        VERSION: ${OPENWORD_VERSION:-v1.30.0}
+    image: openword-web:${OPENWORD_VERSION:-v1.30.0}
     restart: unless-stopped
     expose:
       - "80"
-    # Uncomment to reach it directly from the Pi while setting things up.
+    # Uncomment to reach it directly from this machine while setting up.
     # ports:
     #   - "127.0.0.1:8080:80"
     networks:
@@ -36,18 +49,21 @@ services:
       timeout: 3s
       start_period: 5s
       retries: 3
-    logging:
+    logging: &logging
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
   cloudflared:
+    profiles: [tunnel]
     # Pin this to a dated tag once you know the one you want; :latest with
     # autoupdate off at least keeps the running binary predictable.
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
+      # Not `:?` — compose interpolates every service, including the one
+      # whose profile is off, and the quick tunnel needs no token.
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
       # Cloudflare's own metrics endpoint, handy for `docker logs`.
       TUNNEL_METRICS: 0.0.0.0:2000
     depends_on:
@@ -55,9 +71,23 @@ services:
         condition: service_healthy
     networks:
       - openword
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+    logging: *logging
+
+  cloudflared-quick:
+    profiles: [quick]
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    # The address is printed in this container's log:
+    #   docker compose logs cloudflared-quick | grep trycloudflare.com
+    command: tunnel --no-autoupdate --url http://web:80
+    environment:
+      TUNNEL_METRICS: 0.0.0.0:2000
+    depends_on:
+      web:
+        condition: service_healthy
+    networks:
+      - openword
+    logging: *logging
 
 networks:
   openword:
