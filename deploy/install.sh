@@ -106,11 +106,26 @@ quick_url() {
     | grep -Eo 'https://[a-z0-9-]+\.trycloudflare\.com' | tail -n 1
 }
 
+# $SUDO is either empty or "sudo", so letting it split is the point.
+# shellcheck disable=SC2086
+dock() { $SUDO docker "$@"; }
+
+# Remove every openword-web image, or with an argument every one but that
+# tag: each update builds a new one and would otherwise leave the old behind.
+remove_images() {
+  local img
+  dock images --format '{{.Repository}}:{{.Tag}}' openword-web 2>/dev/null \
+    | while IFS= read -r img; do
+        [ "$img" = "openword-web:${1:-}" ] || dock rmi "$img" >/dev/null 2>&1 || true
+      done
+}
+
 uninstall() {
   [ -f "$DIR/docker-compose.yml" ] || die "nothing installed in $DIR"
   ensure_docker
   say "Stopping OpenWord and removing its containers and images"
-  compose --profile tunnel --profile quick down --rmi local --remove-orphans || true
+  compose --profile tunnel --profile quick down --rmi all --remove-orphans || true
+  remove_images
   rm -rf "$DIR"
   say "Removed $DIR"
 }
@@ -155,11 +170,12 @@ main() {
       printf '\nPaste a Cloudflare tunnel token to serve OpenWord on your own domain,\n'
       printf 'or press Enter for a free https://<words>.trycloudflare.com address: '
       IFS= read -r token </dev/tty || token=""
-      # People paste the whole `cloudflared ... --token XYZ` line; keep XYZ.
-      token="${token%"${token##*[![:space:]]}"}"
-      token="${token##*[[:space:]]}"
     fi
   fi
+  # People paste the whole `cloudflared service install XYZ` line the
+  # dashboard shows; the token is its last word.
+  token="${token%"${token##*[![:space:]]}"}"
+  token="${token##*[[:space:]]}"
   [ -n "$quick" ] && token=""
 
   local profile service other_profile other_service
@@ -202,6 +218,7 @@ EOF
   say "Building OpenWord $version and starting it (the first build takes a minute)"
   compose pull --quiet "$service" || warn "could not pull the cloudflared image; using what is here"
   compose up -d --build --remove-orphans
+  remove_images "$version"
 
   echo
   if [ "$profile" = "tunnel" ]; then

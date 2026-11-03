@@ -742,8 +742,35 @@ flutter test
 ## Self-hosting the web build
 
 `deploy/` holds an nginx image and a Cloudflare Tunnel, which between them
-put the app on your own domain from a Raspberry Pi with no port forwarded
-and no inbound firewall hole — cloudflared only ever dials out.
+put the app on the internet from a Raspberry Pi or any Linux box with no
+port forwarded and no inbound firewall hole — cloudflared only ever dials
+out. One line sets it all up:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tahuffman1s/OpenWord/main/deploy/install.sh | bash
+```
+
+It installs Docker if the machine has none, builds the latest release into
+`~/openword` and starts it. Asked for a tunnel token, press Enter and it
+prints a free `https://<words>.trycloudflare.com` address that needs no
+Cloudflare account — handy for trying it, but the address changes whenever
+the tunnel restarts. For a fixed address on your own domain, give it a token:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tahuffman1s/OpenWord/main/deploy/install.sh | bash -s -- --token <TOKEN>
+```
+
+The token comes from the Cloudflare dashboard, under Zero Trust → Networks →
+Tunnels → Create a tunnel → Cloudflared: copy the install command it offers
+(the installer keeps only the token from it). Point the tunnel's public
+hostname at `http://web:80`; the containers share a network, and the web
+container publishes no port at all.
+
+Run the same line again to update to the newest release; the token is kept.
+`--quick` switches to a trycloudflare.com address, `--version v1.30.0` pins a
+release, `--dir` installs somewhere else, and `--uninstall` removes the lot.
+
+By hand, the same thing is:
 
 ```bash
 cd deploy
@@ -751,11 +778,9 @@ cp .env.example .env        # put your tunnel token in it
 docker compose up -d
 ```
 
-The token comes from the Cloudflare dashboard, under Zero Trust → Networks →
-Tunnels → Create a tunnel → Cloudflared: copy the value after `--token` in
-the install command it offers. Point the tunnel's public hostname at
-`http://web:80`; the containers share a network, and the web container
-publishes no port at all.
+`COMPOSE_PROFILES` in `.env` picks the tunnel: `tunnel` runs a named tunnel
+from `TUNNEL_TOKEN`, `quick` a trycloudflare.com one, whose address is in
+`docker compose logs cloudflared-quick`.
 
 **The build serves everything itself.** `flutter build web` normally fetches
 CanvasKit — some 7 MB — from `gstatic.com` on every cold load, and takes its
