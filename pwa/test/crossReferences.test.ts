@@ -176,19 +176,21 @@ describe('the asset that ships', () => {
     // John 3:16 is the best-known verse in the book; it has references.
     expect(byKey.get(XrefCodec.keyOf(42, 3, 16))!.passages).toBeGreaterThan(0);
 
-    // Every range points somewhere inside the canon.
+    // Every range points somewhere inside the canon. Checked in one pass and
+    // asserted once: an `expect` per range is tens of thousands of matcher
+    // calls, which is slow enough to time out under a full-suite run.
+    const astray: string[] = [];
     for (const entry of entries.slice(0, 2000)) {
       for (const anchor of entry.anchors) {
         for (const range of anchor.ranges) {
-          expect(range.book).toBeGreaterThanOrEqual(0);
-          expect(range.book).toBeLessThanOrEqual(65);
-          expect(range.chapter).toBeGreaterThan(0);
-          expect(range.verse).toBeGreaterThan(0);
-          expect(range.endVerse).toBeGreaterThanOrEqual(range.verse);
+          if (range.book < 0 || range.book > 65 || range.chapter <= 0 || range.verse <= 0 || range.endVerse < range.verse) {
+            astray.push(`${entry.key}: ${range.book} ${range.chapter}:${range.verse}-${range.endVerse}`);
+          }
         }
       }
     }
-  });
+    expect(astray).toEqual([]);
+  }, 20000);
 
   it('answers Psalm 23:1 through the loader', async () => {
     const xrefs = new CrossReferences(new FsAssetBundle());

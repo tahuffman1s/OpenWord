@@ -13,10 +13,10 @@
 import { tidyBib } from './importTidy';
 import { importFile, type ImportWorkerReply, type ImportWorkerRequest } from './shelf';
 
-const scope = self as unknown as {
+interface WorkerScope {
   onmessage: ((event: MessageEvent<ImportWorkerRequest>) => void) | null;
   postMessage(message: ImportWorkerReply, transfer?: Transferable[]): void;
-};
+}
 
 /** Answers one request. Exported so a test can drive it without a worker. */
 export function answer(request: ImportWorkerRequest): ImportWorkerReply {
@@ -32,10 +32,15 @@ export function answer(request: ImportWorkerRequest): ImportWorkerReply {
   }
 }
 
-scope.onmessage = (event: MessageEvent<ImportWorkerRequest>) => {
-  const reply = answer(event.data);
-  // The file is handed over rather than copied: the worker is done with it.
-  const transfer: Transferable[] =
-    reply.kind !== 'error' && reply.bytes !== null ? [reply.bytes.buffer as ArrayBuffer] : [];
-  scope.postMessage(reply, transfer);
-};
+// Only inside a worker: a test imports `answer` under Node, where there is
+// no `self` to listen on.
+if (typeof self !== 'undefined' && typeof (self as unknown as WorkerScope).postMessage === 'function') {
+  const scope = self as unknown as WorkerScope;
+  scope.onmessage = (event: MessageEvent<ImportWorkerRequest>) => {
+    const reply = answer(event.data);
+    // The file is handed over rather than copied: the worker is done with it.
+    const transfer: Transferable[] =
+      reply.kind !== 'error' && reply.bytes !== null ? [reply.bytes.buffer as ArrayBuffer] : [];
+    scope.postMessage(reply, transfer);
+  };
+}

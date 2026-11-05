@@ -25,7 +25,7 @@ export class Originals {
   private static over(reader: StrongsReader): Originals {
     const own = new Originals();
     own.bundle = null;
-    own.reader = reader;
+    own._reader = reader;
     return own;
   }
 
@@ -84,30 +84,30 @@ export class Originals {
   static readonly isolateAbove = 64 * 1024;
 
   private bundle: AssetBundle | null;
-  private reader: StrongsReader | null = null;
+  private _reader: StrongsReader | null = null;
   private loading: Promise<StrongsReader | null> | null = null;
 
   /** The layer itself, where it has been read. */
-  get strongsReader(): StrongsReader | null {
-    return this.reader;
+  get reader(): StrongsReader | null {
+    return this._reader;
   }
 
   get isLoaded(): boolean {
-    return this.reader !== null;
+    return this._reader !== null;
   }
 
   load(): Promise<StrongsReader | null> {
-    const loaded = this.reader;
+    const loaded = this._reader;
     if (loaded !== null) return Promise.resolve(loaded);
     return (this.loading ??= this.read().then((reader) => {
-      this.reader = reader;
+      this._reader = reader;
       return reader;
     }));
   }
 
   /** The original words of a verse, in their own order. */
   wordsFor(reference: Reference): OriginalWord[] {
-    const reader = this.reader;
+    const reader = this._reader;
     const verse = reference.verse;
     if (reader === null || verse === null) return [];
     const book = canon.indexOf(reference.bookCode);
@@ -125,16 +125,16 @@ export class Originals {
   }
 
   entryFor(number: StrongsNumber): StrongsEntry | null {
-    return this.reader?.entryFor(number) ?? null;
+    return this._reader?.entryFor(number) ?? null;
   }
 
   occurrenceCount(number: StrongsNumber): number {
-    return this.reader?.occurrenceCount(number) ?? 0;
+    return this._reader?.occurrenceCount(number) ?? 0;
   }
 
   /** Every verse a number occurs in, as references. */
   occurrences(number: StrongsNumber): Reference[] {
-    const reader = this.reader;
+    const reader = this._reader;
     if (reader === null) return [];
     const found: Reference[] = [];
     for (const key of reader.occurrences(number)) {
@@ -210,7 +210,7 @@ export class Originals {
 
   private async read(): Promise<StrongsReader | null> {
     const bundle = this.bundle;
-    if (bundle === null) return this.reader;
+    if (bundle === null) return this._reader;
     try {
       const bytes = await bundle.load(Originals.assetPath);
       return decodeOriginals(bytes);
