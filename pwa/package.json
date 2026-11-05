@@ -1,0 +1,40 @@
+{
+  "name": "openword-pwa",
+  "private": true,
+  "version": "2.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "postinstall": "node scripts/copy-ort.mjs",
+    "prebuild": "node scripts/copy-ort.mjs",
+    "tts:smoke": "node scripts/tts-smoke.mjs"
+  },
+  "dependencies": {
+    "@material-design-icons/svg": "^0.14.15",
+    "@material/material-color-utilities": "^0.4.0",
+    "@preact/signals": "^2.11.4",
+    "domhandler": "^5.0.3",
+    "domutils": "^3.2.2",
+    "fflate": "^0.8.3",
+    "htmlparser2": "^10.1.0",
+    "idb": "^8.0.4",
+    "onnxruntime-web": "1.31.1",
+    "phonemizer": "^1.2.1",
+    "preact": "^10.27.0",
+    "workbox-window": "^7.4.1"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "^2.10.6",
+    "@types/node": "^22.0.0",
+    "fake-indexeddb": "^6.2.7",
+    "jsdom": "^26.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^6.4.0",
+    "vite-plugin-pwa": "^1.0.0",
+    "vitest": "^3.2.0"
+  }
+}

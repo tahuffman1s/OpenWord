@@ -1,0 +1,35 @@
+/* App-level styles that are not one component's: the splash, and the
+   reading typeface variables the reader sets from Settings. */
+:root {
+  --ow-reading-font: var(--md-ref-typeface-serif);
+  --ow-reading-scale: 1;
+  --ow-reading-line-height: 1.6;
+}
+
+.ow-splash {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 32px;
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  text-align: center;
+}
+.ow-splash__mark {
+  width: 96px;
+  height: 96px;
+  border-radius: 30px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ow-splash__title {
+  font: var(--md-sys-typescale-headline-small);
+  font-weight: 600;
+}

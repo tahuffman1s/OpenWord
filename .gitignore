@@ -52,3 +52,15 @@ replay_pid*
 
 # The voice, fetched by tool/fetch_voice.dart rather than kept in git
 assets/voice/kitten.tar.gz
+pwa/node_modules/
+pwa/dist/
+pwa/public/assets/
+pwa/public/voice/
+pwa/public/ort/
+pwa/src/ui/m3/iconData.ts
+pwa/.vite/
+pwa/test-results/
+
+# The voice the PWA serves, fetched at build time rather than kept in git
+pwa/public/voice/
+pwa/public/ort/
