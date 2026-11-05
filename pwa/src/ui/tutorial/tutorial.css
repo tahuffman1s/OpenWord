@@ -91,6 +91,7 @@
 
 /* The illustration: one big circle, small ones around it, and a mock
    of the control the card talks about beneath. */
+.ow-tut__art-wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; flex: none; }
 .ow-tut__art {
   position: relative;
   width: 232px;
@@ -221,7 +222,6 @@
     align-items: center;
     gap: 40px;
   }
-  .ow-tut__card-inner > .ow-tut__art { flex: none; }
   .ow-tut__words { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; flex: 1; min-width: 0; }
   .ow-tut__title { font: var(--md-sys-typescale-headline-medium); margin-top: 0; }
   .ow-tut__try { align-items: flex-start; }
