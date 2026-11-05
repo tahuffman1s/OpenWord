@@ -277,7 +277,7 @@ export class WebNeuralVoices extends NeuralVoices {
         if (cache !== null) {
           await cache.put(
             this._url(model, file),
-            new Response(bytes, {
+            new Response(bytes.buffer as ArrayBuffer, {
               headers: {
                 'content-type': file.endsWith('.txt') ? 'text/plain' : 'application/octet-stream',
                 'content-length': String(bytes.byteLength),

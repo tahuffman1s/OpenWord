@@ -5,40 +5,25 @@ import { fileURLToPath } from 'node:url';
 
 // The bundled Scripture, atlas, notes, references and originals are
 // precached so the app is whole offline; the voice (57 MB) is fetched the
-// first time Listen is used and kept in Cache Storage by the app itself.
+// first time Listen is used and kept in Cache Storage by the worker's
+// runtime cache (see src/sw.ts).
 export default defineConfig({
   plugins: [
     preact(),
     VitePWA({
+      // The worker is ours (src/sw.ts): precaching, the runtime caches, the
+      // navigation fallback, push notifications and the update handshake.
+      // The plugin builds it and injects the precache manifest.
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'prompt',
       injectRegister: false,
       manifest: false, // public/manifest.webmanifest is hand-written
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,ttf,bib,gz,json,wasm,webmanifest}'],
         globIgnores: ['voice/**', '**/*.map'],
         maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
-        navigateFallback: '/index.html',
-        navigateFallbackDenylist: [/^\/api\//, /^\/healthz$/],
-        runtimeCaching: [
-          {
-            urlPattern: /\/voice\/.*/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'openword-voice',
-              expiration: { maxEntries: 8 },
-              cacheableResponse: { statuses: [0, 200] },
-              rangeRequests: true,
-            },
-          },
-          {
-            urlPattern: /\/api\/users\/[^/]+\/avatar/,
-            handler: 'StaleWhileRevalidate',
-            options: { cacheName: 'openword-avatars', expiration: { maxEntries: 200, maxAgeSeconds: 30 * 24 * 3600 } },
-          },
-        ],
-        cleanupOutdatedCaches: true,
-        clientsClaim: true,
-        skipWaiting: false,
       },
       includeAssets: ['icons/*.png', 'favicon.png'],
     }),
@@ -51,6 +36,12 @@ export default defineConfig({
     sourcemap: false,
     chunkSizeWarningLimit: 1500,
     assetsInlineLimit: 0,
+    // The voice's test page (scripts/tts-smoke.mjs) is built only when
+    // asked for, so it stays out of the production bundle. In dev Vite
+    // serves it regardless.
+    rollupOptions: process.env.OPENWORD_TTS_HARNESS
+      ? { input: { main: 'index.html', ttsHarness: 'tts-harness.html' } }
+      : undefined,
   },
   server: { port: 5173, host: true },
   test: {

@@ -1,64 +1,141 @@
-# OpenWord behind a Cloudflare Tunnel.
+# OpenWord on a Raspberry Pi (or any 64-bit Docker host).
 #
-#   cp .env.example .env    # put your tunnel token in it
-#   docker compose up -d
+#   cp .env.example .env     # then fill it in, or let install.sh do it
+#   docker compose --profile tunnel up -d --build      # behind Cloudflare
+#   docker compose -f docker-compose.yml -f docker-compose.lan.yml up -d --build
+#                                                       # LAN only, no tunnel
 #
-# The web container publishes no port. Nothing but cloudflared can reach it,
-# and cloudflared makes only outbound connections, so the Pi needs no port
-# forwarded and no inbound firewall hole at all.
+# Four containers: nginx with the app baked in (web), the Go API (api),
+# Postgres (db) and, when the `tunnel` profile is on, cloudflared. Nothing
+# publishes a port by default: the tunnel dials *out* to Cloudflare, so the
+# Pi needs no port forwarded and no inbound firewall hole. The LAN overlay
+# publishes web on ${OPENWORD_PORT:-8080} instead.
+#
+# Memory limits add up to 832 MB, leaving a 2 GB Pi room for the OS, the
+# page cache and the occasional `docker compose build`. Observed at rest:
+# web ~5 MB, api ~20 MB, db ~40 MB, cloudflared ~30 MB.
 
 name: openword
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
 
 services:
   web:
     build:
-      # To build from the working tree instead of a release, point this at
-      # the repository root and swap the dockerfile — Dockerfile.source
-      # copies deploy/nginx.conf, so it needs the wider context:
-      #   context: ..
-      #   dockerfile: deploy/Dockerfile.source
-      context: .
-      dockerfile: Dockerfile
-      args:
-        VERSION: ${OPENWORD_VERSION:-v1.10.0}
-    image: openword-web:${OPENWORD_VERSION:-v1.10.0}
+      context: ..
+      dockerfile: deploy/web.Dockerfile
+    image: openword-web:${OPENWORD_VERSION:-local}
     restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_started
     expose:
       - "80"
-    # Uncomment to reach it directly from the Pi while setting things up.
-    # ports:
-    #   - "127.0.0.1:8080:80"
     networks:
       - openword
+    mem_limit: 64m
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
       interval: 30s
       timeout: 3s
       start_period: 5s
       retries: 3
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+    logging: *logging
+
+  api:
+    build:
+      context: ../server
+      dockerfile: Dockerfile
+    image: openword-api:${OPENWORD_VERSION:-local}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://openword:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/openword?sslmode=disable
+      LISTEN: ":8080"
+      OPENWORD_PUBLIC_URL: ${OPENWORD_PUBLIC_URL:-}
+      OPENWORD_INVITE_CODE: ${OPENWORD_INVITE_CODE:-}
+      OPENWORD_ADMIN_EMAIL: ${OPENWORD_ADMIN_EMAIL:-}
+      TRUST_PROXY: "1"
+      LOG_LEVEL: ${OPENWORD_LOG_LEVEL:-info}
+    expose:
+      - "8080"
+    networks:
+      - openword
+    mem_limit: 256m
+    healthcheck:
+      # /healthz pings the database, so "healthy" means the whole path works.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging: *logging
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    # Tuned for a 2 GB Pi on an SD card or USB SSD: small shared buffers
+    # (the OS page cache does the rest), few connections (the API keeps a
+    # small pool), cheap random reads (flash, not spinning rust), and a log
+    # line for any statement that takes longer than half a second.
+    command: >
+      postgres
+      -c shared_buffers=64MB
+      -c effective_cache_size=256MB
+      -c work_mem=4MB
+      -c maintenance_work_mem=32MB
+      -c max_connections=20
+      -c wal_buffers=4MB
+      -c checkpoint_completion_target=0.9
+      -c random_page_cost=1.1
+      -c log_min_duration_statement=500ms
+    environment:
+      POSTGRES_USER: openword
+      POSTGRES_DB: openword
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_INITDB_ARGS: --data-checksums
+    volumes:
+      - openword-db:/var/lib/postgresql/data
+    networks:
+      - openword
+    mem_limit: 384m
+    shm_size: 128m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U openword -d openword"]
+      interval: 10s
+      timeout: 5s
+      start_period: 10s
+      retries: 6
+    logging: *logging
 
   cloudflared:
-    # Pin this to a dated tag once you know the one you want; :latest with
-    # autoupdate off at least keeps the running binary predictable.
-    image: cloudflare/cloudflared:latest
+    profiles: ["tunnel"]
+    # Multi-arch (amd64 + arm64) release tag; bump deliberately. With
+    # --no-autoupdate the running binary is whatever this tag says.
+    image: cloudflare/cloudflared:2026.10.7
     restart: unless-stopped
     command: tunnel --no-autoupdate run
     environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN in .env}
-      # Cloudflare's own metrics endpoint, handy for `docker logs`.
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+      # Cloudflare's own metrics endpoint, handy for `docker compose logs`.
       TUNNEL_METRICS: 0.0.0.0:2000
     depends_on:
       web:
         condition: service_healthy
     networks:
       - openword
-    logging:
-      driver: json-file
-      options: { max-size: "10m", max-file: "3" }
+    mem_limit: 128m
+    logging: *logging
 
 networks:
   openword:
     driver: bridge
+
+volumes:
+  openword-db:

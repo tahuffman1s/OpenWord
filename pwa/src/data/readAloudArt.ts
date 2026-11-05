@@ -158,7 +158,7 @@ export async function chapterArtFile(chapter: Reference, options: { colours: Art
       chapter: `${chapter.chapter}`,
       colours,
     });
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+    const url = URL.createObjectURL(new Blob([bytes.buffer as ArrayBuffer], { type: 'image/png' }));
     covers.set(key, url);
     return url;
   } catch (error) {

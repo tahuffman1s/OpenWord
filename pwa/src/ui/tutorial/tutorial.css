@@ -1,0 +1,313 @@
+/* The walkthrough (tutorial.tsx) and the install guide (installGuide.tsx).
+   Colours only through the --md-sys-color-* roles. */
+
+/* ---- tinted circles the illustrations are built from ---- */
+.ow-tut__blob {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  flex: none;
+}
+.ow-tut__blob--primary { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); }
+.ow-tut__blob--secondary { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.ow-tut__blob--tertiary { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }
+.ow-tut__blob--error { background: var(--md-sys-color-error-container); color: var(--md-sys-color-on-error-container); }
+.ow-tut__blob--surface { background: var(--md-sys-color-surface-container-highest); color: var(--md-sys-color-on-surface-variant); }
+
+/* ---- the walkthrough ---- */
+.ow-tut {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  outline: none;
+}
+.ow-tut__top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 0 24px;
+  min-height: 48px;
+  flex: none;
+}
+.ow-tut__brand {
+  font: var(--md-sys-typescale-title-medium);
+  color: var(--md-sys-color-primary);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.ow-tut__viewport {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+  touch-action: pan-y;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.ow-tut__track {
+  display: flex;
+  height: 100%;
+  width: 100%;
+  transition: transform 320ms var(--md-sys-motion-emphasized);
+  will-change: transform;
+}
+.ow-tut__track--dragging { transition: none; }
+.ow-tut__card {
+  flex: none;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 8px 24px 16px;
+  display: flex;
+  flex-direction: column;
+}
+.ow-tut__card-inner {
+  margin: auto;
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+.ow-tut__title {
+  font: var(--md-sys-typescale-headline-small);
+  margin: 16px 0 0;
+  color: var(--md-sys-color-on-surface);
+}
+.ow-tut__text {
+  font: var(--md-sys-typescale-body-large);
+  color: var(--md-sys-color-on-surface-variant);
+  margin: 0;
+  text-wrap: pretty;
+}
+.ow-tut__try { margin-top: 12px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.ow-tut__try-hint { font: var(--md-sys-typescale-body-small); color: var(--md-sys-color-on-surface-variant); }
+
+/* The illustration: one big circle, small ones around it, and a mock
+   of the control the card talks about beneath. */
+.ow-tut__art {
+  position: relative;
+  width: 232px;
+  height: 232px;
+  flex: none;
+  margin-top: 8px;
+}
+.ow-tut__art-main {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 136px;
+  height: 136px;
+  transform: translate(-50%, -50%);
+}
+.ow-tut__art-main .m3-icon { width: 64px; height: 64px; }
+.ow-tut__sat {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  box-shadow: 0 0 0 4px var(--md-sys-color-surface-container-low);
+}
+.ow-tut__sat .m3-icon { width: 28px; height: 28px; }
+.ow-tut__sat--tl { left: 14px; top: 18px; }
+.ow-tut__sat--tr { right: 14px; top: 18px; }
+.ow-tut__sat--bl { left: 14px; bottom: 18px; }
+.ow-tut__sat--br { right: 14px; bottom: 18px; }
+.ow-tut__sat--l { left: 0; top: 50%; transform: translateY(-50%); }
+.ow-tut__sat--r { right: 0; top: 50%; transform: translateY(-50%); }
+.ow-tut__sat--t { left: 50%; top: 0; transform: translateX(-50%); }
+.ow-tut__sat--b { left: 50%; bottom: 0; transform: translateX(-50%); }
+
+/* Little mock-ups: a go-to field, a player bar, word tiles… */
+.ow-tut__mock {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-label-large);
+  box-shadow: var(--md-sys-elevation-1);
+  white-space: nowrap;
+}
+.ow-tut__mock .m3-icon { width: 20px; height: 20px; color: var(--md-sys-color-on-surface-variant); }
+.ow-tut__mock--field { font: var(--md-sys-typescale-body-large); font-family: var(--md-ref-typeface-serif); }
+.ow-tut__mock--field .ow-tut__caret { width: 2px; height: 20px; background: var(--md-sys-color-primary); margin-left: -4px; }
+.ow-tut__mock--player { gap: 4px; padding: 0 8px; }
+.ow-tut__mock--player .ow-tut__play {
+  width: 36px; height: 36px; border-radius: 50%;
+  background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary);
+  display: flex; align-items: center; justify-content: center;
+}
+.ow-tut__mock--player .ow-tut__play .m3-icon { color: inherit; }
+.ow-tut__mock--player .ow-tut__verse { font: var(--md-sys-typescale-label-medium); color: var(--md-sys-color-on-surface-variant); padding: 0 8px; }
+.ow-tut__wave { display: inline-flex; align-items: center; gap: 3px; height: 24px; padding: 0 4px; }
+.ow-tut__wave i { display: block; width: 3px; border-radius: 2px; background: var(--md-sys-color-primary); height: var(--h, 12px); }
+.ow-tut__tiles { display: flex; gap: 6px; }
+.ow-tut__tile {
+  padding: 6px 12px;
+  border-radius: var(--md-sys-shape-corner-small);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-label-large);
+  font-family: var(--md-ref-typeface-serif);
+  box-shadow: var(--md-sys-elevation-1);
+}
+.ow-tut__tile--placed { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+.ow-tut__tile--blank { background: transparent; box-shadow: none; border: 2px dashed var(--md-sys-color-outline); color: transparent; min-width: 44px; }
+.ow-tut__flame {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 12px 4px 8px; border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container);
+  font: var(--md-sys-typescale-label-large);
+}
+.ow-tut__flame .m3-icon { width: 20px; height: 20px; }
+.ow-tut__avatars { display: inline-flex; align-items: center; }
+.ow-tut__avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font: var(--md-sys-typescale-title-medium);
+  box-shadow: 0 0 0 3px var(--md-sys-color-surface-container-low);
+}
+.ow-tut__avatar + .ow-tut__avatar { margin-left: -10px; }
+.ow-tut__appicon {
+  width: 56px; height: 56px; border-radius: 14px; overflow: hidden;
+  box-shadow: var(--md-sys-elevation-2);
+  background: var(--md-sys-color-primary);
+}
+.ow-tut__appicon img { display: block; width: 100%; height: 100%; }
+.ow-tut__mock-row { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; min-height: 48px; }
+.ow-tut__dock {
+  display: inline-flex; align-items: flex-end; gap: 10px; padding: 10px 14px;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-highest);
+}
+.ow-tut__dock-app { width: 40px; height: 40px; border-radius: 10px; background: var(--md-sys-color-outline-variant); }
+.ow-tut__dock .ow-tut__appicon { width: 40px; height: 40px; border-radius: 10px; }
+
+/* ---- bottom: page dots, Back, Next ---- */
+.ow-tut__bottom {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px calc(12px + var(--ow-safe-bottom));
+  flex: none;
+}
+.ow-tut__dots { display: flex; gap: 6px; align-items: center; margin: 0 auto; }
+.ow-tut__dot {
+  width: 8px; height: 8px; border-radius: 4px;
+  background: var(--md-sys-color-outline-variant);
+  transition: width 200ms var(--md-sys-motion-standard), background-color 200ms;
+  padding: 0;
+}
+.ow-tut__dot--on { width: 24px; background: var(--md-sys-color-primary); }
+.ow-tut__bottom-side { flex: 1; display: flex; }
+.ow-tut__bottom-side--end { justify-content: flex-end; }
+
+/* Wide windows: the art beside the words. */
+@media (min-width: 840px) {
+  .ow-tut__card { padding: 24px 48px; }
+  .ow-tut__card-inner {
+    max-width: 760px;
+    flex-direction: row;
+    text-align: start;
+    align-items: center;
+    gap: 40px;
+  }
+  .ow-tut__card-inner > .ow-tut__art { flex: none; }
+  .ow-tut__words { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; flex: 1; min-width: 0; }
+  .ow-tut__title { font: var(--md-sys-typescale-headline-medium); margin-top: 0; }
+  .ow-tut__try { align-items: flex-start; }
+  .ow-tut__art { width: 280px; height: 280px; }
+  .ow-tut__art-main { width: 160px; height: 160px; }
+  .ow-tut__art-main .m3-icon { width: 76px; height: 76px; }
+  .ow-tut__sat { width: 64px; height: 64px; }
+  .ow-tut__sat .m3-icon { width: 32px; height: 32px; }
+  .ow-tut__sat--tl { left: 20px; top: 24px; }
+  .ow-tut__sat--tr { right: 20px; top: 24px; }
+  .ow-tut__sat--bl { left: 20px; bottom: 24px; }
+  .ow-tut__sat--br { right: 20px; bottom: 24px; }
+  .ow-tut__bottom { padding: 12px 24px 20px; }
+}
+.ow-tut__words { display: contents; }
+@media (min-width: 840px) {
+  .ow-tut__words { display: flex; }
+}
+
+/* Short screens: smaller art so the words fit. */
+@media (max-height: 640px) and (max-width: 839px) {
+  .ow-tut__art { width: 168px; height: 168px; }
+  .ow-tut__art-main { width: 104px; height: 104px; }
+  .ow-tut__art-main .m3-icon { width: 48px; height: 48px; }
+  .ow-tut__sat { width: 44px; height: 44px; }
+  .ow-tut__sat .m3-icon { width: 22px; height: 22px; }
+  .ow-tut__sat--tl, .ow-tut__sat--bl { left: 4px; }
+  .ow-tut__sat--tr, .ow-tut__sat--br { right: 4px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ow-tut__track { transition: none; }
+  .ow-tut__dot { transition: none; }
+}
+
+/* ---- the install guide ---- */
+.ow-install { padding: 0 24px 8px; display: flex; flex-direction: column; gap: 16px; }
+.ow-install__hero { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; }
+.ow-install__blob { width: 80px; height: 80px; margin-bottom: 8px; }
+.ow-install__title { margin: 0; }
+.ow-install__prompt { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; }
+.ow-install__prompt .m3-button--filled { min-height: 48px; padding: 0 32px; }
+.ow-install__outcome { display: inline-flex; align-items: center; gap: 8px; color: var(--md-sys-color-primary); }
+.ow-install__intro { margin: 0; color: var(--md-sys-color-on-surface-variant); }
+.ow-install__steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.ow-install__step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container);
+}
+.ow-install__step-n {
+  width: 24px; height: 24px; border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary);
+  font: var(--md-sys-typescale-label-medium);
+}
+.ow-install__step-icon {
+  width: 40px; height: 40px; border-radius: 50%; flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container);
+}
+.ow-install__step-text { flex: 1; min-width: 0; color: var(--md-sys-color-on-surface); }
+.ow-install__menu {
+  display: inline-block;
+  padding: 0 6px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-label-large);
+  white-space: nowrap;
+  line-height: 20px;
+}
+.ow-install__gets { display: flex; flex-direction: column; gap: 8px; }
+.ow-install__list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr; gap: 8px; }
+.ow-install__list li { display: flex; align-items: center; gap: 10px; font: var(--md-sys-typescale-body-medium); color: var(--md-sys-color-on-surface-variant); }
+.ow-install__list .m3-icon { color: var(--md-sys-color-primary); }
+.ow-install__note {
+  display: flex; gap: 8px; align-items: flex-start;
+  padding: 10px 12px; border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container);
+}
+.ow-install__note .m3-icon { flex: none; margin-top: 1px; }
+.ow-install__actions { display: flex; justify-content: flex-end; }
+@media (min-width: 600px) {
+  .ow-install__list { grid-template-columns: 1fr 1fr; }
+}

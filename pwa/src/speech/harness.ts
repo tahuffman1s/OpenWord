@@ -14,6 +14,7 @@ interface HarnessResult {
   loadMs: number;
   phonemizerOnWorker: boolean;
   deviceVoices: number;
+  engine?: EngineResult;
   error?: string;
 }
 
@@ -100,7 +101,63 @@ async function run(): Promise<HarnessResult> {
     say(`no playback here: ${error}`);
   }
   send({ type: 'close' });
+
+  // And the whole engine over it: the download into Cache Storage, the
+  // worker started by the engine, two verses played through Web Audio,
+  // paused and resumed, with the verse starts reported as they are heard.
+  try {
+    result.engine = await Promise.race([runEngine(), timeout<EngineResult>(120_000, 'the engine took too long')]);
+    say(JSON.stringify(result.engine));
+  } catch (error) {
+    result.engine = { said: false, progress: [], ms: 0, error: String(error) };
+    say(`engine FAILED: ${error}`);
+  }
   return result;
+}
+
+interface EngineResult {
+  said: boolean;
+  progress: number[];
+  ms: number;
+  error?: string;
+}
+
+function timeout<T>(ms: number, what: string): Promise<T> {
+  return new Promise((_, reject) => setTimeout(() => reject(new Error(what)), ms));
+}
+
+async function runEngine(): Promise<EngineResult> {
+  const [{ WebNeuralVoices }, { speechAudioContext }] = await Promise.all([
+    import('../data/neuralVoices'),
+    import('./audio'),
+  ]);
+  const context = speechAudioContext();
+  await context.resume().catch(() => {});
+  say(`audio context: ${context.state} at ${context.sampleRate} Hz`);
+  const voices = new WebNeuralVoices();
+  voices.addListener(() => {
+    const p = voices.progress;
+    if (p !== null) say(`getting the voice… ${p.total > 0 ? Math.round((100 * p.received) / p.total) : 0}%`);
+  });
+  const engine = voices.engine();
+  const started = performance.now();
+  await engine.configure({ language: 'en', rate: 1, voice: 'openword:kitten:1' });
+  say(`engine configured in ${(performance.now() - started).toFixed(0)} ms`);
+  const first = 'In the beginning God created the heavens and the earth.';
+  const second = 'The earth was formless and empty, and darkness was on the surface of the deep.';
+  const text = `${first} ${second}`;
+  const progress: number[] = [];
+  const speaking = performance.now();
+  // A pause of a moment, part way in, to show it holds and goes on.
+  setTimeout(async () => {
+    await engine.pause();
+    setTimeout(() => void engine.resume(), 300);
+  }, 1500);
+  const said = await engine.speak(text, {
+    breaks: [0, first.length + 1],
+    onProgress: (offset) => progress.push(offset),
+  });
+  return { said, progress, ms: performance.now() - speaking };
 }
 
 run().then(

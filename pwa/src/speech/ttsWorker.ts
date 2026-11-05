@@ -69,7 +69,7 @@ export type WorkerRequest = LoadMessage | SpeakMessage | CancelMessage | CloseMe
 export type WorkerReply =
   | { type: 'ready'; phonemizer: boolean }
   | { type: 'error'; id?: number; message: string }
-  | { type: 'audio'; id: number; samples: Float32Array; sampleRate: number; ms: number }
+  | { type: 'audio'; id: number; samples: Float32Array<ArrayBuffer>; sampleRate: number; ms: number }
   | { type: 'cancelled'; id: number };
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
@@ -127,7 +127,12 @@ async function synthesise(phonemes: string, sid: number, speed: number): Promise
   if (!session || !tokens || !voices) throw new Error('the voice is not loaded');
   const ids = tokenIds(phonemes, tokens);
   if (!hasContent(ids)) return new Float32Array(0);
-  const trimmed = ids.length > kittenMeta.maxTokenLen ? ids.slice(0, kittenMeta.maxTokenLen) : ids;
+  // A piece is a sentence or less, far short of the model's limit; cut
+  // to it all the same, keeping the wrapping, rather than hand it more.
+  const trimmed =
+    ids.length > kittenMeta.maxTokenLen
+      ? [...ids.slice(0, kittenMeta.maxTokenLen - 2), kittenMeta.endId, kittenMeta.padId]
+      : ids;
   const row = styleRow(trimmed);
   const feeds: Record<string, ort.Tensor> = {
     input_ids: new ort.Tensor('int64', BigInt64Array.from(trimmed.map((id) => BigInt(id))), [1, trimmed.length]),
@@ -154,7 +159,7 @@ async function serve(): Promise<void> {
         const made = await synthesise(phonemes, request.sid, request.speed);
         // A copy of its own, so the buffer can leave with it.
         const whole = made.byteOffset === 0 && made.byteLength === made.buffer.byteLength;
-        const samples = whole ? made : made.slice();
+        const samples = (whole ? made : made.slice()) as Float32Array<ArrayBuffer>;
         reply(
           {
             type: 'audio',

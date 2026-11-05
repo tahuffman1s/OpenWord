@@ -70,6 +70,11 @@ try {
     [!result.error, `no error (${result.error ?? ''})`],
     [result.durationSeconds >= 2 && result.durationSeconds <= 6, `duration ${result.durationSeconds.toFixed(2)} s in [2, 6]`],
     [result.rms > 0.01, `rms ${result.rms.toFixed(4)} > 0.01`],
+    [result.engine?.said === true, `the engine said two verses through Web Audio (${result.engine?.error ?? ''})`],
+    [
+      (result.engine?.progress ?? []).length >= 2,
+      `verse starts reported as heard: ${JSON.stringify(result.engine?.progress ?? [])}`,
+    ],
   ];
   for (const [ok, what] of checks) {
     console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}`);
@@ -79,7 +84,8 @@ try {
     `synthesis ${result.synthMs.toFixed(0)} ms for ${result.durationSeconds.toFixed(2)} s of speech ` +
       `(${(result.synthMs / 1000 / result.durationSeconds).toFixed(2)}× real time); ` +
       `load ${result.loadMs.toFixed(0)} ms; eSpeak on worker: ${result.phonemizerOnWorker}; ` +
-      `device voices listed: ${result.deviceVoices}`,
+      `device voices listed: ${result.deviceVoices}; ` +
+      `engine: ${result.engine?.ms?.toFixed(0) ?? '-'} ms for two verses`,
   );
 } catch (error) {
   console.error('smoke failed:', error);

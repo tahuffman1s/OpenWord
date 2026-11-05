@@ -64,3 +64,7 @@ pwa/test-results/
 # The voice the PWA serves, fetched at build time rather than kept in git
 pwa/public/voice/
 pwa/public/ort/
+
+# Deployment secrets and local backups (see deploy/README.md)
+deploy/.env
+deploy/backups/

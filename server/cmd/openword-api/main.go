@@ -13,6 +13,10 @@ import (
 	"syscall"
 	"time"
 
+	// Embed the IANA zone database so reminder time zones resolve even on a
+	// base image without tzdata. Costs ~450 KB.
+	_ "time/tzdata"
+
 	"github.com/tahuffman1s/openword/server/internal/config"
 	"github.com/tahuffman1s/openword/server/internal/db"
 	"github.com/tahuffman1s/openword/server/internal/handlers"

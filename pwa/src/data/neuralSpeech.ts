@@ -369,7 +369,7 @@ class Reading {
         if (samples === null || this.cancelled) return null;
         if (samples.length === 0) return this.context.createBuffer(1, 1, this.synth.sampleRate);
         const buffer = this.context.createBuffer(1, samples.length, this.synth.sampleRate);
-        buffer.copyToChannel(samples, 0);
+        buffer.copyToChannel(samples as Float32Array<ArrayBuffer>, 0);
         return buffer;
       });
       this._loaded.set(i, loaded);

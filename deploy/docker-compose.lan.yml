@@ -1,0 +1,11 @@
+# LAN-only overlay: no Cloudflare, web published straight on the Pi.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.lan.yml up -d --build
+#
+# Then open http://<pi's address>:${OPENWORD_PORT:-8080}. Plain HTTP means
+# the API's cookies are not marked Secure and the browser will not install
+# the app as a PWA from any address but localhost; see README.md.
+services:
+  web:
+    ports:
+      - "${OPENWORD_PORT:-8080}:80"
