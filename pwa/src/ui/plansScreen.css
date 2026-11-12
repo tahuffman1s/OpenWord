@@ -1,0 +1,111 @@
+/* Reading plans: the ones under way, the ones to start, a plan's preview,
+   every day of one, and the card at the end of a plan's chapter. */
+.ow-plans__page {
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 8px 16px calc(32px + var(--ow-safe-bottom));
+}
+.ow-plans__lead { padding: 8px 4px 20px; }
+.ow-plans__active { padding-bottom: 16px; }
+.ow-plans__heading { padding: 8px 4px; }
+
+.ow-plan-tile {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 14px 12px 14px 16px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  text-align: start;
+}
+.ow-plan-tile__text { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; }
+.ow-plan-tile__start {
+  margin-bottom: 4px;
+  padding: 2px 8px;
+  border-radius: 8px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  font-weight: 600;
+}
+.ow-plan-tile__meta { margin-top: 4px; }
+
+.ow-plan-preview { padding: 0 24px 8px; display: flex; flex-direction: column; }
+.ow-plan-preview__meta { margin-top: 4px; }
+.ow-plan-preview__description { margin: 12px 0 16px; }
+.ow-plan-preview__day { display: flex; align-items: flex-start; padding-bottom: 6px; }
+.ow-plan-preview__number { flex: none; width: 56px; }
+.ow-plan-preview__label { flex: 1; min-width: 0; }
+.ow-plan-preview__start { margin-top: 20px; align-self: stretch; }
+
+.ow-plan-card {
+  padding: 8px 4px 16px 16px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface);
+}
+.ow-plan-card__head { display: flex; align-items: center; }
+.ow-plan-card__name { flex: 1; min-width: 0; }
+.ow-plan-card__body { padding-right: 12px; display: flex; flex-direction: column; }
+.ow-plan-card__progress { margin: 8px 0 16px; border-radius: 4px; }
+.ow-plan-card__today { padding-bottom: 4px; }
+.ow-plan-card__next { margin-top: 12px; display: flex; flex-direction: column; }
+.ow-plan-card__continue { align-self: stretch; }
+.ow-plan-card__finished { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+
+.ow-passage { display: flex; align-items: center; margin-left: -8px; }
+.ow-passage__name {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 4px;
+  border-radius: 8px;
+  color: var(--md-sys-color-on-surface);
+  text-align: start;
+}
+.ow-passage__name.ow-muted { color: var(--md-sys-color-on-surface-variant); }
+.ow-passage__name--done { text-decoration: line-through; }
+.ow-passage .m3-icon-button.m3-primary { color: var(--md-sys-color-primary); }
+
+.ow-behind {
+  margin-bottom: 14px;
+  padding: 12px 8px 6px 14px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+.ow-behind__action { display: flex; justify-content: flex-end; }
+
+.ow-plan-days__list { max-width: 720px; margin: 0 auto; width: 100%; padding-bottom: var(--ow-safe-bottom); }
+.ow-plan-day { display: flex; align-items: center; gap: 8px; padding: 0 16px 0 8px; }
+.ow-plan-day--current { background: var(--md-sys-color-secondary-container); color: var(--md-sys-color-on-secondary-container); }
+.ow-plan-day__text {
+  flex: 1;
+  min-width: 0;
+  align-self: stretch;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: inherit;
+  text-align: start;
+}
+.ow-plan-day__text:disabled { opacity: 0.38; }
+
+.ow-plan-chapter {
+  padding: 12px 12px 12px 16px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.ow-plan-chapter__head { display: flex; align-items: center; gap: 8px; }
+.ow-plan-chapter__name { flex: 1; min-width: 0; }
+.ow-plan-chapter__done { align-self: stretch; }
+.ow-plan-chapter__read { display: flex; align-items: center; gap: 4px; }

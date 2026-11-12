@@ -1,0 +1,137 @@
+name: Deploy images
+
+# Builds the two images the Raspberry Pi deployment runs and pushes them to
+# the GitHub Container Registry, for linux/arm64 (the Pi) and linux/amd64:
+#
+#   ghcr.io/tahuffman1s/openword-web   nginx + the PWA + Scripture + the voice
+#   ghcr.io/tahuffman1s/openword-api   the Go API
+#
+# A Pi installed with OPENWORD_PREBUILT=1 pulls these instead of spending
+# 10-15 minutes and most of its memory building them (see deploy/README.md
+# and deploy/docker-compose.prebuilt.yml).
+#
+# Both Dockerfiles run their build stage on the runner's own architecture
+# (FROM --platform=$BUILDPLATFORM): the PWA is static files and Go
+# cross-compiles, so QEMU is only ever asked to assemble the small final
+# stage for arm64, not to run npm or a compiler under emulation.
+#
+# After the first run, make the two packages public (repository -> Packages
+# -> the package -> Package settings -> Change visibility), or a Pi will
+# need `docker login ghcr.io` before it can pull them.
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: >-
+          Image tag to publish, e.g. v2.0.0. Leave empty to publish the
+          current commit as "edge" without moving "latest".
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: deploy-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  image:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: web
+            context: .
+            dockerfile: deploy/web.Dockerfile
+          - name: api
+            context: server
+            dockerfile: server/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Work out the tags
+        id: tags
+        env:
+          INPUT_TAG: ${{ github.event.inputs.tag }}
+        run: |
+          # ghcr.io wants the owner in lower case, whatever the account is.
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/openword-${{ matrix.name }}"
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            version="$GITHUB_REF_NAME"
+          else
+            version="$INPUT_TAG"
+          fi
+          sha="sha-${GITHUB_SHA::7}"
+          if [ -n "$version" ]; then
+            case "$version" in
+              v[0-9]*) ;;
+              *) echo "::error::tag must look like v2.0.0, got '$version'"; exit 1 ;;
+            esac
+            tags="$image:$version,$image:$sha"
+            # A pre-release (v2.0.0-rc.1) is published under its own name
+            # only; "latest" is what an unpinned Pi pulls.
+            case "$version" in
+              *-*) ;;
+              *) tags="$tags,$image:latest" ;;
+            esac
+          else
+            version=edge
+            tags="$image:edge,$image:$sha"
+          fi
+          {
+            echo "image=$image"
+            echo "version=$version"
+            echo "tags=$tags"
+            echo "created=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } >> "$GITHUB_OUTPUT"
+          echo "Publishing: $tags"
+
+      - uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
+          platforms: linux/arm64,linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}
+          labels: |
+            org.opencontainers.image.title=openword-${{ matrix.name }}
+            org.opencontainers.image.description=OpenWord ${{ matrix.name }} image for the Raspberry Pi deployment
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.version=${{ steps.tags.outputs.version }}
+            org.opencontainers.image.created=${{ steps.tags.outputs.created }}
+            org.opencontainers.image.licenses=MIT
+          cache-from: type=gha,scope=openword-${{ matrix.name }}
+          cache-to: type=gha,scope=openword-${{ matrix.name }},mode=max
+          # A single multi-arch manifest per tag, which is what
+          # `docker compose pull` on a Pi resolves to its own architecture.
+          provenance: false
+
+      - name: Summary
+        run: |
+          {
+            echo "### openword-${{ matrix.name }}"
+            echo
+            echo '```'
+            echo "${{ steps.tags.outputs.tags }}" | tr ',' '\n'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

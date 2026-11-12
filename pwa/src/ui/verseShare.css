@@ -1,0 +1,12 @@
+.m3-sheet__body.ow-verse-image { padding: 0 20px 20px; }
+.ow-verse-image__preview { display: flex; justify-content: center; margin-top: 14px; }
+.ow-verse-image__card {
+  display: block;
+  width: 100%;
+  max-width: 320px;
+  height: auto;
+  aspect-ratio: 360 / 450;
+  border-radius: 16px;
+}
+.ow-verse-image__styles { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin-top: 14px; }
+.ow-verse-image__share.m3-button { width: 100%; margin-top: 16px; }

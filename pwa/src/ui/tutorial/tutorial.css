@@ -61,6 +61,10 @@
   height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* On the card as well as the viewport: a scroll container starts the
+     touch-action chain afresh, and without this the browser takes the
+     sideways drag for itself and the swipe never reaches us. */
+  touch-action: pan-y;
   padding: 8px 24px 16px;
   display: flex;
   flex-direction: column;
@@ -182,8 +186,9 @@
   width: 56px; height: 56px; border-radius: 14px; overflow: hidden;
   box-shadow: var(--md-sys-elevation-2);
   background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  display: flex; align-items: center; justify-content: center;
 }
-.ow-tut__appicon img { display: block; width: 100%; height: 100%; }
 .ow-tut__mock-row { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; min-height: 48px; }
 .ow-tut__dock {
   display: inline-flex; align-items: flex-end; gap: 10px; padding: 10px 14px;
@@ -241,15 +246,23 @@
   .ow-tut__words { display: flex; }
 }
 
-/* Short screens: smaller art so the words fit. */
-@media (max-height: 640px) and (max-width: 839px) {
-  .ow-tut__art { width: 168px; height: 168px; }
-  .ow-tut__art-main { width: 104px; height: 104px; }
-  .ow-tut__art-main .m3-icon { width: 48px; height: 48px; }
-  .ow-tut__sat { width: 44px; height: 44px; }
-  .ow-tut__sat .m3-icon { width: 22px; height: 22px; }
-  .ow-tut__sat--tl, .ow-tut__sat--bl { left: 4px; }
-  .ow-tut__sat--tr, .ow-tut__sat--br { right: 4px; }
+/* Short phones: smaller art and type, so the words and the button fit. */
+@media (max-height: 700px) and (max-width: 839px) {
+  .ow-tut__card { padding: 0 20px 8px; }
+  .ow-tut__card-inner { gap: 6px; }
+  .ow-tut__art { width: 160px; height: 132px; margin-top: 0; }
+  .ow-tut__art-main { width: 92px; height: 92px; }
+  .ow-tut__art-main .m3-icon { width: 44px; height: 44px; }
+  .ow-tut__sat { width: 40px; height: 40px; }
+  .ow-tut__sat .m3-icon { width: 20px; height: 20px; }
+  .ow-tut__sat--tl, .ow-tut__sat--bl { left: 0; }
+  .ow-tut__sat--tr, .ow-tut__sat--br { right: 0; }
+  .ow-tut__sat--tl, .ow-tut__sat--tr { top: 4px; }
+  .ow-tut__sat--bl, .ow-tut__sat--br { bottom: 4px; }
+  .ow-tut__title { font: var(--md-sys-typescale-title-large); margin-top: 8px; }
+  .ow-tut__text { font: var(--md-sys-typescale-body-medium); }
+  .ow-tut__try { margin-top: 6px; }
+  .ow-tut__mock, .ow-tut__mock-row { min-height: 36px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -289,7 +302,8 @@
 .ow-install__step-text { flex: 1; min-width: 0; color: var(--md-sys-color-on-surface); }
 .ow-install__menu {
   display: inline-block;
-  padding: 0 6px;
+  padding: 0 5px;
+  margin: 0 1px;
   border-radius: var(--md-sys-shape-corner-extra-small);
   background: var(--md-sys-color-surface-container-highest);
   color: var(--md-sys-color-on-surface);

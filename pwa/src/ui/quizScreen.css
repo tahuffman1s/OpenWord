@@ -1,0 +1,78 @@
+/* A round of questions: the stem, the Scripture asked about, four
+   options that show right and wrong once chosen, and the summary. */
+.ow-quiz__page {
+  max-width: 640px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 16px 24px calc(32px + var(--ow-safe-bottom));
+  display: flex;
+  flex-direction: column;
+}
+.ow-quiz__stem { margin-top: 4px; display: flex; align-items: center; gap: 8px; }
+.ow-quiz__stem-text { flex: 1; min-width: 0; }
+.ow-quiz__prompt {
+  margin-top: 16px;
+  padding: 20px;
+  border-radius: 20px;
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+  overflow-wrap: anywhere;
+}
+.ow-quiz__options { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; }
+
+.ow-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--md-sys-shape-corner-large);
+  border: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  text-align: start;
+}
+.ow-option__text { flex: 1; min-width: 0; font: var(--md-sys-typescale-body-large); line-height: 1.4; overflow-wrap: anywhere; }
+.ow-option__icon { flex: none; }
+/* The border thickens by a pixel once answered; the padding gives it back
+   so the options do not jump. */
+.ow-option--right, .ow-option--wrong, .ow-option--dimmed { border-width: 2px; padding: 13px 15px; }
+.ow-option--right {
+  background: var(--md-sys-color-primary-container);
+  border-color: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary-container);
+}
+.ow-option--right .ow-option__icon { color: var(--md-sys-color-primary); }
+.ow-option--wrong {
+  background: var(--md-sys-color-error-container);
+  border-color: var(--md-sys-color-error);
+  color: var(--md-sys-color-on-error-container);
+}
+.ow-option--wrong .ow-option__icon { color: var(--md-sys-color-error); }
+.ow-option--dimmed { border-color: var(--md-sys-color-outline-variant); color: var(--md-sys-color-on-surface-variant); }
+
+.ow-quiz__told { margin-top: 18px; display: flex; flex-direction: column; }
+.ow-quiz__verdict { display: flex; align-items: center; gap: 8px; }
+.ow-quiz__verdict > :first-child { flex: 1; }
+.ow-quiz__buttons { margin-top: 8px; display: flex; gap: 12px; }
+.ow-quiz__buttons > .m3-button { flex: 1; min-width: 0; }
+
+.ow-quiz__result { padding-top: 24px; }
+.ow-quiz__score { font-weight: 700; }
+.ow-quiz__result > .m3-title-medium { margin-top: 4px; }
+.ow-quiz__stats { margin-top: 16px; }
+.ow-quiz__stats + .ow-good-news { margin-top: 12px; }
+.ow-quiz__streak { margin-top: 16px; }
+.ow-quiz__ending { margin-top: 24px; }
+.ow-quiz__missed { margin-top: 28px; display: flex; flex-direction: column; }
+.ow-quiz__missed > .m3-body-medium { margin: 4px 0 8px; }
+.ow-quiz__missed-tile { padding-left: 0; padding-right: 0; }
+
+.ow-quiz__empty {
+  min-height: 100%;
+  padding: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}

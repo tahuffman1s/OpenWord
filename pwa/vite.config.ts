@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 import { VitePWA } from 'vite-plugin-pwa';
 import { fileURLToPath } from 'node:url';
+import { versionPlugin } from './src/pwa/versionPlugin';
 
 // The bundled Scripture, atlas, notes, references and originals are
 // precached so the app is whole offline; the voice (57 MB) is fetched the
@@ -10,6 +11,9 @@ import { fileURLToPath } from 'node:url';
 export default defineConfig({
   plugins: [
     preact(),
+    // Writes dist/version.json before the worker's precache manifest is
+    // made, so the app can say which build it is.
+    versionPlugin(),
     VitePWA({
       // The worker is ours (src/sw.ts): precaching, the runtime caches, the
       // navigation fallback, push notifications and the update handshake.
@@ -22,8 +26,17 @@ export default defineConfig({
       manifest: false, // public/manifest.webmanifest is hand-written
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,ttf,bib,gz,json,wasm,webmanifest}'],
-        globIgnores: ['voice/**', '**/*.map'],
+        // The voice and the ONNX runtime that runs it (15 MB) are fetched
+        // the first time Listen is used and kept by the worker's runtime
+        // caches, rather than downloaded by every reader at install.
+        globIgnores: ['voice/**', 'ort/**', '**/*.map'],
         maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
+        // Only Vite's own output (assets/name-HASH.ext) carries its version
+        // in its name. The plugin's default treats everything under
+        // assets/ that way, which would leave the Scripture, atlas and
+        // references copied from public/assets/ without a revision — and a
+        // new eng-web.bib would never replace the cached one.
+        dontCacheBustURLsMatching: /^assets\/[^/]+-[\w-]{8}\.\w+$/,
       },
       includeAssets: ['icons/*.png', 'favicon.png'],
     }),

@@ -125,12 +125,16 @@ interface Guide {
 
 const Menu = ({ children }: { children: ComponentChildren }) => <span class="ow-install__menu">{children}</span>;
 
-/** Chrome's install icon: a screen with an arrow down into it. */
-const chromeInstallGlyph = (
-  <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor" aria-hidden="true">
-    <path d="M18 1.01 6 1c-1.1 0-2 .9-2 2v3h2V5h12v14H6v-1H4v3c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V3c0-1.1-.9-1.99-2-1.99zM10 15h2V8h2v7h2l-3 3-3-3z" />
+/** Chrome's install icon (Material's install_desktop): a screen with an arrow down into it. */
+const installDesktopPath =
+  'M20 17H4V5h8V3H4c-1.1 0-2 .9-2 2v12a2 2 0 0 0 2 2h4v1c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-1h4c1.1 0 2-.9 2-2v-3h-2v3z' +
+  'M17.71 13.29 21.3 9.7a.996.996 0 1 0-1.41-1.41L18 10.17V4c0-.55-.45-1-1-1s-1 .45-1 1v6.17l-1.89-1.88A.996.996 0 1 0 12.7 9.7l3.59 3.59c.4.39 1.03.39 1.42 0z';
+const installGlyph = (size: number) => (
+  <svg viewBox="0 0 24 24" width={size} height={size} fill="currentColor" aria-hidden="true">
+    <path d={installDesktopPath} />
   </svg>
 );
+const chromeInstallGlyph = installGlyph(24);
 
 const guides: Record<PlatformKey, Guide> = {
   'ios-safari': {
@@ -439,6 +443,7 @@ export function InstallGuide({ platform, installed, promptAvailable }: InstallGu
   const canPrompt = promptAvailable ?? installPrompt.available;
   const [outcome, setOutcome] = useState<InstallOutcome | 'working' | null>(null);
   const isIos = key.startsWith('ios');
+  const isDesktop = key.startsWith('desktop');
 
   const runPrompt = async () => {
     setOutcome('working');
@@ -461,17 +466,17 @@ export function InstallGuide({ platform, installed, promptAvailable }: InstallGu
       <div class="ow-install">
         <div class="ow-install__hero">
           <div class="ow-tut__blob ow-tut__blob--primary ow-install__blob">
-            <Icon name={isInstalled ? 'check_circle' : 'add_to_home_screen'} size={40} />
+            {isInstalled ? <Icon name="check_circle" size={40} /> : isDesktop ? installGlyph(40) : <Icon name="add_to_home_screen" size={40} />}
           </div>
           <h2 class="m3-headline-small ow-install__title">{isInstalled ? 'You’re using the installed app' : guide.title}</h2>
           <div class="m3-body-medium m3-on-surface-variant">
-            {isInstalled ? 'OpenWord is on your home screen and opens full screen, offline, with everything in place.' : guide.where}
+            {isInstalled ? 'OpenWord has its own icon and opens full screen, offline, with everything in place.' : guide.where}
           </div>
         </div>
 
         {!isInstalled && canPrompt && (
           <div class="ow-install__prompt">
-            <Button icon="install_mobile" onClick={runPrompt} disabled={outcome === 'working'}>
+            <Button icon={isDesktop ? 'download' : 'install_mobile'} onClick={runPrompt} disabled={outcome === 'working'}>
               Install OpenWord
             </Button>
             {outcome === 'accepted' && (
@@ -511,10 +516,11 @@ export function InstallGuide({ platform, installed, promptAvailable }: InstallGu
 
         {!guide.noInstall && (
           <div class="ow-install__gets">
-            <div class="m3-title-small">What you get</div>
+            <div class="m3-title-small">{isInstalled ? 'What that gives you' : 'What you get'}</div>
             <ul class="ow-install__list">
               <li>
-                <Icon name="smartphone" size={20} /> An icon on your home screen or desktop
+                <Icon name={isDesktop ? 'desktop_windows' : 'smartphone'} size={20} />{' '}
+                {isDesktop ? 'An icon in your Dock, taskbar or app list' : 'An icon on your home screen'}
               </li>
               <li>
                 <Icon name="crop_free" size={20} /> Full screen, with no browser bar

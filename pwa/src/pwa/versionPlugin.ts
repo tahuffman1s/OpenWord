@@ -1,6 +1,6 @@
 import { execSync } from 'node:child_process';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import type { Plugin } from 'vite';
 
 /**
@@ -59,7 +59,7 @@ export function versionPlugin(options: VersionPluginOptions = {}): Plugin {
       });
     },
     writeBundle() {
-      const dir = join(root, outDir);
+      const dir = resolve(root, outDir);
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, fileName), `${JSON.stringify(read(), null, 2)}\n`);
     },

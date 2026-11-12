@@ -23,24 +23,27 @@
 #   OPENWORD_PREBUILT=1         pull the images GitHub Actions built instead
 #                               of building on this machine (no swap needed)
 #   OPENWORD_VERSION=v2.0.0     which prebuilt tag to pull (default latest)
+#   OPENWORD_SKIP_SWAP=1        never create a swapfile, whatever the memory
 #   OPENWORD_NONINTERACTIVE=1   never prompt; take TUNNEL_TOKEN,
 #                               OPENWORD_PUBLIC_URL, OPENWORD_INVITE_CODE,
 #                               OPENWORD_ADMIN_EMAIL and OPENWORD_PORT from
 #                               the environment and defaults for the rest
 #
 # Flags (after `bash -s --` when piping): --allow-root, --reconfigure (ask
-# the questions again on an existing install), --lan (skip the tunnel
-# question), --help.
+# the questions again on an existing install), --lan (no tunnel; drops a
+# stored token), --prebuilt, --branch NAME, --dir PATH, --help.
 
-set -euo pipefail
+set -Eeuo pipefail
 
+# Was the directory chosen by the caller, or is it the default?
+OPENWORD_DIR_EXPLICIT=${OPENWORD_DIR:+1}
 OPENWORD_REPO="${OPENWORD_REPO:-https://github.com/tahuffman1s/OpenWord.git}"
 OPENWORD_BRANCH="${OPENWORD_BRANCH:-main}"
 OPENWORD_DIR="${OPENWORD_DIR:-$HOME/openword}"
 OPENWORD_NONINTERACTIVE="${OPENWORD_NONINTERACTIVE:-0}"
 OPENWORD_PREBUILT="${OPENWORD_PREBUILT:-}"
 OPENWORD_VERSION="${OPENWORD_VERSION:-}"
-HELPER=/usr/local/bin/openword
+HELPER=${OPENWORD_HELPER_PATH:-/usr/local/bin/openword}
 
 ALLOW_ROOT=0
 RECONFIGURE=0
@@ -51,6 +54,7 @@ SUDO=""
 DOCKER=()
 COMPOSE=()
 TTY_IN=""
+ME=$(id -un)
 
 # --- output ----------------------------------------------------------------
 
@@ -68,6 +72,7 @@ die()  { printf '\n%sError:%s %s\n' "$C_RED" "$C_OFF" "$*" >&2; exit 1; }
 
 on_error() {
   local line=$1
+  [ "$BASHPID" = "$$" ] || return 0
   printf '\n%sThe installer stopped%s (around line %s of install.sh).\n' "$C_RED" "$C_OFF" "$line" >&2
   cat >&2 <<EOF
 
@@ -104,7 +109,9 @@ interactive() { [ -n "$TTY_IN" ]; }
 ask() {
   local prompt=$1 default=${2:-} secret=${3:-} answer=""
   if ! interactive; then printf '%s' "$default"; return 0; fi
-  if [ -n "$default" ]; then
+  if [ -n "$default" ] && [ -n "$secret" ]; then
+    printf '    %s [Enter keeps the current one]: ' "$prompt" >&2
+  elif [ -n "$default" ]; then
     printf '    %s [%s]: ' "$prompt" "$default" >&2
   else
     printf '    %s: ' "$prompt" >&2
@@ -165,7 +172,27 @@ gen_password() {
 # --- helpers -----------------------------------------------------------------
 
 usage() {
-  sed -n '2,33p' "$0" 2>/dev/null | sed 's/^# \{0,1\}//' || true
+  cat <<'EOF'
+OpenWord installer
+
+  curl -fsSL https://raw.githubusercontent.com/tahuffman1s/OpenWord/main/deploy/install.sh | bash
+  curl -fsSL .../install.sh | bash -s -- [options]
+  bash deploy/install.sh [options]          (from a checkout: installs that checkout)
+
+Options:
+  --allow-root       run as root (files end up owned by root)
+  --reconfigure      ask the setup questions again on an existing install
+  --lan              LAN-only: no Cloudflare tunnel, drop any stored token
+  --prebuilt         pull images from ghcr.io instead of building here
+  --branch NAME      branch to install (default: main)
+  --dir PATH         where the checkout lives (default: ~/openword)
+  -h, --help         this text
+
+Environment: OPENWORD_BRANCH, OPENWORD_DIR, OPENWORD_PREBUILT=1,
+OPENWORD_VERSION, OPENWORD_NONINTERACTIVE=1 and, for a non-interactive
+install, TUNNEL_TOKEN, OPENWORD_PUBLIC_URL, OPENWORD_INVITE_CODE,
+OPENWORD_ADMIN_EMAIL, OPENWORD_PORT.
+EOF
   exit 0
 }
 
@@ -178,8 +205,8 @@ parse_args() {
       --prebuilt) OPENWORD_PREBUILT=1 ;;
       --branch) OPENWORD_BRANCH=$2; shift ;;
       --branch=*) OPENWORD_BRANCH=${1#*=} ;;
-      --dir) OPENWORD_DIR=$2; shift ;;
-      --dir=*) OPENWORD_DIR=${1#*=} ;;
+      --dir) OPENWORD_DIR=$2; OPENWORD_DIR_EXPLICIT=1; shift ;;
+      --dir=*) OPENWORD_DIR=${1#*=}; OPENWORD_DIR_EXPLICIT=1 ;;
       -h|--help) usage ;;
       *) die "unknown option: $1 (try --help)" ;;
     esac
@@ -244,15 +271,14 @@ preflight() {
     warn "running as root; files will be owned by root"
   else
     have sudo || die "sudo is needed to install packages and Docker. Install it, or run as root with --allow-root."
-    SUDO="sudo"
-    if ! interactive; then SUDO="sudo -n"; fi
-    if ! $SUDO -v 2>/dev/null; then
-      if interactive; then
-        info "sudo will ask for your password to install packages"
-        $SUDO -v || die "sudo failed"
-      else
-        die "sudo needs a password and there is no terminal to ask on. Run interactively once, or allow passwordless sudo."
-      fi
+    if sudo -n true 2>/dev/null; then
+      SUDO="sudo"
+    elif interactive; then
+      info "sudo may ask for your password (to install packages and the openword command)"
+      sudo -v || die "sudo failed"
+      SUDO="sudo"
+    else
+      die "sudo needs a password and there is no terminal to ask on. Run interactively once, or allow passwordless sudo."
     fi
   fi
 
@@ -303,17 +329,19 @@ ensure_docker() {
     $SUDO systemctl enable --now docker >/dev/null 2>&1 || true
   fi
 
-  if [ "$(id -u)" -ne 0 ] && ! id -nG "$USER" | tr ' ' '\n' | grep -qx docker; then
-    $SUDO usermod -aG docker "$USER"
+  local in_docker_group=0
+  case " $(id -nG "$ME") " in *" docker "*) in_docker_group=1 ;; esac
+  if [ "$(id -u)" -ne 0 ] && [ "$in_docker_group" = 0 ]; then
+    $SUDO usermod -aG docker "$ME"
     GROUP_ADDED=1
-    warn "added $USER to the docker group. That takes effect at your next login;"
+    warn "added $ME to the docker group. That takes effect at your next login;"
     warn "this run uses sudo for docker commands instead."
   fi
 
   if docker info >/dev/null 2>&1; then
     DOCKER=(docker)
-  elif $SUDO docker info >/dev/null 2>&1; then
-    DOCKER=($SUDO docker)
+  elif [ -n "$SUDO" ] && "$SUDO" docker info >/dev/null 2>&1; then
+    DOCKER=("$SUDO" docker)
   else
     die "Docker is installed but the daemon is not answering. Try: sudo systemctl start docker, then run this again."
   fi
@@ -355,17 +383,23 @@ checkout() {
   fi
 
   cd "$OPENWORD_DIR"
-  git fetch --depth 1 origin "$OPENWORD_BRANCH" 2>/dev/null || git fetch origin "$OPENWORD_BRANCH"
+  # The clone is shallow and tracks one branch. Name the branch wanted, then
+  # fetch it without --depth: a plain fetch brings the commits between what
+  # is here and the new tip, which is what lets --ff-only see them as one
+  # line of history.
+  git remote set-branches origin "$OPENWORD_BRANCH"
+  git fetch origin "$OPENWORD_BRANCH" \
+    || die "cannot fetch $OPENWORD_BRANCH from $OPENWORD_REPO (is that a branch, and is the network up?)"
   local current
   current=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)
   if [ "$current" = "$OPENWORD_BRANCH" ]; then
-    if ! git merge --ff-only FETCH_HEAD >/dev/null 2>&1; then
+    if ! git merge --ff-only "origin/$OPENWORD_BRANCH" >/dev/null 2>&1; then
       die "cannot fast-forward $OPENWORD_DIR: it has local commits or edits to tracked files.
     Put them aside (git stash) or discard them (git reset --hard origin/$OPENWORD_BRANCH) and run this again.
     deploy/.env and deploy/backups/ are not tracked and will not be touched by either."
     fi
   else
-    git checkout -B "$OPENWORD_BRANCH" FETCH_HEAD >/dev/null 2>&1 \
+    git checkout -B "$OPENWORD_BRANCH" "origin/$OPENWORD_BRANCH" >/dev/null 2>&1 \
       || die "cannot switch $OPENWORD_DIR to $OPENWORD_BRANCH over local edits; see git status there"
   fi
   git branch --set-upstream-to="origin/$OPENWORD_BRANCH" "$OPENWORD_BRANCH" >/dev/null 2>&1 || true
@@ -392,9 +426,14 @@ configure() {
   # OPENWORD_PREBUILT=1 curl ... | bash does what it says on a re-run too.
   [ -z "$OPENWORD_PREBUILT" ] || env_set OPENWORD_PREBUILT "$OPENWORD_PREBUILT"
   [ -z "$OPENWORD_VERSION" ] || env_set OPENWORD_VERSION "$OPENWORD_VERSION"
-  [ -z "${OPENWORD_PORT:-}" ] || env_set OPENWORD_PORT "$OPENWORD_PORT"
 
-  if [ "$fresh" = 1 ] || [ "$RECONFIGURE" = 1 ]; then
+  # Ask when this is a new install, when asked to, when an earlier run was
+  # interrupted before its answers were written (the address is the one
+  # setting a finished run always fills in), or when the caller handed
+  # settings in through the environment.
+  local given="${TUNNEL_TOKEN:-}${OPENWORD_PUBLIC_URL:-}${OPENWORD_INVITE_CODE:-}${OPENWORD_ADMIN_EMAIL:-}${OPENWORD_PORT:-}"
+  if [ "$fresh" = 1 ] || [ "$RECONFIGURE" = 1 ] || [ "$FORCE_LAN" = 1 ] \
+      || [ -z "$(env_get OPENWORD_PUBLIC_URL)" ] || [ -n "$given" ]; then
     ask_settings
   else
     ok "keeping the existing deploy/.env (run with --reconfigure, or edit it, to change it)"
@@ -411,6 +450,9 @@ ask_settings() {
   email=${OPENWORD_ADMIN_EMAIL:-$(env_get OPENWORD_ADMIN_EMAIL)}
   port=${OPENWORD_PORT:-$(env_get OPENWORD_PORT)}
   port=${port:-8080}
+  local had_token old_port
+  had_token=$(env_get TUNNEL_TOKEN)
+  old_port=$(env_get OPENWORD_PORT)
 
   if [ "$FORCE_LAN" = 1 ]; then
     token=""
@@ -452,6 +494,14 @@ EOF
         *) [ "$port" -ge 1 ] && [ "$port" -le 65535 ] && break; warn "port out of range"; port=8080; interactive || break ;;
       esac
     done
+    # A stored address is only still right if it was a LAN address for this
+    # port; one left over from a tunnel, or from another port, is not.
+    if [ -z "${OPENWORD_PUBLIC_URL:-}" ]; then
+      case "$url" in
+        http://*) { [ -z "$had_token" ] && [ "$port" = "${old_port:-$port}" ]; } || url="" ;;
+        *) url="" ;;
+      esac
+    fi
     url=${url:-http://$(lan_ip):$port}
     info "LAN-only install: no tunnel, the app will be at $url"
     info "Browsers treat plain http (except localhost) as insecure: no install-to-home-screen,"
@@ -483,10 +533,13 @@ EOF
 
 swap_check() {
   [ "$(env_get OPENWORD_PREBUILT)" = 1 ] && return 0
+  [ "${OPENWORD_SKIP_SWAP:-0}" = 1 ] && return 0
   local total swap
   total=$(awk '/MemTotal/ {print int($2 / 1024)}' /proc/meminfo)
   swap=$(awk '/SwapTotal/ {print int($2 / 1024)}' /proc/meminfo)
-  [ "$total" -lt 1800 ] || return 0
+  # A "2 GB" Pi 4 reports about 1850 MB once the firmware has taken its
+  # share, so the line is drawn above that; a 4 GB board sails past it.
+  [ "$total" -lt 2200 ] || return 0
 
   step "Memory"
   warn "this machine has ${total} MB of memory and ${swap} MB of swap."
@@ -496,7 +549,8 @@ swap_check() {
   if [ "$swap" -ge 512 ]; then ok "existing swap will do"; return 0; fi
 
   if ! confirm "Create a 1 GB swapfile now?" y; then
-    warn "carrying on without swap. If the build dies, run: OPENWORD_PREBUILT=1 to pull images instead."
+    warn "carrying on without swap. If the build is killed, run the installer again and say yes,"
+    warn "or set OPENWORD_PREBUILT=1 to pull ready-made images instead of building."
     return 0
   fi
 
@@ -532,7 +586,10 @@ deploy() {
       info "On a Pi 4 the first build takes 10-15 minutes (npm install, the app build,"
       info "a 63 MB voice download and the Go API). Later builds reuse most of it."
     fi
-    compose build
+    # One at a time. `up -d --build` builds both at once, and Node and the
+    # Go compiler side by side are what runs a 2 GB Pi out of memory.
+    compose build api
+    compose build web
     step "Starting OpenWord"
     compose up -d --remove-orphans
     "${DOCKER[@]}" image prune -f >/dev/null 2>&1 || true
@@ -541,7 +598,8 @@ deploy() {
 
 container_state() {
   local id
-  id=$(compose ps -q "$1" 2>/dev/null | head -n 1)
+  id=$(compose ps -q "$1" 2>/dev/null || true)
+  id=${id%%$'\n'*}
   [ -n "$id" ] || { echo missing; return; }
   "${DOCKER[@]}" inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$id" 2>/dev/null || echo missing
 }
@@ -569,11 +627,16 @@ wait_healthy() {
 
   if [ -n "$(env_get TUNNEL_TOKEN)" ]; then
     deadline=$((SECONDS + 90))
+    local tunnel_log
     while :; do
-      if compose logs --tail=200 cloudflared 2>/dev/null | grep -q 'Registered tunnel connection'; then
-        ok "cloudflared is connected to Cloudflare"
-        return 0
-      fi
+      # Into a variable, not a pipe to grep -q: under pipefail a grep that
+      # stops at the first match makes the pipeline look like it failed.
+      tunnel_log=$(compose logs --tail=200 cloudflared 2>&1 || true)
+      case "$tunnel_log" in
+        *'Registered tunnel connection'*)
+          ok "cloudflared is connected to Cloudflare"
+          return 0 ;;
+      esac
       if [ "$SECONDS" -ge "$deadline" ]; then
         warn "cloudflared has not reported a connection yet. Check 'openword logs cloudflared':"
         warn "a bad token says 'Unauthorized'; no route to the hostname says 'error 1033' in the browser."
@@ -598,6 +661,7 @@ set -euo pipefail
 
 OPENWORD_DIR="__OPENWORD_DIR__"
 DEPLOY="$OPENWORD_DIR/deploy"
+export OPENWORD_CALLER_PWD="$PWD"   # so `openword restore ./file` means what it says
 cd "$DEPLOY" || { echo "openword: $DEPLOY is gone; re-run the installer" >&2; exit 1; }
 
 if docker info >/dev/null 2>&1; then DOCKER=(docker); else DOCKER=(sudo docker); fi
@@ -652,7 +716,10 @@ case "$cmd" in
       compose pull
       compose up -d --remove-orphans
     else
-      compose up -d --build --remove-orphans
+      # One image at a time; see the note in install.sh.
+      compose build api
+      compose build web
+      compose up -d --remove-orphans
     fi
     "${DOCKER[@]}" image prune -f >/dev/null 2>&1 || true
     echo "Updated. $(app_url)"
@@ -678,7 +745,7 @@ case "$cmd" in
     case "$a" in y|Y) "${DOCKER[@]}" volume rm openword_openword-db ;; esac
     read -r -p "Also delete the checkout at $OPENWORD_DIR (keeps nothing, backups included)? [y/N] " a
     case "$a" in y|Y) rm -rf "$OPENWORD_DIR" ;; esac
-    sudo rm -f /usr/local/bin/openword
+    if [ "$(id -u)" -eq 0 ]; then rm -f /usr/local/bin/openword; else sudo rm -f /usr/local/bin/openword; fi
     echo "Removed. The Docker images stay until 'docker image prune -a'."
     ;;
   help|-h|--help) usage ;;
@@ -739,7 +806,7 @@ main() {
   if [ -n "${BASH_SOURCE[0]:-}" ] && [ -f "${BASH_SOURCE[0]}" ]; then
     local here
     here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-    if [ -f "$here/docker-compose.yml" ] && [ -z "${OPENWORD_DIR_SET:-}" ] && [ "$OPENWORD_DIR" = "$HOME/openword" ]; then
+    if [ -f "$here/docker-compose.yml" ] && [ -f "$here/web.Dockerfile" ] && [ -z "$OPENWORD_DIR_EXPLICIT" ]; then
       OPENWORD_DIR=$(dirname "$here")
       LOCAL_CHECKOUT=1
     fi

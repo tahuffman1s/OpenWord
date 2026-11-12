@@ -56,6 +56,17 @@ registerRoute(
   }),
 );
 
+// The ONNX runtime the voice runs on (15 MB of WebAssembly): too large to
+// precache for readers who never listen, so it is kept from first use,
+// like the voice it is no use without.
+registerRoute(
+  ({ url }) => url.origin === self.location.origin && url.pathname.startsWith('/ort/'),
+  new CacheFirst({
+    cacheName: 'openword-ort',
+    plugins: [new CacheableResponsePlugin({ statuses: [0, 200] }), new ExpirationPlugin({ maxEntries: 8 })],
+  }),
+);
+
 // Friends' avatars: shown at once from cache, refreshed behind.
 registerRoute(
   ({ url }) => /\/api\/users\/[^/]+\/avatar/.test(url.pathname),

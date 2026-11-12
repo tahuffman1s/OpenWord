@@ -1,0 +1,72 @@
+/* The goal strip on Learn and the card at the top of Progress. */
+.ow-goal-ring { position: relative; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+.ow-goal-ring svg { position: absolute; inset: 0; transform: rotate(-90deg); }
+.ow-goal-ring circle { fill: none; }
+.ow-goal-ring__track { stroke: var(--md-sys-color-surface-container-highest); }
+.ow-goal-ring__value { stroke: var(--md-sys-color-primary); stroke-linecap: round; transition: stroke-dashoffset 300ms var(--md-sys-motion-standard); }
+.ow-goal-ring__label { position: relative; display: flex; flex-direction: column; align-items: center; color: var(--md-sys-color-primary); }
+
+.ow-freezes { display: inline-flex; align-items: center; color: var(--md-sys-color-tertiary); flex: none; }
+
+.ow-goal-strip { display: flex; align-items: center; gap: 12px; padding: 12px 16px 4px; }
+.ow-goal-strip__ring { position: relative; flex: none; border-radius: 32px; display: inline-flex; overflow: hidden; }
+.ow-goal-strip__text { flex: 1; min-width: 0; }
+.ow-goal-strip .ow-freezes { margin-left: -6px; }
+
+.ow-progress-card { padding: 12px 16px 4px; display: flex; flex-direction: column; }
+.ow-progress-card__top { display: flex; align-items: center; gap: 16px; }
+.ow-progress-card__ring { position: relative; flex: none; padding: 4px; border-radius: 52px; display: inline-flex; overflow: hidden; }
+.ow-progress-card__earned { font: var(--md-sys-typescale-title-medium); font-weight: 700; line-height: 1.1; color: var(--md-sys-color-on-surface); }
+.ow-progress-card__summary { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.ow-progress-card__chips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+
+.ow-level-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+.ow-level-bar { margin-top: 12px; display: flex; flex-direction: column; gap: 4px; }
+.ow-level-bar .m3-linear-progress { border-radius: 4px; }
+.ow-level-bar .m3-linear-progress__bar { border-radius: 4px; }
+
+.ow-week { margin-top: 14px; display: flex; flex-direction: column; gap: 6px; }
+.ow-week__chart { position: relative; }
+.ow-week__goal { position: absolute; left: 0; right: 0; height: 1px; background: var(--md-sys-color-outline-variant); }
+.ow-week__bars { position: absolute; inset: 0; display: flex; align-items: flex-end; }
+.ow-week__day { flex: 1; padding: 0 6px; display: flex; flex-direction: column; justify-content: flex-end; }
+.ow-week__bar { border-radius: 4px 4px 0 0; }
+.ow-week__bar--met { background: var(--md-sys-color-primary); }
+.ow-week__bar--some { background: rgb(var(--md-sys-color-primary-rgb) / 0.5); }
+.ow-week__bar--none { background: var(--md-sys-color-surface-container-highest); }
+.ow-week__letter { display: flex; align-items: center; justify-content: center; color: var(--md-sys-color-on-surface-variant); }
+.ow-week__letter--today { color: var(--md-sys-color-on-surface); font-weight: 700; }
+
+.ow-badge-strip {
+  position: relative;
+  margin-top: 14px;
+  padding: 4px 0;
+  border-radius: var(--md-sys-shape-corner-medium);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  overflow: hidden;
+  color: var(--md-sys-color-on-surface);
+}
+.ow-badge-strip__head { display: flex; align-items: center; justify-content: space-between; }
+.ow-badge-strip__icons { display: flex; flex-wrap: wrap; gap: 8px; }
+
+.ow-achievement {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  border-radius: 50%;
+  background: var(--md-sys-color-surface-container-highest);
+  color: rgb(var(--md-sys-color-on-surface-variant-rgb) / 0.4);
+}
+.ow-achievement--won { background: var(--md-sys-color-tertiary-container); color: var(--md-sys-color-on-tertiary-container); }

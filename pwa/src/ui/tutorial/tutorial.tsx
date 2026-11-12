@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { Prefs } from '../../infra/prefs';
 import { useNotifier } from '../../infra/changeNotifier';
 import { installPrompt, isStandalone } from '../../pwa/install';
-import { Button, Icon, TextButton, TonalButton, showSheet, useOverlay } from '../m3';
+import { Button, Icon, TextButton, TonalButton, overlays, showSheet, useOverlay } from '../m3';
 import { showInstallGuide } from './installGuide';
 import './tutorial.css';
 
@@ -99,7 +99,7 @@ const cards: CardSpec[] = [
     title: 'Read it like a printed Bible',
     text: [
       'Paragraphs, poetry, headings and the words of Jesus in red, laid out as the translation itself is.',
-      'Tap the title to go anywhere — type "jn 3:16", "ps 23" or just "mat" — and swipe between chapters.',
+      'Tap the title to go anywhere — type “jn 3:16”, “ps 23” or just “mat” — and swipe between chapters.',
       'Tap a verse for highlights, bookmarks, notes, cross-references, the Hebrew and Greek, and maps.',
     ],
     art: {
@@ -258,7 +258,7 @@ const cards: CardSpec[] = [
           <span class="ow-tut__dock-app" />
           <span class="ow-tut__dock-app" />
           <span class="ow-tut__appicon">
-            <img src="/icons/Icon-192.png" alt="" />
+            <Icon name="menu_book" />
           </span>
           <span class="ow-tut__dock-app" />
         </span>
@@ -316,29 +316,42 @@ export function Tutorial({ onTry, initialCard = 0 }: TutorialProps) {
     rootRef.current?.focus({ preventScroll: true });
   }, []);
 
-  const onKeyDown = (e: KeyboardEvent) => {
-    const target = e.target as HTMLElement | null;
-    if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
-    switch (e.key) {
-      case 'ArrowRight':
-      case 'PageDown':
-        go(index + 1);
-        break;
-      case 'ArrowLeft':
-      case 'PageUp':
-        go(index - 1);
-        break;
-      case 'Home':
-        go(0);
-        break;
-      case 'End':
-        go(last);
-        break;
-      default:
-        return;
-    }
-    e.preventDefault();
-  };
+  // The arrow keys, wherever the focus is, while this is the top overlay:
+  // a sheet opened over the walkthrough (the install guide) makes it inert,
+  // which drops the focus, so a handler on the element would go deaf.
+  const indexRef = useRef(index);
+  indexRef.current = index;
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (overlay.id !== 0 && overlays.top?.id !== overlay.id) return;
+      if (e.altKey || e.ctrlKey || e.metaKey) return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
+      const at = indexRef.current;
+      switch (e.key) {
+        case 'ArrowRight':
+        case 'PageDown':
+          go(at + 1);
+          break;
+        case 'ArrowLeft':
+        case 'PageUp':
+          go(at - 1);
+          break;
+        case 'Home':
+          go(0);
+          break;
+        case 'End':
+          go(last);
+          break;
+        default:
+          return;
+      }
+      e.preventDefault();
+    };
+    addEventListener('keydown', onKeyDown);
+    return () => removeEventListener('keydown', onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [overlay.id]);
 
   // Swipe: horizontal pointer drags move the track with the finger and
   // settle on the nearer card; vertical ones are left to the browser
@@ -404,7 +417,7 @@ export function Tutorial({ onTry, initialCard = 0 }: TutorialProps) {
   const transform = `translateX(calc(${-index * 100}% + ${drag.dx}px))`;
 
   return (
-    <div class="ow-tut" ref={rootRef} tabIndex={-1} onKeyDown={onKeyDown} role="region" aria-roledescription="carousel" aria-label="Welcome to OpenWord">
+    <div class="ow-tut" ref={rootRef} tabIndex={-1} role="region" aria-roledescription="carousel" aria-label="Welcome to OpenWord">
       <div class="ow-tut__top">
         <span class="ow-tut__brand">
           <Icon name="menu_book" size={20} /> OpenWord

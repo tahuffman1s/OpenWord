@@ -1,4 +1,4 @@
-import { ChangeNotifier } from '../infra/changeNotifier';
+import { ChangeNotifier, type Listener } from '../infra/changeNotifier';
 
 /**
  * The browser's "install this app" prompt, caught and kept.
@@ -41,6 +41,32 @@ export class InstallPrompt extends ChangeNotifier {
   private event: BeforeInstallPromptEvent | null = null;
   private _installed = false;
   private captured = false;
+
+  // `useNotifier` subscribes in an effect, after the component's first
+  // render. Anything that changed in between — and here things change
+  // within milliseconds of the page loading — would never reach it, so a
+  // listener added after the first change is called once to catch up.
+  private changes = 0;
+  private readonly lateListeners = new Set<Listener>();
+
+  override notifyListeners(): void {
+    this.changes++;
+    super.notifyListeners();
+  }
+
+  override addListener(listener: Listener): void {
+    super.addListener(listener);
+    if (this.changes === 0) return;
+    this.lateListeners.add(listener);
+    queueMicrotask(() => {
+      if (this.lateListeners.delete(listener)) listener();
+    });
+  }
+
+  override removeListener(listener: Listener): void {
+    this.lateListeners.delete(listener);
+    super.removeListener(listener);
+  }
 
   /** Whether the browser has offered an install prompt we can fire. */
   get available(): boolean {

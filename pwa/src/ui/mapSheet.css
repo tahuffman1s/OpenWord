@@ -1,0 +1,47 @@
+.ow-map-sheet { padding: 0 20px 12px; }
+.ow-map-sheet__map {
+  position: relative;
+  flex: 5;
+  min-height: 0;
+  margin-top: 12px;
+  border-radius: 20px;
+  overflow: hidden;
+}
+.ow-map-sheet__controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  border-radius: 12px;
+  /* The surface at nine tenths, so the map shows faintly through. */
+  background: color-mix(in srgb, var(--md-sys-color-surface) 90%, transparent);
+}
+.ow-map-sheet__chips {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 40px;
+  margin-top: 10px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ow-map-sheet__chips::-webkit-scrollbar { display: none; }
+.ow-map-sheet__details {
+  flex: 3;
+  min-height: 0;
+  margin-top: 8px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ow-map-sheet__place { display: flex; align-items: flex-start; gap: 8px; }
+.ow-map-sheet__label {
+  margin-top: 10px;
+  font: var(--md-sys-typescale-label-small);
+  letter-spacing: 1.1px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.ow-map-sheet__verses { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ow-chip--compact.m3-chip { height: 28px; padding: 0 12px; }

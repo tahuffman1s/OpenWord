@@ -1,0 +1,25 @@
+/* The Learn tab: the lesson card, the verses being learnt, the rounds. */
+.ow-learn { padding-bottom: calc(24px + var(--ow-safe-bottom)); }
+
+.ow-learn__lesson { padding: 8px 16px 4px; }
+.ow-lesson {
+  padding: 20px;
+  border-radius: 24px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  display: flex;
+  flex-direction: column;
+}
+.ow-lesson__head { display: flex; align-items: center; gap: 10px; }
+.ow-lesson__title { flex: 1; min-width: 0; }
+.ow-lesson__summary { margin-top: 6px; }
+.ow-lesson__held { margin-top: 4px; }
+.ow-lesson__start { margin-top: 14px; align-self: stretch; }
+
+.ow-learn__header { display: flex; align-items: center; padding: 16px 8px 4px 16px; min-height: 60px; }
+.ow-learn__header-title { flex: 1; min-width: 0; }
+.ow-learn__nothing { padding: 0 16px 8px; }
+.ow-learn__rounds { padding: 0 16px 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+
+.ow-suggestions__theme { padding: 12px 24px 0; }
+.ow-suggestions__tile { padding-left: 24px; padding-right: 24px; }

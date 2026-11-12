@@ -11,6 +11,9 @@ import { AppBar, Button, ListTile, OverlayHost, Screen, SectionHeader, TonalButt
 import { showTutorial } from '../ui/tutorial/tutorial';
 import { detectPlatform, platformKey, showInstallGuide, type PlatformKey } from '../ui/tutorial/installGuide';
 import { captureInstallPrompt, installPrompt } from '../pwa/install';
+import { registerServiceWorker, useAppUpdates } from '../pwa/serviceWorker';
+import { useNotifier } from '../infra/changeNotifier';
+import { notificationPermission, requestNotificationPermission, showLocalNotification } from '../pwa/notifications';
 
 const platforms: PlatformKey[] = [
   'ios-safari', 'ios-other', 'android-chrome', 'android-samsung', 'android-edge', 'android-firefox', 'android-other',
@@ -22,9 +25,19 @@ const dark = params.get('dark') === '1';
 applyScheme(schemeFromSeed(0xff1b6c4f, dark ? 'dark' : 'light'));
 installRipples();
 captureInstallPrompt();
+// In dev there is no /sw.js and this says so and carries on; in a build
+// (vite preview) it registers the worker, so the update flow can be tried.
+registerServiceWorker();
 
 function Demo() {
   const [isDark, setDark] = useState(dark);
+  const updates = useAppUpdates();
+  useNotifier(installPrompt);
+  const [permission, setPermission] = useState(notificationPermission());
+  useEffect(() => {
+    if (!updates.updateAvailable) return;
+    showSnackBar('A new version of OpenWord is ready', { duration: 0, action: { label: 'Reload', onPressed: () => updates.applyUpdate() } });
+  }, [updates.updateAvailable]);
   const detected = platformKey(detectPlatform());
   useEffect(() => {
     // After OverlayHost (a sibling, mounted after this) has subscribed to
@@ -58,6 +71,29 @@ function Demo() {
         <TonalButton onClick={() => showInstallGuide({ installed: true })}>Already installed</TonalButton>
         <TonalButton onClick={() => showInstallGuide({ promptAvailable: true })}>With prompt</TonalButton>
       </div>
+      <SectionHeader>Service worker</SectionHeader>
+      <ListTile
+        icon="cloud_done"
+        title={updates.supported ? (updates.updateAvailable ? 'Update waiting' : updates.offlineReady ? 'Ready to work offline' : 'Registered') : 'Not registered (dev, or unsupported)'}
+        subtitle={updates.version ? `Version ${updates.version.version} · built ${updates.version.builtAt}${updates.version.commit ? ` · ${updates.version.commit}` : ''}` : 'No version.json'}
+        trailing={<TonalButton onClick={() => updates.checkNow()} disabled={!updates.supported || updates.checking}>Check now</TonalButton>}
+      />
+      <ListTile
+        icon="notifications"
+        title={`Notifications: ${permission}`}
+        trailing={
+          <TonalButton
+            onClick={async () => {
+              setPermission(await requestNotificationPermission());
+              const shown = await showLocalNotification('OpenWord', { body: 'A test notification', tag: 'demo', url: '/tutorial-demo.html' });
+              showSnackBar(shown ? 'Notification shown' : 'Could not show a notification');
+            }}
+          >
+            Test
+          </TonalButton>
+        }
+      />
+      <SectionHeader>Install guide, by platform</SectionHeader>
       {platforms.map((p) => (
         <ListTile key={p} icon={p.startsWith('ios') ? 'phone_iphone' : p.startsWith('android') ? 'smartphone' : 'desktop_windows'} title={p} onClick={() => showInstallGuide({ platform: p })} />
       ))}

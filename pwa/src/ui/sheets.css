@@ -1,0 +1,24 @@
+/* What the reader's bottom sheets share: the heights Flutter gave them as
+   a fraction of the screen (FractionallySizedBox), and a column that fills
+   the sheet under its handle. */
+.m3-sheet.ow-sheet--h92 { height: 92%; }
+.m3-sheet.ow-sheet--h90 { height: 90%; }
+.m3-sheet.ow-sheet--h88 { height: 88%; }
+.m3-sheet.ow-sheet--h85 { height: 85%; }
+
+.ow-sheet-fill {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ow-sheet-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.ow-sheet-note {
+  font: var(--md-sys-typescale-body-small);
+  color: var(--md-sys-color-on-surface-variant);
+}

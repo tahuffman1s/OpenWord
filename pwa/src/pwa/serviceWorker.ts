@@ -1,5 +1,5 @@
 import { Workbox } from 'workbox-window';
-import { ChangeNotifier, useNotifier } from '../infra/changeNotifier';
+import { ChangeNotifier, useNotifier, type Listener } from '../infra/changeNotifier';
 
 /**
  * Registers the service worker (`src/sw.ts`, built to `/sw.js`) and tells
@@ -31,6 +31,7 @@ export class AppUpdates extends ChangeNotifier {
   private registration: ServiceWorkerRegistration | null = null;
   private _updateAvailable = false;
   private _offlineReady = false;
+  private _firstInstall = false;
   private _version: VersionInfo | null = null;
   private _supported = false;
   private _checking = false;
@@ -39,14 +40,48 @@ export class AppUpdates extends ChangeNotifier {
   private lastCheck = 0;
   private registered = false;
 
+  // `useNotifier` subscribes in an effect, after the component's first
+  // render. Anything that changed in between — and here things change
+  // within milliseconds of the page loading — would never reach it, so a
+  // listener added after the first change is called once to catch up.
+  private changes = 0;
+  private readonly lateListeners = new Set<Listener>();
+
+  override notifyListeners(): void {
+    this.changes++;
+    super.notifyListeners();
+  }
+
+  override addListener(listener: Listener): void {
+    super.addListener(listener);
+    if (this.changes === 0) return;
+    this.lateListeners.add(listener);
+    queueMicrotask(() => {
+      if (this.lateListeners.delete(listener)) listener();
+    });
+  }
+
+  override removeListener(listener: Listener): void {
+    this.lateListeners.delete(listener);
+    super.removeListener(listener);
+  }
+
   /** A newer build is installed and waiting; `applyUpdate()` switches to it. */
   get updateAvailable(): boolean {
     return this._updateAvailable;
   }
 
-  /** The first worker has installed: the app now opens without a network. */
+  /** A worker with the precache is in place: the app opens without a network. */
   get offlineReady(): boolean {
     return this._offlineReady;
+  }
+
+  /**
+   * True only in the session in which the very first worker installed —
+   * for saying "Ready to work offline" once, not on every launch.
+   */
+  get firstInstall(): boolean {
+    return this._firstInstall;
   }
 
   /** The running build's version, once `version.json` has been read. */
@@ -101,6 +136,7 @@ export class AppUpdates extends ChangeNotifier {
     wb.addEventListener('installed', (event) => {
       if (!event.isUpdate) {
         this._offlineReady = true;
+        this._firstInstall = true;
         this.notifyListeners();
       }
     });
@@ -126,6 +162,8 @@ export class AppUpdates extends ChangeNotifier {
       this.registration = registration ?? null;
       this._supported = registration !== undefined;
       this.lastCheck = Date.now();
+      // A worker from an earlier visit is already serving the precache.
+      if (registration?.active && navigator.serviceWorker.controller) this._offlineReady = true;
       // A worker that was already waiting before this page loaded.
       if (registration?.waiting && navigator.serviceWorker.controller) {
         this._updateAvailable = true;

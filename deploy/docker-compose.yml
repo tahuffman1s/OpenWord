@@ -12,8 +12,8 @@
 # publishes web on ${OPENWORD_PORT:-8080} instead.
 #
 # Memory limits add up to 832 MB, leaving a 2 GB Pi room for the OS, the
-# page cache and the occasional `docker compose build`. Observed at rest:
-# web ~5 MB, api ~20 MB, db ~40 MB, cloudflared ~30 MB.
+# page cache and the occasional image build. They are ceilings, not what
+# the containers are expected to use: see "What it costs" in README.md.
 
 name: openword
 

@@ -14,9 +14,10 @@
 #   voice   alpine          fetch the Kitten voice, verify its SHA-256, unpack
 #   final   nginx:1.27      deploy/nginx.conf + the two trees above
 #
-# On a Pi 4 with 2 GB the first build takes 10-15 minutes and the node stage
-# peaks at about 1.5 GB; NODE_OPTIONS below keeps V8 from asking for more.
-# Enable a swapfile first if `free -m` shows no swap (install.sh offers to).
+# On a Pi 4 with 2 GB, budget 10-15 minutes for the first build and about
+# 1.5 GB of memory for the node stage: NODE_OPTIONS below caps V8's heap at
+# 1536 MB so it fails cleanly rather than taking the machine down. Have
+# swap on first if `free -m` shows none (install.sh offers to set it up).
 
 ARG NODE_IMAGE=node:22-alpine
 ARG NGINX_IMAGE=nginx:1.27-alpine
@@ -59,7 +60,12 @@ RUN set -eux; \
     test -f dist/manifest.webmanifest; \
     test -d dist/assets/bible; \
     test -f dist/ort/ort-wasm-simd-threaded.wasm; \
-    rm -rf dist/voice
+    test -f dist/version.json; \
+    # The voice comes from the stage below, never from a working tree.
+    rm -rf dist/voice; \
+    # nginx's workers are not root. Files copied from a checkout made under
+    # a strict umask would otherwise arrive unreadable and serve as 403s.
+    chmod -R a+rX dist
 
 # Pre-compress what compresses, so the Pi spends no CPU on it per request and
 # the tunnel carries a third of the bytes (gzip_static in nginx.conf serves
@@ -94,12 +100,13 @@ RUN set -eux; \
     curl -fsSL --retry 5 --retry-delay 5 -o voice.tar.bz2 "${VOICE_URL}"; \
     echo "${VOICE_SHA256}  voice.tar.bz2" | sha256sum -c -; \
     mkdir -p "/voice/${VOICE_NAME}"; \
-    tar -xjf voice.tar.bz2 -C "/voice/${VOICE_NAME}" --strip-components=1 \
+    tar -xjf voice.tar.bz2 -C "/voice/${VOICE_NAME}" --strip-components=1 --no-same-owner \
         "${VOICE_NAME}/model.fp32.onnx" \
         "${VOICE_NAME}/voices.bin" \
         "${VOICE_NAME}/tokens.txt" \
         "${VOICE_NAME}/LICENSE"; \
     rm voice.tar.bz2; \
+    chmod -R a+rX /voice; \
     test -s "/voice/${VOICE_NAME}/model.fp32.onnx"; \
     test -s "/voice/${VOICE_NAME}/voices.bin"; \
     test -s "/voice/${VOICE_NAME}/tokens.txt"; \

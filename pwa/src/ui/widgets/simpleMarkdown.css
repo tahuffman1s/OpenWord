@@ -1,0 +1,16 @@
+/* The book introductions' Markdown: headings in the primary colour, set
+   apart from the text around them. */
+.ow-markdown { color: var(--md-sys-color-on-surface); }
+.ow-markdown__heading {
+  font: var(--md-sys-typescale-title-small);
+  font-weight: 700;
+  color: var(--md-sys-color-primary);
+  padding: 16px 0 6px;
+}
+.ow-markdown__heading--major { font: var(--md-sys-typescale-title-medium); font-weight: 700; padding-top: 22px; }
+.ow-markdown__heading--first { padding-top: 0; }
+.ow-markdown__paragraph { margin: 0; padding-bottom: 10px; font: inherit; }
+.ow-markdown__item { display: flex; align-items: flex-start; padding: 0 0 6px 4px; }
+.ow-markdown__marker { flex: none; width: 22px; color: var(--md-sys-color-on-surface-variant); }
+.ow-markdown__item-text { flex: 1; min-width: 0; }
+.ow-markdown__rule { margin: 10px 0; }

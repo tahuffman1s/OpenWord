@@ -1,0 +1,29 @@
+.ow-concordance__bar {
+  flex: none;
+  background: var(--md-sys-color-surface);
+  transition: background-color 200ms;
+  position: relative;
+  z-index: 2;
+}
+.ow-concordance__bar--scrolled { background: var(--md-sys-color-surface-container); }
+.ow-concordance__head { padding: 0 16px 8px; }
+.ow-concordance__lemma { line-height: 1.7; }
+.ow-concordance__books {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  margin-top: 6px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ow-concordance__books::-webkit-scrollbar { display: none; }
+.ow-concordance__text {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  color: var(--md-sys-color-on-surface);
+}
+.ow-concordance__text.m3-on-surface-variant { color: var(--md-sys-color-on-surface-variant); }
