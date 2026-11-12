@@ -1,17 +1,77 @@
 # OpenWord
 
-A free and open source Bible reader, built with Flutter and themed with
-Material You. One codebase runs on Android, iOS, Linux, macOS, Windows and the
-web.
+A free and open source Bible reader that you host yourself and install
+from the browser, themed with Material You. It reads offline, speaks in a
+voice that runs on the device, teaches verses by heart, and keeps a streak
+going with your friends.
 
-There is also an installable web app with accounts and friends that you
-can host on a Raspberry Pi with one command: see
-[The PWA, and hosting it yourself](#the-pwa-and-hosting-it-yourself).
+**Nothing about your reading leaves your device.** Three public-domain
+translations ship with the app and are kept by it, so it works with no
+connection. There is no telemetry. An account is optional, and exists only
+for friends, reminders and a backup.
 
-**Everything is offline.** Three public-domain translations ship inside the
-app, so there is no download step, no account, no telemetry — the Android
-build does not even ask for the internet permission, and the macOS build has
-no network entitlement.
+The same reader is also here as **native builds** for Android, iOS, Linux,
+macOS and Windows, made with Flutter from `lib/`. They have no accounts or
+friends, and they are where Android Auto lives. See [Building the native
+apps](#building-the-native-apps).
+
+## Hosting it yourself
+
+`pwa/` is the app: TypeScript (Preact, Vite), themed with Material You
+from the seed colour and following the system's light or dark. `server/`
+is a small Go API over Postgres for accounts with a photo, friends, an
+achievements feed, streaks kept together, reminders and a backup.
+`deploy/` puts all of it on a Raspberry Pi behind a Cloudflare Tunnel.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/tahuffman1s/OpenWord/main/deploy/install.sh | bash
+```
+
+Run as your normal user on 64-bit Raspberry Pi OS (a Pi 4 with 2 GB is
+enough) or any 64-bit Linux. It installs Docker if it is missing, asks for
+a Cloudflare tunnel token and the public address, builds the two images
+and starts everything; with no token it serves on the local network
+instead. Afterwards `openword update`, `openword logs`, `openword backup`
+and the rest are one command each. [`deploy/README.md`](deploy/README.md)
+is the full guide.
+
+How it differs from the native builds, and why:
+
+- **Everything still works offline, and nothing about reading is sent
+  anywhere.** A service worker keeps the app, the three translations, the
+  maps, the cross-references and the Hebrew and Greek. An account is
+  optional; without one the app never calls the server.
+- **A translation you import stays in your browser.** An EPUB is converted
+  to a `.bib` in a worker on your own device and kept in IndexedDB. It is
+  never uploaded, and the server has nowhere to put one.
+- **The voice runs in the browser.** The same KittenTTS model, through
+  ONNX Runtime's WebAssembly build and eSpeak NG, fetched from your own
+  server the first time *Listen* is used (57 MB, once) and kept. The
+  voices a device brings are offered beside it.
+- **The lock screen, a headset and a car's media buttons** pause it and
+  step it verse by verse, through the browser's Media Session. **Android
+  Auto and CarPlay as browsable apps are not possible for a web app** and
+  are the one thing cut.
+- **Material You without the wallpaper.** A browser cannot read the
+  system's palette, so the seed colour picker is the palette everywhere.
+- **Friends are new.** Add someone by username, keep a streak together
+  (days on which you both learnt), cheer what each other earns, and be
+  reminded in the evening before a shared streak ends. Reminders arrive as
+  push notifications; on an iPhone that needs the app installed to the
+  home screen (iOS 16.4 or later).
+- **A walkthrough on first launch** shows the app a card at a time and
+  ends with how to install it in the browser at hand; Settings reopens
+  both.
+
+```bash
+cd pwa && npm ci && npm run dev      # the app, at localhost:5173
+npm test && npm run typecheck        # 540-odd tests against the shipped data
+cd ../server && go test ./...        # the API; docs/api.md is its contract
+```
+
+Under compose the whole stack idles at around 50 MB of memory: nginx with
+everything pre-compressed, a 10 MB static Go binary, and Postgres capped
+and tuned for 2 GB.
 
 ## Features
 
@@ -77,7 +137,8 @@ no network entitlement.
   no screen of the app open. The voice is [KittenTTS](https://github.com/KittenML/KittenTTS),
   an open neural model with eight speakers, bundled with the app and run
   with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); it speaks
-  English. Not on the web, which cannot run it.
+  English. In the browser the same model runs through ONNX Runtime's
+  WebAssembly build; Android Auto is the native Android build's alone.
 - **Select several verses and share them.** Hold a verse, then tap others
   to add them; a bar along the bottom cites the selection the way a printed
   Bible would — *John 3:16–18, 20* — and copies it, shares it, highlights it
@@ -701,7 +762,7 @@ introductions, the maps and the voice are all bundled, and importing a
 translation reads the file the system picker hands over without sending it
 anywhere.
 
-## Building
+## Building the native apps
 
 Requires the Flutter SDK (3.47 or newer; Dart 3.13+).
 
@@ -742,67 +803,6 @@ Tagged builds for Android, Linux, Windows and the web are attached to each
 flutter analyze
 flutter test
 ```
-
-## The PWA, and hosting it yourself
-
-`pwa/` is the same app as an installable web app, written in TypeScript
-(Preact, Vite) rather than compiled from the Flutter code: the reader, the
-study layers, plans, quizzes, learning by heart and the voice, one for one,
-themed with Material You from the seed colour and following the system's
-light or dark. `server/` is a small Go API over Postgres for what an app
-with no account never had: accounts with a photo, friends, an achievements
-feed, streaks kept together, reminders and a backup. `deploy/` puts all of
-it on a Raspberry Pi behind a Cloudflare Tunnel.
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/tahuffman1s/OpenWord/main/deploy/install.sh | bash
-```
-
-Run as your normal user on 64-bit Raspberry Pi OS (a Pi 4 with 2 GB is
-enough) or any 64-bit Linux. It installs Docker if it is missing, asks for
-a Cloudflare tunnel token and the public address, builds the two images
-and starts everything; with no token it serves on the local network
-instead. Afterwards `openword update`, `openword logs`, `openword backup`
-and the rest are one command each. [`deploy/README.md`](deploy/README.md)
-is the full guide.
-
-What differs from the Flutter app, and why:
-
-- **Everything still works offline, and nothing about reading is sent
-  anywhere.** A service worker keeps the app, the three translations, the
-  maps, the cross-references and the Hebrew and Greek. An account is
-  optional; without one the app never calls the server.
-- **A translation you import stays in your browser.** An EPUB is converted
-  to a `.bib` in a worker on your own device and kept in IndexedDB. It is
-  never uploaded, and the server has nowhere to put one.
-- **The voice runs in the browser.** The same KittenTTS model, through
-  ONNX Runtime's WebAssembly build and eSpeak NG, fetched from your own
-  server the first time *Listen* is used (57 MB, once) and kept. The
-  voices a device brings are offered beside it.
-- **The lock screen, a headset and a car's media buttons** pause it and
-  step it verse by verse, through the browser's Media Session. **Android
-  Auto and CarPlay as browsable apps are not possible for a web app** and
-  are the one thing cut.
-- **Material You without the wallpaper.** A browser cannot read the
-  system's palette, so the seed colour picker is the palette everywhere.
-- **Friends are new.** Add someone by username, keep a streak together
-  (days on which you both learnt), cheer what each other earns, and be
-  reminded in the evening before a shared streak ends. Reminders arrive as
-  push notifications; on an iPhone that needs the app installed to the
-  home screen (iOS 16.4 or later).
-- **A walkthrough on first launch** shows the app a card at a time and
-  ends with how to install it in the browser at hand; Settings reopens
-  both.
-
-```bash
-cd pwa && npm ci && npm run dev      # the app, at localhost:5173
-npm test && npm run typecheck        # 540-odd tests against the shipped data
-cd ../server && go test ./...        # the API; docs/api.md is its contract
-```
-
-Under compose the whole stack idles at around 50 MB of memory: nginx with
-everything pre-compressed, a 10 MB static Go binary, and Postgres capped
-and tuned for 2 GB.
 
 ## How it works
 
