@@ -4,6 +4,10 @@ A free and open source Bible reader, built with Flutter and themed with
 Material You. One codebase runs on Android, iOS, Linux, macOS, Windows and the
 web.
 
+There is also an installable web app with accounts and friends that you
+can host on a Raspberry Pi with one command: see
+[The PWA, and hosting it yourself](#the-pwa-and-hosting-it-yourself).
+
 **Everything is offline.** Three public-domain translations ship inside the
 app, so there is no download step, no account, no telemetry — the Android
 build does not even ask for the internet permission, and the macOS build has
@@ -739,75 +743,66 @@ flutter analyze
 flutter test
 ```
 
-## Self-hosting the web build
+## The PWA, and hosting it yourself
 
-`deploy/` holds an nginx image and a Cloudflare Tunnel, which between them
-put the app on your own domain from a Raspberry Pi with no port forwarded
-and no inbound firewall hole — cloudflared only ever dials out.
-
-```bash
-cd deploy
-cp .env.example .env        # put your tunnel token in it
-docker compose up -d
-```
-
-The token comes from the Cloudflare dashboard, under Zero Trust → Networks →
-Tunnels → Create a tunnel → Cloudflared: copy the value after `--token` in
-the install command it offers. Point the tunnel's public hostname at
-`http://web:80`; the containers share a network, and the web container
-publishes no port at all.
-
-**The build serves everything itself.** `flutter build web` normally fetches
-CanvasKit — some 7 MB — from `gstatic.com` on every cold load, and takes its
-default UI font from `fonts.gstatic.com` with it. On a network that cannot
-reach Google the app renders no text whatsoever. Both builds here pass
-`--no-web-resources-cdn`, which puts CanvasKit in the bundle and the fonts
-with it; a browser loading the result makes no request to anything but your
-own origin. That is worth keeping true of a Bible app whose whole claim is
-that it needs no connection.
-
-Two ways to build the image:
-
-| | what it does | when |
-|---|---|---|
-| `deploy/Dockerfile` | unpacks a published release zip | **the default.** No Flutter, no cross-build, works on the Pi itself |
-| `deploy/Dockerfile.source` | builds this working tree | for changes not yet released |
-
-The default is the right one for a Pi because a web bundle is static files
-and so architecture-free; only nginx has to match, and that is multi-arch.
-The source build cannot be: Flutter publishes **no arm64 Linux SDK**, so its
-build stage is pinned to `linux/amd64` and would crawl under emulation on a
-Pi. Build that one on an x86 machine and push the result:
+`pwa/` is the same app as an installable web app, written in TypeScript
+(Preact, Vite) rather than compiled from the Flutter code: the reader, the
+study layers, plans, quizzes, learning by heart and the voice, one for one,
+themed with Material You from the seed colour and following the system's
+light or dark. `server/` is a small Go API over Postgres for what an app
+with no account never had: accounts with a photo, friends, an achievements
+feed, streaks kept together, reminders and a backup. `deploy/` puts all of
+it on a Raspberry Pi behind a Cloudflare Tunnel.
 
 ```bash
-docker buildx build --platform linux/arm64 \
-  -f deploy/Dockerfile.source -t you/openword:dev --push .
+curl -fsSL https://raw.githubusercontent.com/tahuffman1s/OpenWord/main/deploy/install.sh | bash
 ```
 
-### What the nginx config is doing
+Run as your normal user on 64-bit Raspberry Pi OS (a Pi 4 with 2 GB is
+enough) or any 64-bit Linux. It installs Docker if it is missing, asks for
+a Cloudflare tunnel token and the public address, builds the two images
+and starts everything; with no token it serves on the local network
+instead. Afterwards `openword update`, `openword logs`, `openword backup`
+and the rest are one command each. [`deploy/README.md`](deploy/README.md)
+is the full guide.
 
-Two details of a Flutter bundle drive it, and both are easy to get wrong:
+What differs from the Flutter app, and why:
 
-- **Nothing is content-hashed.** `main.dart.js` is called `main.dart.js` in
-  every build, so no file may be cached immutably or a redeploy would serve
-  the old app for as long as a browser kept it. Everything is `no-cache`
-  with an ETag instead, which makes a warm load a handful of 304s and no
-  bodies; the service worker and `version.json` are `no-store`.
-- **Several assets are gzip *content*** — the `.bib` translations,
-  `originals.ows.gz`, `xrefs.owx.gz` — which the app unpacks itself. They
-  must go out as opaque bytes. A server that set `Content-Encoding` on them
-  would have the browser unpack them early and the app's own gunzip would
-  then fail on what was left.
+- **Everything still works offline, and nothing about reading is sent
+  anywhere.** A service worker keeps the app, the three translations, the
+  maps, the cross-references and the Hebrew and Greek. An account is
+  optional; without one the app never calls the server.
+- **A translation you import stays in your browser.** An EPUB is converted
+  to a `.bib` in a worker on your own device and kept in IndexedDB. It is
+  never uploaded, and the server has nowhere to put one.
+- **The voice runs in the browser.** The same KittenTTS model, through
+  ONNX Runtime's WebAssembly build and eSpeak NG, fetched from your own
+  server the first time *Listen* is used (57 MB, once) and kept. The
+  voices a device brings are offered beside it.
+- **The lock screen, a headset and a car's media buttons** pause it and
+  step it verse by verse, through the browser's Media Session. **Android
+  Auto and CarPlay as browsable apps are not possible for a web app** and
+  are the one thing cut.
+- **Material You without the wallpaper.** A browser cannot read the
+  system's palette, so the seed colour picker is the palette everywhere.
+- **Friends are new.** Add someone by username, keep a streak together
+  (days on which you both learnt), cheer what each other earns, and be
+  reminded in the evening before a shared streak ends. Reminders arrive as
+  push notifications; on an iPhone that needs the app installed to the
+  home screen (iOS 16.4 or later).
+- **A walkthrough on first launch** shows the app a card at a time and
+  ends with how to install it in the browser at hand; Settings reopens
+  both.
 
-Everything else *is* pre-compressed, at build time rather than per request,
-so the Pi spends no CPU on it: `main.dart.js` goes out at 926 kB instead of
-3.1 MB, `canvaskit.wasm` at 2.9 MB instead of 7.0 MB.
+```bash
+cd pwa && npm ci && npm run dev      # the app, at localhost:5173
+npm test && npm run typecheck        # 540-odd tests against the shipped data
+cd ../server && go test ./...        # the API; docs/api.md is its contract
+```
 
-One nginx trap worth knowing if you edit the config: a `types { … }` block
-inside `server` **replaces** the inherited MIME map rather than extending
-it. Adding `font/ttf` that way silently costs `index.html` its `text/html`
-and `canvaskit.wasm` its `application/wasm`, and the page stops working.
-The Dockerfile appends to `mime.types` instead.
+Under compose the whole stack idles at around 50 MB of memory: nginx with
+everything pre-compressed, a 10 MB static Go binary, and Postgres capped
+and tuned for 2 GB.
 
 ## How it works
 
