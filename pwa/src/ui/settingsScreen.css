@@ -48,11 +48,6 @@
 .ow-voice__note { padding: 8px 24px 0; }
 
 .ow-licences__problem { padding: 16px; }
-.ow-licences__text {
-  margin: 0;
-  padding: 16px;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  font-family: ui-monospace, 'Roboto Mono', Menlo, Consolas, monospace;
-  color: var(--md-sys-color-on-surface);
-}
+.ow-licences__text { padding: 8px 16px 16px; overflow-wrap: anywhere; color: var(--md-sys-color-on-surface); }
+.ow-licences__text p { margin: 0 0 10px; }
+.ow-licences__text .ow-licences__centred { margin-bottom: 2px; text-align: center; font-weight: 500; }

@@ -29,7 +29,10 @@ export default defineConfig({
         // The voice and the ONNX runtime that runs it (15 MB) are fetched
         // the first time Listen is used and kept by the worker's runtime
         // caches, rather than downloaded by every reader at install.
-        globIgnores: ['voice/**', 'ort/**', '**/*.map'],
+        // Vite also emits the runtime's wasm beside the bundle that names it;
+        // the worker loads the copy under /ort/ instead, so that one is left
+        // out of the precache too.
+        globIgnores: ['voice/**', 'ort/**', 'assets/ort-wasm-*.wasm', '**/*.map'],
         maximumFileSizeToCacheInBytes: 12 * 1024 * 1024,
         // Only Vite's own output (assets/name-HASH.ext) carries its version
         // in its name. The plugin's default treats everything under
@@ -61,5 +64,8 @@ export default defineConfig({
     environment: 'node',
     include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],
     setupFiles: ['test/setup.ts'],
+    // Its files import each other without extensions, which Node will not
+    // resolve; inlined, Vite does it.
+    server: { deps: { inline: ['@material/material-color-utilities'] } },
   },
 });

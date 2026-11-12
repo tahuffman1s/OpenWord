@@ -63,6 +63,27 @@ class OverlayStack extends ChangeNotifier {
   private exitTimers = new Map<number, ReturnType<typeof setTimeout>>();
   private historyReady = false;
 
+  /**
+   * A back-step of our own is on its way: `history.go` is asynchronous, so
+   * between asking and the popstate that answers, history is not where
+   * the stack is. Anything pushed in that gap — a dialog opened as a menu
+   * closes — is shown at once, and its history entry is written when the
+   * back-step lands; written sooner, the back-step would land on the
+   * wrong side of it and close what was just opened.
+   */
+  private awaitingPop = false;
+  private deferredPushes = 0;
+  private popFallback: ReturnType<typeof setTimeout> | null = null;
+
+  private backStepLanded(): void {
+    if (this.popFallback) clearTimeout(this.popFallback);
+    this.popFallback = null;
+    this.awaitingPop = false;
+    const base = this.live.length - this.deferredPushes;
+    for (let i = 1; i <= this.deferredPushes; i++) history.pushState({ owDepth: base + i }, '');
+    this.deferredPushes = 0;
+  }
+
   /** Hooks into the browser's history. Called once by the host. */
   attachHistory(): void {
     if (this.historyReady || typeof history === 'undefined') return;
@@ -70,6 +91,11 @@ class OverlayStack extends ChangeNotifier {
     history.replaceState({ owDepth: 0 }, '');
     addEventListener('popstate', (event) => {
       const e = event as PopStateEvent;
+      if (this.awaitingPop) {
+        // Our own back-step arriving: the stack is already right.
+        this.backStepLanded();
+        return;
+      }
       const depth = typeof e.state?.owDepth === 'number' ? e.state.owDepth : 0;
       // The browser went back (or forward past where we were): bring the
       // stack to the depth history says, without touching history again.
@@ -114,7 +140,10 @@ class OverlayStack extends ChangeNotifier {
       // Something may be pushed before the host has mounted (a deep link
       // opening a screen at launch): history is hooked up here if not yet.
       this.attachHistory();
-      if (this.historyReady) history.pushState({ owDepth: this.live.length }, '');
+      if (this.historyReady) {
+        if (this.awaitingPop) this.deferredPushes++;
+        else history.pushState({ owDepth: this.live.length }, '');
+      }
       this.notifyListeners();
     });
   }
@@ -133,11 +162,45 @@ class OverlayStack extends ChangeNotifier {
     const live = this.live;
     const removing = live.length - index;
     for (let i = live.length - 1; i >= index; i--) this.settle(live[i], i === index ? result : undefined);
+    if (this.awaitingPop) {
+      // Closed before its history entry was written: there is nothing in
+      // history to take back for those, only for what was there before.
+      const unwritten = Math.min(removing, this.deferredPushes);
+      this.deferredPushes -= unwritten;
+      const written = removing - unwritten;
+      if (written > 0) {
+        // Rare: closing through what was open before the pending step.
+        // Let that step land, then take these back as well.
+        const landed = () => {
+          removeEventListener('popstate', landed);
+          setTimeout(() => this.stepBack(written), 0);
+        };
+        addEventListener('popstate', landed);
+      }
+      return;
+    }
     if (this.historyReady && typeof history.state?.owDepth === 'number' && history.state.owDepth === live.length) {
       // History is in step with the stack: step it back to match. If it is
       // not, the popstate that got us here already did.
-      history.go(-removing);
+      this.stepBack(removing);
     }
+  }
+
+  private stepBack(count: number): void {
+    this.awaitingPop = true;
+    history.go(-count);
+    // Should the popstate never come, do not hold pushes back for ever.
+    this.popFallback = setTimeout(() => {
+      if (this.awaitingPop) this.backStepLanded();
+    }, 400);
+  }
+
+  /** Settles once no back-step of ours is still on its way. */
+  historySettled(): Promise<void> {
+    return new Promise((resolve) => {
+      const check = () => (this.awaitingPop ? setTimeout(check, 10) : resolve());
+      check();
+    });
   }
 
   /** Whether anything but the root screen is showing. */
@@ -221,9 +284,11 @@ class SnackBarQueue extends ChangeNotifier {
 
   show(message: string, options: SnackBarOptions = {}): void {
     const snack: Snack = { id: this.nextId++, message, exiting: false, ...options };
-    if (this.current && !this.current.exiting) {
+    if (this.current) {
+      // One is showing, or on its way out: this waits its turn. Presenting
+      // it over one that is leaving would have that one's exit remove it.
       this.queue.push(snack);
-      this.hide();
+      if (!this.current.exiting) this.hide();
       return;
     }
     this.present(snack);

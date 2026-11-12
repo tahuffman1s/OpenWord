@@ -27,9 +27,9 @@ export interface LibraryScreenProps {
 
 export interface QuizScreenProps {
   kind: QuizKind;
-  questions?: readonly QuizQuestion[];
-  title?: string;
-  onFinished?: (right: number, total: number) => void;
+  questions?: readonly QuizQuestion[] | null;
+  title?: string | null;
+  onFinished?: ((right: number, total: number) => void) | null;
 }
 
 export interface PretestCardProps {

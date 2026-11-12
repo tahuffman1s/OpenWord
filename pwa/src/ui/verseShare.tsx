@@ -240,8 +240,10 @@ export const VerseCard = {
     // Where a line's baseline sits inside a line box of a given height:
     // the face's own ascent and descent, stretched to fill it.
     const baselineIn = (size: number, lineHeight: number): number => {
+      const drawingIn = canvas.font;
       canvas.font = font(size);
       const metrics = canvas.measureText('Hg');
+      canvas.font = drawingIn;
       const ascent = metrics.fontBoundingBoxAscent ?? size * 0.93;
       const descent = metrics.fontBoundingBoxDescent ?? size * 0.27;
       return (lineHeight * ascent) / (ascent + descent);

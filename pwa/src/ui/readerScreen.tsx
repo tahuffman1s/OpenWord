@@ -70,6 +70,7 @@ import {
   type PretestCardProps,
 } from './optionalScreens';
 import { showOriginal } from './originalSheet';
+import { hasReader, registerReaderGoTo } from './readerNav';
 import { showSearch } from './searchScreen';
 import { showInstallGuide } from './tutorial/installGuide';
 import { VerseSharing, copyText, showVerseImageSheet, type ShareParams } from './verseShare';
@@ -594,7 +595,23 @@ class ReaderController extends ChangeNotifier {
       return;
     }
     const result = await openScreen<Reference>(<LibraryScreen initialTab={initialTab} />, { name: 'library' });
-    if (result instanceof Reference && !this.disposedNow) this.goTo(result);
+    // A screen that knows the reader has sent it there already (readerNav);
+    // one that does not closes with the place and leaves it to this.
+    if (result instanceof Reference && !hasReader() && !this.disposedNow) this.goTo(result);
+  };
+
+  /**
+   * Somewhere a screen over the reader has sent it: a verse from the
+   * library, a chapter of a plan with the day it belongs to.
+   */
+  readonly goToFromScreen = (reference: Reference, plan?: PlanReading): void => {
+    if (this.disposedNow) return;
+    if (plan !== undefined) {
+      this.planFocus = plan;
+      this.notifyListeners();
+      if (!hasChapter(this.bible, plan.chapter)) return;
+    }
+    this.goTo(reference);
   };
 
   readonly openSettings = async (): Promise<void> => {
@@ -643,10 +660,8 @@ class ReaderController extends ChangeNotifier {
       return;
     }
     const result = await openScreen<PlanReading>(<PlansScreen />, { name: 'plans' });
-    if (result === undefined || result === null || typeof result !== 'object' || this.disposedNow) return;
-    this.planFocus = result;
-    this.notifyListeners();
-    if (hasChapter(this.bible, result.chapter)) this.goTo(result.chapter);
+    if (result === undefined || result === null || typeof result !== 'object' || hasReader() || this.disposedNow) return;
+    this.goToFromScreen(result.chapter, result);
   };
 
   /**
@@ -739,7 +754,7 @@ class ReaderController extends ChangeNotifier {
       />,
       { name: 'pretest' },
     );
-    if (opened instanceof Reference && !this.disposedNow) this.goTo(opened);
+    if (opened instanceof Reference && !hasReader() && !this.disposedNow) this.goTo(opened);
   }
 
   planCardFor(chapter: Reference): VNode | null {
@@ -1108,6 +1123,7 @@ export function ReaderScreen() {
   }, [controller]);
 
   useEffect(() => registerFeatureOpener(controller.openFeature), [controller]);
+  useEffect(() => registerReaderGoTo(controller.goToFromScreen), [controller]);
 
   // The reading face arrives a moment after the first frame; what was
   // measured in its stand-in is measured again.
@@ -1159,6 +1175,8 @@ export function ReaderScreen() {
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
   }, [controller]);
+
+  useBackEndsSelection(controller.selecting, controller.clearSelection);
 
   const pager = useRef<PagerHandle | null>(null);
   useEffect(() => {
@@ -1289,6 +1307,47 @@ export function ReaderScreen() {
       )}
     </Screen>
   );
+}
+
+/**
+ * Back ends a selection before it leaves anything — Flutter's `PopScope`.
+ *
+ * The reader is the bottom of the app, so there is nothing for the back
+ * button to go back to but out. While verses are selected the reader
+ * keeps one entry of its own in the browser's history: going back lands
+ * on what was there before it, which is the cue to let the selection go;
+ * and a selection ended any other way takes its entry away again.
+ */
+function useBackEndsSelection(selecting: boolean, clear: () => void): void {
+  useEffect(() => {
+    if (!selecting || typeof history === 'undefined') return;
+    let ended = false;
+    let pushed = false;
+    const mine = () => (history.state as { owSelection?: boolean } | null)?.owSelection === true;
+
+    // After whatever closed to start it — the verse sheet's "Select more".
+    void historySettled().then(() => {
+      if (ended) return;
+      history.pushState({ owDepth: overlays.live.length, owSelection: true }, '');
+      pushed = true;
+    });
+
+    const onPop = () => {
+      // Back past the selection's own entry, with nothing open over it.
+      if (pushed && !mine() && overlays.isEmpty) clear();
+    };
+    addEventListener('popstate', onPop);
+
+    return () => {
+      ended = true;
+      removeEventListener('popstate', onPop);
+      if (!pushed) return;
+      void historySettled().then(() => {
+        if (mine()) history.back();
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selecting]);
 }
 
 /** An app-bar button with a small dot on it while something is waiting. */

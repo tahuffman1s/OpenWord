@@ -545,16 +545,17 @@ function builtLine(builtAt: string): string {
 function UpdateRow({ updates }: { updates: AppUpdates }) {
   const [looked, setLooked] = useState(false);
   const version = updates.version;
-  const title = version === null ? 'OpenWord' : `Version ${version.version}${version.commit ? ` (${version.commit})` : ''}`;
+  const title = version === null ? 'OpenWord' : `Version ${version.version}`;
+  const built = version === null ? '' : `${builtLine(version.builtAt)}${version.commit ? ` Commit ${version.commit}.` : ''} `;
   const subtitle = updates.checking
     ? 'Checking for a newer version…'
     : updates.updateAvailable
       ? 'A newer version is ready. Reload to switch to it.'
       : !updates.supported
-        ? `${version === null ? '' : `${builtLine(version.builtAt)} `}Updates arrive when the page is reloaded.`.trim()
+        ? `${built}Updates arrive when the page is reloaded.`.trim()
         : looked
           ? 'This is the newest version.'
-          : `${version === null ? '' : `${builtLine(version.builtAt)} `}${updates.offlineReady ? 'Ready to read offline.' : 'Checks for a newer version by itself.'}`.trim();
+          : `${built}${updates.offlineReady ? 'Ready to read offline.' : 'Checks for a newer version by itself.'}`.trim();
   return (
     <ListTile
       static
@@ -964,6 +965,40 @@ export function LicencesScreen() {
   );
 }
 
+/** A paragraph of a licence: its lines run together, or a line set in the middle. */
+export interface LicenceBlock {
+  text: string;
+  centred: boolean;
+
+  /** How far in the paragraph is set, in steps: a clause under a clause. */
+  indent: number;
+}
+
+/**
+ * A licence's text as paragraphs. The texts are wrapped by hand at some
+ * seventy columns, which a phone would wrap again into ragged halves; the
+ * lines of a paragraph are run together instead, and a line pushed well
+ * in — a title — is set in the middle, as Flutter's licence page does it.
+ */
+export function licenceBlocks(text: string): LicenceBlock[] {
+  const blocks: LicenceBlock[] = [];
+  for (const paragraph of text.replaceAll('\r\n', '\n').split(/\n[ \t]*\n/)) {
+    const lines = paragraph.split('\n').filter((line) => line.trim().length > 0);
+    if (lines.length === 0) continue;
+    const leading = (line: string): number => line.length - line.trimStart().length;
+    if (lines.every((line) => leading(line) >= 8)) {
+      for (const line of lines) blocks.push({ text: line.trim(), centred: true, indent: 0 });
+      continue;
+    }
+    blocks.push({
+      text: lines.map((line) => line.trim()).join(' '),
+      centred: false,
+      indent: Math.min(Math.floor(leading(lines[0]) / 2), 3),
+    });
+  }
+  return blocks;
+}
+
 function LicenceScreen({ licence }: { licence: Licence }) {
   const text = useAsync(() => licence.load(), [licence]);
   return (
@@ -974,7 +1009,13 @@ function LicenceScreen({ licence }: { licence: Licence }) {
         ) : text.error !== undefined ? (
           <div class="m3-body-medium m3-error ow-licences__problem">That licence could not be read.</div>
         ) : (
-          <pre class="ow-licences__text m3-body-small">{text.value}</pre>
+          <div class="ow-licences__text m3-body-small">
+            {licenceBlocks(text.value ?? '').map((block) => (
+              <p class={block.centred ? 'ow-licences__centred' : undefined} style={block.indent > 0 ? `padding-left:${block.indent * 12}px` : undefined}>
+                {block.text}
+              </p>
+            ))}
+          </div>
         )}
       </div>
     </Screen>
