@@ -2,34 +2,7 @@
 
 ## Unreleased
 
-### Added
-- **A verse in every translation at once** (#5). Tap a verse and the
-  translations on the device are offered under it: choosing one sets its
-  words in place of the first, there in the sheet. *Compare all* stacks
-  them, the one being read first, with the words the others do not share
-  with it marked, so the eye goes to where they part. The arrows step to
-  the next verse without closing anything, several selected verses are
-  compared together, and a translation's menu goes on reading in it, sets
-  it beside the page, copies it or leaves it out.
-- **The voice on the graphics processor.** The model runs on WebGPU where
-  the browser has it, which on an iPhone (iOS 26 and later) is what lets
-  speech be made faster than it is heard, and on WebAssembly where it does
-  not. The first time on a device the graphics processor is made to say a
-  word and listened to before it is trusted; a load the page does not come
-  back from is remembered and not tried a third time; and whichever of the
-  two keeps the better pace is used.
-- **Reading aloud on an iPhone set to silent**, and with the screen
-  locked: while a chapter is being read the page tells iOS it is playback,
-  not a sound effect. Sound taken by a phone call comes back when the app
-  does.
-
-### Fixed
-- **Sheets are pulled down to close** (#4). A finger anywhere on a bottom
-  sheet drags it away; one that starts on a list scrolls the list back to
-  its top first.
-- **The words of Jesus are red beside a second translation** (#6), as
-  they are on the page, with the translators' additions in italics and
-  the divine name in small capitals.
+## 2.0.0
 
 ### Added
 - **OpenWord as an installable web app.** `pwa/` is the app again in
@@ -57,8 +30,33 @@
 - **One command to host it on a Raspberry Pi**: nginx, the API, Postgres
   and a Cloudflare Tunnel under compose, sized for a Pi 4 with 2 GB.
   `deploy/README.md` has the guide.
+- **A verse in every translation at once** (#5). Tap a verse and the
+  translations on the device are offered under it: choosing one sets its
+  words in place of the first, there in the sheet. *Compare all* stacks
+  them, the one being read first, with the words the others do not share
+  with it marked, so the eye goes to where they part. The arrows step to
+  the next verse without closing anything, several selected verses are
+  compared together, and a translation's menu goes on reading in it, sets
+  it beside the page, copies it or leaves it out.
+- **The voice on the graphics processor.** The model runs on WebGPU where
+  the browser has it, which on an iPhone (iOS 26 and later) is what lets
+  speech be made faster than it is heard, and on WebAssembly where it does
+  not. The first time on a device the graphics processor is made to say a
+  word and listened to before it is trusted; a load the page does not come
+  back from is remembered and not tried a third time; and whichever of the
+  two keeps the better pace is used.
+- **Reading aloud on an iPhone set to silent**, and with the screen
+  locked: while a chapter is being read the page tells iOS it is playback,
+  not a sound effect. Sound taken by a phone call comes back when the app
+  does.
 
 ### Fixed
+- **Sheets are pulled down to close** (#4). A finger anywhere on a bottom
+  sheet drags it away; one that starts on a list scrolls the list back to
+  its top first.
+- **The words of Jesus are red beside a second translation** (#6), as
+  they are on the page, with the translators' additions in italics and
+  the divine name in small capitals.
 - **Listening starts sooner, and says what it is waiting for.** The first
   Listen used to look stuck while 57 MB of voice came down unannounced.
   The bar now reads *Getting the voice · 34%* and then *Preparing the
