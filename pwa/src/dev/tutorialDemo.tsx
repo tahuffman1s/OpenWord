@@ -27,16 +27,21 @@ function Demo() {
   const [isDark, setDark] = useState(dark);
   const detected = platformKey(detectPlatform());
   useEffect(() => {
-    const card = params.get('card');
-    const guide = params.get('guide');
-    if (card !== null) void showTutorial((f) => showSnackBar(`Try: ${f}`), { initialCard: Number(card) });
-    else if (guide !== null) {
-      void showInstallGuide({
-        platform: platforms.includes(guide as PlatformKey) ? (guide as PlatformKey) : undefined,
-        installed: params.get('installed') === '1' ? true : undefined,
-        promptAvailable: params.get('prompt') === '1' ? true : undefined,
-      });
-    }
+    // After OverlayHost (a sibling, mounted after this) has subscribed to
+    // the overlay stack; in the app the caller is its parent, so it has.
+    const timer = setTimeout(() => {
+      const card = params.get('card');
+      const guide = params.get('guide');
+      if (card !== null) void showTutorial((f) => showSnackBar(`Try: ${f}`), { initialCard: Number(card) });
+      else if (guide !== null) {
+        void showInstallGuide({
+          platform: platforms.includes(guide as PlatformKey) ? (guide as PlatformKey) : undefined,
+          installed: params.get('installed') === '1' ? true : undefined,
+          promptAvailable: params.get('prompt') === '1' ? true : undefined,
+        });
+      }
+    }, 0);
+    return () => clearTimeout(timer);
   }, []);
   return (
     <Screen appBar={(s) => <AppBar scrolled={s} leading="none" title="Tutorial demo" subtitle={`Detected: ${detected}${installPrompt.available ? ' · prompt captured' : ''}`} />} padded>
