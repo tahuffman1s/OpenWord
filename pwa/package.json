@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "prepare:assets": "node scripts/gen-icons.mjs && node scripts/sync-assets.mjs && node scripts/copy-ort.mjs",
+    "prepare:assets": "node scripts/gen-icons.mjs && node scripts/gen-manifest.mjs && node scripts/sync-assets.mjs && node scripts/copy-ort.mjs",
     "icons": "node scripts/gen-icons.mjs",
     "postinstall": "node scripts/copy-ort.mjs",
     "predev": "npm run prepare:assets",

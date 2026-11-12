@@ -29,6 +29,19 @@
   and a Cloudflare Tunnel under compose, sized for a Pi 4 with 2 GB.
   `deploy/README.md` has the guide.
 
+### Fixed
+- **Listening starts sooner, and says what it is waiting for.** The first
+  Listen used to look stuck while 57 MB of voice came down unannounced.
+  The bar now reads *Getting the voice · 34%* and then *Preparing the
+  voice…*; the voice is fetched in the background shortly after launch,
+  so it is usually there already; the model is no longer run once to warm
+  it while someone is waiting; it runs on several threads where the
+  browser allows; and behind Cloudflare it is served from the edge.
+- **The strip under Android's gesture bar matches the page.** It took the
+  manifest's purple; the app now links a manifest in the colours of the
+  theme it is showing. An installed copy picks this up when Chrome next
+  refreshes it, or on reinstalling.
+
 ### Changed
 - `deploy/` now serves the PWA and its API. The Flutter web build is
   still made by the release workflow, but is no longer what `deploy/`

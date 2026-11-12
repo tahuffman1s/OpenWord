@@ -2369,16 +2369,36 @@ export function rateLabel(rate: number): string {
  * it has got to, and the few controls a listener needs.
  */
 function PlayerBar({ voice, rate, onSettings }: { voice: ReadAloud; rate: number; onSettings: () => void }) {
+  // The voice's own state as well as the reading's: the first Listen
+  // fetches sixty megabytes and loads a model before a word is heard, and
+  // a bar that said "Reading aloud" through all of it would look stuck.
+  useNotifier(neuralVoices);
   const current = voice.current;
   const where =
     current === null ? '' : current.verse === null ? ReadAloud.announcement(current).replaceAll('.', '') : current.label;
+  const download = neuralVoices.progress;
+  const waiting = voice.isWaitingForVoice;
+  const fetched =
+    download !== null && download.total > 0 ? Math.min(1, download.received / download.total) : download !== null ? 0 : null;
+  const status = !voice.isPlaying
+    ? 'Paused'
+    : waiting && fetched !== null
+      ? `Getting the voice · ${Math.round(fetched * 100)}% · once only`
+      : waiting
+        ? 'Preparing the voice…'
+        : `Reading aloud · ${rateLabel(rate)}`;
   return (
     <div class="ow-reader-bar">
+      {waiting && (
+        <div class="ow-reader-bar__progress">
+          <LinearProgress value={fetched ?? undefined} />
+        </div>
+      )}
       <IconButton icon="close" label="Stop reading aloud" onClick={() => voice.stop()} />
       <div class="ow-reader-bar__text">
         <div class="m3-title-small ow-truncate">{where}</div>
-        <div class="m3-label-small m3-on-surface-variant ow-truncate">
-          {voice.isPlaying ? `Reading aloud · ${rateLabel(rate)}` : 'Paused'}
+        <div class="m3-label-small m3-on-surface-variant ow-truncate" role="status">
+          {status}
         </div>
       </div>
       <IconButton icon="skip_previous" label="Previous verse" onClick={() => voice.skip(-1)} />

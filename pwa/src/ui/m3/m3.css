@@ -135,6 +135,9 @@
 
 html {
   height: 100%;
+  /* The page's own colour wherever the browser paints past the app: the
+     overscroll, and the strip under a gesture bar. */
+  background: var(--md-sys-color-surface);
   -webkit-text-size-adjust: 100%;
   -webkit-tap-highlight-color: transparent;
   overscroll-behavior: none;

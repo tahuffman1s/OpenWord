@@ -14,6 +14,13 @@
     <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png" />
     <link rel="icon" type="image/png" href="/favicon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
+    <script>
+      // The manifest in the system's colours, before the app has loaded to
+      // say otherwise: see useManifestFor in src/ui/m3/theme.ts.
+      if (window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.querySelector('link[rel="manifest"]').setAttribute('href', '/manifest-dark.webmanifest');
+      }
+    </script>
     <title>OpenWord</title>
   </head>
   <body>

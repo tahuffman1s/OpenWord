@@ -163,6 +163,50 @@ export abstract class NeuralVoices extends ChangeNotifier {
   get progress(): VoiceProgress | null {
     return null;
   }
+
+  /**
+   * Fetches the voice ahead of its being asked for, where that is a fair
+   * thing to do with someone's connection: not when they have asked the
+   * browser to save data, and not over a mobile network the browser knows
+   * to be one. Quietly — a failure is tried again on Listen.
+   */
+  prefetch(): void {
+    if (!this.isSupported || !mayFetchUnasked()) return;
+    this.ready.catch(() => {});
+    // And the runtime the voice runs on, fifteen megabytes of WebAssembly
+    // the worker would otherwise fetch when Listen is pressed. Asked for
+    // here, it is in the service worker's cache by then.
+    try {
+      void fetch(runtimeWasmUrl).then(
+        // Read to its end, so the copy the service worker keeps is whole.
+        (response) => void response.arrayBuffer().catch(() => {}),
+        () => {},
+      );
+    } catch {
+      // No fetch here; the worker asks for it itself.
+    }
+  }
+}
+
+/** Where the ONNX runtime's WebAssembly is served from; see ttsWorker.ts. */
+export const runtimeWasmUrl = '/ort/ort-wasm-simd-threaded.wasm';
+
+interface NetworkInformation {
+  saveData?: boolean;
+  type?: string;
+  effectiveType?: string;
+}
+
+/** Whether sixty megabytes may be fetched without being asked for. */
+export function mayFetchUnasked(
+  connection: NetworkInformation | undefined = (globalThis.navigator as { connection?: NetworkInformation } | undefined)
+    ?.connection,
+): boolean {
+  if (connection === undefined) return true;
+  if (connection.saveData === true) return false;
+  if (connection.type === 'cellular') return false;
+  const effective = connection.effectiveType;
+  return effective === undefined || effective === '4g';
 }
 
 /** Fetch and Cache Storage, as the browser has them; a test hands in its own. */
@@ -231,6 +275,29 @@ export class WebNeuralVoices extends NeuralVoices {
     return `${this._base}${model.archive}/${file}`;
   }
 
+  /**
+   * Fetches one of a model's files. The network itself is asked for as
+   * `<name>.bin` first: a server behind Cloudflare is cached at the edge by
+   * file extension, `.bin` is on that list and `.onnx` is not, and sixty
+   * megabytes from the edge beats sixty megabytes up a home connection. A
+   * server that does not answer to that name — the dev server, an older
+   * deployment — is asked for the file as it is.
+   */
+  private async _fetchFile(model: NeuralModel, file: string): Promise<Response> {
+    const url = this._url(model, file);
+    if (file.endsWith('.onnx')) {
+      try {
+        const response = await this._store.fetch(`${url}.bin`);
+        const type = response.headers.get('content-type') ?? '';
+        if (response.ok && !type.startsWith('text/html')) return response;
+        void response.body?.cancel().catch(() => {});
+      } catch {
+        // Asked for plainly, below.
+      }
+    }
+    return this._store.fetch(url);
+  }
+
   private async _cache(): Promise<Cache | null> {
     const store = this._store.caches;
     if (store === null) return null;
@@ -260,7 +327,7 @@ export class WebNeuralVoices extends NeuralVoices {
       let total = 0;
       const responses = await Promise.all(
         missing.map(async (file) => {
-          const response = await this._store.fetch(this._url(model, file));
+          const response = await this._fetchFile(model, file);
           if (!response.ok) throw new Error(`The voice could not be fetched: ${file} answered ${response.status}`);
           const length = Number(response.headers.get('content-length') ?? 0);
           total += length;
@@ -343,7 +410,7 @@ export class WebNeuralVoices extends NeuralVoices {
       if (kept !== undefined) return kept.arrayBuffer();
       const loose = this._uncached.get(file);
       if (loose !== undefined) return loose.slice().buffer as ArrayBuffer;
-      const response = await this._store.fetch(this._url(model, file));
+      const response = await this._fetchFile(model, file);
       if (!response.ok) throw new Error(`The voice could not be fetched: ${file} answered ${response.status}`);
       return response.arrayBuffer();
     };

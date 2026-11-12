@@ -615,8 +615,16 @@ but a missing file under `/assets/`, `/voice/`, `/ort/` or `/icons/` is an
 honest 404, not the app's HTML with a 200.
 
 The voice's neural network runs on one thread in the browser unless the
-page is "cross-origin isolated". Two commented-out headers in `nginx.conf`
-turn that on; read the note beside them before enabling them.
+page is "cross-origin isolated", so `nginx.conf` sends the two headers that
+make it so (`Cross-Origin-Opener-Policy: same-origin` and
+`Cross-Origin-Embedder-Policy: credentialless`). With them the voice uses
+up to four threads. Safari does not know `credentialless` and stays on one.
+
+The voice's model is also answered as `model.fp32.onnx.bin`, and the app
+asks for it by that name. Cloudflare caches at its edge by file extension;
+`.bin` is on its list and `.onnx` is not. So after the first reader has
+fetched it, the 57 MB comes from Cloudflare at the reader's own speed
+rather than up your home connection each time.
 
 ## Uninstalling
 

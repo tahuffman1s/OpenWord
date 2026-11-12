@@ -8,6 +8,11 @@ import { versionPlugin } from './src/pwa/versionPlugin';
 // precached so the app is whole offline; the voice (57 MB) is fetched the
 // first time Listen is used and kept in Cache Storage by the worker's
 // runtime cache (see src/sw.ts).
+const isolation = {
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Embedder-Policy': 'credentialless',
+};
+
 export default defineConfig({
   plugins: [
     preact(),
@@ -59,7 +64,11 @@ export default defineConfig({
       ? { input: { main: 'index.html', ttsHarness: 'tts-harness.html' } }
       : undefined,
   },
-  server: { port: 5173, host: true },
+  // Cross-origin isolation, as deploy/nginx.conf sends it: with it the
+  // voice's runtime may use threads (SharedArrayBuffer), which is the
+  // difference between speech made faster than it is heard and slower.
+  server: { port: 5173, host: true, headers: isolation },
+  preview: { headers: isolation },
   test: {
     environment: 'node',
     include: ['test/**/*.test.ts', 'test/**/*.test.tsx'],

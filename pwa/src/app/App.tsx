@@ -7,6 +7,7 @@ import { ReadingStore } from '../data/marks';
 import { LibraryController } from '../data/library';
 import { Shelf } from '../data/shelf';
 import { AccountController } from '../data/account';
+import { neuralVoices } from '../data/neuralVoices';
 import { registerServiceWorker, type AppUpdates } from '../pwa/serviceWorker';
 import { hasSeenTutorial, markTutorialSeen, showTutorial } from '../ui/tutorial/tutorial';
 import { showInstallGuide } from '../ui/tutorial/installGuide';
@@ -87,6 +88,14 @@ function Started({ booted }: { booted: Booted }) {
     markTutorialSeen(booted.prefs);
     void showTutorial((feature) => openFromTutorial(feature));
   }, [library.isReady, booted.prefs]);
+
+  // The voice, fetched once the app has settled, so that the first Listen
+  // has it in hand rather than sixty megabytes to wait for.
+  useEffect(() => {
+    if (!library.isReady) return;
+    const timer = setTimeout(() => neuralVoices.prefetch(), 8000);
+    return () => clearTimeout(timer);
+  }, [library.isReady]);
 
   // A home-screen shortcut, or a link into a feature.
   useEffect(() => {

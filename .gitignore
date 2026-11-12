@@ -68,3 +68,4 @@ pwa/public/ort/
 # Deployment secrets and local backups (see deploy/README.md)
 deploy/.env
 deploy/backups/
+pwa/public/manifest-dark.webmanifest

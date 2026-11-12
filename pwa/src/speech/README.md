@@ -86,10 +86,20 @@ the RMS (> 0.01), printing the synthesis time. `vite build` leaves the harness o
 
 ## Caveats
 
-- **Threads.** onnxruntime-web uses one thread unless the page is cross-origin isolated
-  (COOP/COEP headers), which the deployment does not set; `numThreads` is chosen from
-  `crossOriginIsolated` at load. One thread is a little under real time on a laptop and
-  may fall behind on an old phone, which the UI is told of.
+- **Threads.** onnxruntime-web uses one thread unless the page is cross-origin isolated.
+  `deploy/nginx.conf` and the Vite dev and preview servers send the COOP/COEP headers
+  for it, and `numThreads` is chosen from `crossOriginIsolated` at load (up to four).
+  Threads make speech about a third faster. Where a browser is not isolated (Safari
+  does not know `credentialless`), one thread is a little under real time on a laptop
+  and may fall behind on an old phone, which the UI is told of.
+- **The loader in a build.** With threads the runtime starts its workers from its
+  loader's own URL. Bundled into `ttsWorker`, that URL is the worker itself and the
+  first run never returns, so a production build points `wasmPaths.mjs` at the copy
+  under `/ort/`. Test any change here against `vite preview`, not only `vite`.
+- **Getting started quickly.** The voice files and the runtime are fetched in the
+  background a few seconds after launch (not on a metered or data-saving connection),
+  the model is not run once "to warm it" while someone is waiting to hear, and a
+  reader who has listened before has the model loaded as the app opens.
 - **iOS Safari.** The model (57 MB) plus the runtime's arena is a lot for a Safari tab;
   the worker releases the session on `close`, and the files are never held on the main
   thread. Web Audio there needs a user gesture before any sound: `src/speech/audio.ts`

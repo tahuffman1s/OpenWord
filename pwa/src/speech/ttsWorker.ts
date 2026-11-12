@@ -7,8 +7,8 @@
  * Messages in:
  *   { type: 'load', files: { model, voices, tokens }, wasmPaths? }
  *       model, voices: ArrayBuffer; tokens: string. Answered by
- *       { type: 'ready', phonemizer: boolean } once the session is made
- *       and warmed, or { type: 'error', message }. `phonemizer` says
+ *       { type: 'ready', phonemizer: boolean, timings } once the session is
+ *       made, or { type: 'error', message }. `phonemizer` says
  *       whether eSpeak loaded here; if not, every 'speak' must carry its
  *       phonemes, made on the main thread.
  *   { type: 'speak', id, text, sid, speed, phonemes? }
@@ -43,6 +43,17 @@ export interface LoadMessage {
   files: { model: ArrayBuffer; voices: ArrayBuffer; tokens: string };
   /** Where the runtime's `.wasm` is served from; `/ort/` by default. */
   wasmPaths?: string;
+  /** How hard the runtime works over the graph before the first run. */
+  optimization?: 'disabled' | 'basic' | 'extended' | 'all';
+  /** Whether to run the model once before saying it is ready. Default true. */
+  warm?: boolean;
+}
+
+/** How long each part of getting ready took, in milliseconds. */
+export interface LoadTimings {
+  threads: number;
+  session: number;
+  phonemizer: number;
 }
 
 export interface SpeakMessage {
@@ -67,7 +78,7 @@ export interface CloseMessage {
 export type WorkerRequest = LoadMessage | SpeakMessage | CancelMessage | CloseMessage;
 
 export type WorkerReply =
-  | { type: 'ready'; phonemizer: boolean }
+  | { type: 'ready'; phonemizer: boolean; timings: LoadTimings }
   | { type: 'error'; id?: number; message: string }
   | { type: 'audio'; id: number; samples: Float32Array<ArrayBuffer>; sampleRate: number; ms: number }
   | { type: 'cancelled'; id: number };
@@ -86,41 +97,90 @@ function reply(message: WorkerReply, transfer: Transferable[] = []): void {
   scope.postMessage(message, transfer);
 }
 
-async function load(message: LoadMessage): Promise<void> {
+async function load(message: LoadMessage): Promise<LoadTimings> {
+  const timings: LoadTimings = { threads: 1, session: 0, phonemizer: 0 };
+  let mark = performance.now();
+  const lap = (): number => {
+    const now = performance.now();
+    const took = now - mark;
+    mark = now;
+    return took;
+  };
   const wasm = ort.env.wasm;
   // Only the binary is fetched from there: the bundle we import carries its
   // own loader, and Vite will not serve a module out of public/ in dev.
   const prefix = message.wasmPaths ?? '/ort/';
-  wasm.wasmPaths = { wasm: new URL(`${prefix}ort-wasm-simd-threaded.wasm`, scope.location.href).href };
+  const binary = new URL(`${prefix}ort-wasm-simd-threaded.wasm`, scope.location.href).href;
+  // In a build, the loader is taken from there too. With threads the
+  // runtime starts its workers from its loader's own address; bundled into
+  // this file, that address is this worker, and a second copy of it sits
+  // waiting to be told to load a voice instead of doing sums: the first
+  // run never returns. Served as a file of its own, the loader starts
+  // itself. The dev server will not hand a module out of public/, and
+  // does not bundle, so there the one imported is used.
+  wasm.wasmPaths = import.meta.env.PROD
+    ? { wasm: binary, mjs: new URL(`${prefix}ort-wasm-simd-threaded.mjs`, scope.location.href).href }
+    : { wasm: binary };
   // Threads need SharedArrayBuffer, which needs the page to be cross-origin
-  // isolated; the deployment does not set COOP/COEP, so one thread it is.
+  // isolated: deploy/nginx.conf sends the two headers for it. Where a
+  // browser or a server does not, one thread it is.
   wasm.numThreads = scope.crossOriginIsolated
     ? Math.min(4, Math.max(1, (navigator.hardwareConcurrency || 2) - 1))
     : 1;
   wasm.proxy = false;
+  timings.threads = wasm.numThreads;
   tokens = parseTokens(message.files.tokens);
   voices = parseVoices(new Uint8Array(message.files.voices));
+  // eSpeak is got ready while the model is: each is mostly a WebAssembly
+  // module being compiled, which the browser does off this thread, so the
+  // two overlap rather than queue.
+  const espeak = (async () => {
+    const started = performance.now();
+    try {
+      const module = await import('./phonemes');
+      // Proven here, so that a build whose eSpeak wants a window is found
+      // out now rather than on the first verse.
+      await module.phonemesFor('Hello.');
+      phonemesFor = module.phonemesFor;
+    } catch (error) {
+      console.warn('OpenWord: eSpeak will not run on the worker; phonemes come from the page', error);
+      phonemesFor = null;
+    }
+    timings.phonemizer = performance.now() - started;
+  })();
   session = await ort.InferenceSession.create(new Uint8Array(message.files.model), {
     executionProviders: ['wasm'],
-    graphOptimizationLevel: 'all',
+    graphOptimizationLevel: message.optimization ?? 'all',
   });
-  try {
-    const module = await import('./phonemes');
-    // Proven here, so that a build whose eSpeak wants a window is found
-    // out now rather than on the first verse.
-    await module.phonemesFor('Hello.');
-    phonemesFor = module.phonemesFor;
-  } catch (error) {
-    console.warn('OpenWord: eSpeak will not run on the worker; phonemes come from the page', error);
-    phonemesFor = null;
-  }
-  // The first run of a model is slower than any after it; it is had now,
-  // while nothing is waiting to be heard.
+  timings.session = lap();
+  await espeak;
+  warmWanted = message.warm !== false;
+  return timings;
+}
+
+/** Whether to run the model once, unasked, when there is a quiet moment. */
+let warmWanted = false;
+
+/**
+ * The first run of a model is slower than any after it, so it is had
+ * while nothing is waiting to be heard — and only then. Someone who has
+ * pressed Listen is waiting for the first words of the chapter, and a
+ * "Hello." nobody hears would stand between them and it: the chapter's
+ * first piece is the first run instead. A voice loaded ahead of being
+ * asked for has the moment to spare.
+ */
+async function warm(): Promise<void> {
+  if (!warmWanted || busy || queue.length > 0) return;
+  warmWanted = false;
+  busy = true;
   try {
     await synthesise(phonemesFor ? await phonemesFor('Hello.') : 'həlˈoʊ.', 0, 1);
   } catch {
     // Found out on the first real piece, if it matters.
+  } finally {
+    busy = false;
   }
+  void serve();
 }
 
 async function synthesise(phonemes: string, sid: number, speed: number): Promise<Float32Array> {
@@ -184,11 +244,16 @@ scope.onmessage = (event: MessageEvent<WorkerRequest>) => {
   switch (message.type) {
     case 'load':
       load(message).then(
-        () => reply({ type: 'ready', phonemizer: phonemesFor !== null }),
+        (timings) => {
+          reply({ type: 'ready', phonemizer: phonemesFor !== null, timings });
+          // Long enough for a piece already wanted to arrive and be first.
+          setTimeout(() => void warm(), 150);
+        },
         (error) => reply({ type: 'error', message: String(error) }),
       );
       break;
     case 'speak':
+      warmWanted = false;
       queue.push(message);
       void serve();
       break;

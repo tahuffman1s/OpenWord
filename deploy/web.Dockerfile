@@ -58,6 +58,7 @@ RUN set -eux; \
     test -f dist/index.html; \
     test -f dist/sw.js; \
     test -f dist/manifest.webmanifest; \
+    test -f dist/manifest-dark.webmanifest; \
     test -d dist/assets/bible; \
     test -f dist/ort/ort-wasm-simd-threaded.wasm; \
     test -f dist/version.json; \

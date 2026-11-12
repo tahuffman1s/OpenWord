@@ -143,6 +143,25 @@ export function applyScheme(scheme: ColorScheme): void {
   for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
     meta.content = hexOf(scheme.surface);
   }
+  useManifestFor(scheme.brightness);
+}
+
+/**
+ * Points the page at the manifest in this brightness's colours.
+ *
+ * An installed app's system bars are not all the page's to colour.
+ * Android takes the bar along the bottom — the strip the gesture handle
+ * sits in — from the manifest's `theme_color`, and a manifest is one
+ * static file with one colour in it. So there are two, alike but for
+ * their colours, and the page links whichever matches what it is showing:
+ * the app is installed, and later refreshed, from the one in use, and the
+ * strip matches the page instead of standing under it in another colour.
+ */
+export function useManifestFor(brightness: Brightness): void {
+  const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+  if (link === null) return;
+  const wanted = brightness === 'dark' ? '/manifest-dark.webmanifest' : '/manifest.webmanifest';
+  if (link.getAttribute('href') !== wanted) link.setAttribute('href', wanted);
 }
 
 function rgbTriplet(argb: number): string {

@@ -304,6 +304,18 @@ export class ReadAloud extends ChangeNotifier {
    */
   private _saying = -1;
 
+  /** Whether anything of the passage in hand has been heard yet. */
+  private _heard = false;
+
+  /**
+   * Playing, with nothing heard so far: the voice is still being fetched
+   * or loaded, or is making its first words. What a reader who has pressed
+   * Listen and hears nothing needs to be told.
+   */
+  get isWaitingForVoice(): boolean {
+    return this.isPlaying && !this._heard;
+  }
+
   /**
    * How long to wait, in milliseconds, before saying a verse again after
    * the engine did not finish it. A test shortens it.
@@ -605,6 +617,8 @@ export class ReadAloud extends ChangeNotifier {
    */
   private async _speakCurrent(interrupt = false): Promise<void> {
     const generation = ++this._generation;
+    // Nothing of what is about to be said has been heard.
+    this._heard = false;
     if (interrupt) await this.engine.stop();
     if (generation !== this._generation) return;
     await this._apply();
@@ -653,13 +667,22 @@ export class ReadAloud extends ChangeNotifier {
       }, 300);
     }
     this._saying = generation;
+    this._heard = false;
+    const heard = (): void => {
+      if (this._heard) return;
+      this._heard = true;
+      this.notifyListeners();
+    };
     const said = await this.engine.speak(text, {
       breaks: starts,
       onStart: () => {
-        if (generation === this._generation) this._passageStartedAt = this._clock();
+        if (generation !== this._generation) return;
+        this._passageStartedAt = this._clock();
+        heard();
       },
       onProgress: (offset) => {
         if (generation !== this._generation) return;
+        heard();
         this._passageHasProgress = true;
         this._cancelEstimator();
         // Exact: this word, in its verse.
