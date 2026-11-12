@@ -1,0 +1,231 @@
+/* The reading surface: the app bar's own button, the pages, one chapter's
+   column, the bars along the bottom, and the sheets that open over it. */
+
+/* ---- the app bar ---- */
+/* The place being read stands twelve pixels in, as Flutter's titleSpacing
+   set it, rather than at the kit's sixteen. */
+.ow-reader__bar .m3-app-bar__title { padding: 0 4px 0 0; margin-left: -8px; display: flex; }
+.ow-reader__dotted { position: relative; display: inline-flex; }
+.ow-reader__dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--md-sys-color-primary);
+  pointer-events: none;
+}
+
+.ow-reference-button {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface);
+}
+.ow-reference-button__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--md-sys-typescale-title-medium);
+  font-weight: 600;
+}
+.ow-reference-button__badge {
+  flex: none;
+  margin-inline-start: 8px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  font: var(--md-sys-typescale-label-small);
+  font-weight: 700;
+}
+.ow-reference-button .m3-icon { color: var(--md-sys-color-on-surface-variant); }
+
+/* On a narrow phone the six actions and the place being read share one
+   line; the actions give a little so the place is not cut to nothing. */
+@media (max-width: 400px) {
+  .ow-reader__bar .m3-icon-button { width: 36px; }
+}
+
+/* ---- the pages ---- */
+.m3-screen__body.ow-reader__body { overflow: hidden; display: flex; }
+
+.ow-pager {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
+  overflow-anchor: none;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.ow-pager::-webkit-scrollbar { display: none; }
+.ow-pager__page {
+  flex: 0 0 100%;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
+  position: relative;
+}
+
+/* ---- one chapter ---- */
+.ow-chapter {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  /* No scrollbar over the text: a page of Scripture is read, not scrubbed. */
+  scrollbar-width: none;
+  padding: 4px 20px calc(48px + var(--ow-safe-bottom));
+}
+.ow-chapter::-webkit-scrollbar { display: none; }
+.ow-chapter__column { max-width: 720px; margin: 0 auto; }
+.ow-chapter__column--compare { max-width: 1000px; }
+
+.ow-chapter__heading { padding: 8px 0 18px; }
+.ow-chapter__links { display: flex; flex-wrap: wrap; align-items: center; column-gap: 6px; row-gap: 4px; }
+.ow-chapter__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 4px;
+  border-radius: 8px;
+  font: var(--md-sys-typescale-label-medium);
+  letter-spacing: 1.2px;
+  color: var(--md-sys-color-primary);
+}
+.ow-chapter__link--book {
+  gap: 6px;
+  padding: 2px 0;
+  margin-inline-end: 4px;
+  letter-spacing: 1.6px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.ow-chapter__title {
+  margin-top: 2px;
+  font: var(--md-sys-typescale-headline-medium);
+  font-weight: 600;
+  color: var(--md-sys-color-primary);
+}
+
+.ow-chapter__plan { padding-top: 28px; }
+.ow-chapter__footer { display: flex; justify-content: space-between; padding-top: 28px; }
+.ow-chapter__next.m3-button .m3-icon { margin-left: 0; margin-right: -4px; }
+[dir='rtl'] .ow-chapter__footer .m3-icon { transform: scaleX(-1); }
+
+/* ---- two translations, verse by verse ---- */
+.ow-compare { container-type: inline-size; }
+.ow-compare__labels { display: flex; gap: 8px; padding-bottom: 10px; }
+.ow-compare__chip {
+  padding: 4px 10px;
+  border-radius: 10px;
+  background: var(--md-sys-color-surface-container-highest);
+  color: var(--md-sys-color-on-surface-variant);
+  font: var(--md-sys-typescale-label-medium);
+  font-weight: 700;
+}
+.ow-compare__chip--primary {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+}
+.ow-compare__row { display: flex; flex-direction: column; gap: 6px; padding-bottom: 14px; }
+.ow-compare__cell { border-radius: 6px; min-width: 0; }
+.ow-compare__cell[data-verse] { cursor: pointer; }
+.ow-compare__cell--other { color: var(--md-sys-color-on-surface-variant); }
+.ow-compare__number { padding-inline-end: 4px; }
+/* Wide windows put them in columns; narrow ones stack each pair. */
+@container (min-width: 620px) {
+  .ow-compare__row { flex-direction: row; align-items: flex-start; gap: 20px; }
+  .ow-compare__cell { flex: 1; }
+}
+
+/* ---- the plan cards ---- */
+.ow-plan-card {
+  padding: 12px 12px 12px 16px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+.ow-plan-card__head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.ow-plan-card__done.m3-button { width: 100%; white-space: normal; }
+.ow-plan-card__read { display: flex; align-items: center; gap: 4px; }
+.ow-pretest-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 16px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-tertiary-container);
+  color: var(--md-sys-color-on-tertiary-container);
+}
+
+/* ---- the bars along the bottom: the selection, and reading aloud ---- */
+.ow-reader-bar {
+  flex: none;
+  display: flex;
+  align-items: center;
+  padding: 6px 4px calc(6px + var(--ow-safe-bottom));
+  background: var(--md-sys-color-surface-container);
+  box-shadow: var(--md-sys-elevation-3);
+  position: relative;
+  z-index: 1;
+}
+.ow-reader-bar__text { flex: 1; min-width: 0; padding: 0 4px; }
+.ow-reader-bar__progress { position: absolute; top: 0; left: 0; right: 0; }
+
+/* ---- the sheets ---- */
+.m3-sheet__body.ow-verse-sheet,
+.m3-sheet__body.ow-voice-sheet { padding: 0 24px 16px; }
+.m3-sheet__body.ow-note-sheet { padding: 0 24px 32px; }
+.m3-sheet__body.ow-highlight-sheet { padding: 0 24px 24px; }
+
+.ow-verse-sheet__text {
+  margin-top: 8px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  font: var(--md-sys-typescale-body-medium);
+  color: var(--md-sys-color-on-surface-variant);
+}
+.ow-verse-sheet__text--absent { font-style: italic; }
+.ow-verse-sheet__swatches { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.ow-verse-sheet__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+.ow-verse-sheet__note {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 14px;
+  background: var(--md-sys-color-surface-container-highest);
+  white-space: pre-wrap;
+}
+
+.ow-highlight-sheet__row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 16px; }
+
+.ow-swatch {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  /* The tick sits on a pale colour in either theme, so it is dark in both. */
+  color: rgb(0 0 0 / 0.87);
+}
+.ow-swatch--selected { border-color: var(--md-sys-color-on-surface); }
+
+.ow-voice-sheet__rates { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.ow-voice-sheet__voice.m3-list-tile { padding-left: 0; padding-right: 0; }

@@ -1,0 +1,61 @@
+/* The library: its three tabs, the Progress page's cards and numbers, and
+   the Saved lists. */
+.ow-library__page { min-height: 100%; display: flex; flex-direction: column; animation: ow-library-tab 200ms var(--md-sys-motion-standard); }
+.ow-library__page > * { flex: 1 0 auto; }
+@keyframes ow-library-tab {
+  from { opacity: 0; }
+}
+
+.ow-progress { padding-bottom: calc(24px + var(--ow-safe-bottom)); }
+.ow-progress__heading { padding: 16px 16px 4px; }
+.ow-progress__heading--roomy { padding-bottom: 8px; }
+.ow-progress__text { padding: 0 16px; }
+.ow-progress__text--roomy { padding-bottom: 8px; }
+.ow-progress__inset { padding: 0 16px; }
+
+.ow-trial {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  border-radius: var(--md-sys-shape-corner-large);
+  background: var(--md-sys-color-surface-container-highest);
+}
+.ow-trial__text { flex: 1; min-width: 0; }
+
+.ow-progress__numbers { padding: 0 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+@media (min-width: 600px) {
+  .ow-progress__numbers { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+.ow-number {
+  min-height: 64px;
+  padding: 8px 14px;
+  border-radius: 14px;
+  background: var(--md-sys-color-surface-container-highest);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+.ow-number__value { font-weight: 700; }
+
+.ow-saved { display: flex; flex-direction: column; }
+.ow-saved__choices { padding: 12px 16px 8px; }
+.ow-saved__segments { display: flex; width: 100%; }
+/* Four choices across a phone: tighter than the kit sets them, so that
+   "Highlights" and its icon still fit a quarter of the width. */
+.ow-saved__segments .m3-segmented__item { padding: 0 8px; gap: 6px; min-width: 0; white-space: nowrap; }
+@media (max-width: 480px) {
+  .ow-saved__segments .m3-segmented__item { padding: 0 4px; gap: 4px; font: var(--md-sys-typescale-label-medium); }
+  .ow-saved__segments .m3-segmented__item .m3-icon { width: 16px; height: 16px; }
+}
+.ow-saved__list { padding-bottom: calc(24px + var(--ow-safe-bottom)); }
+.ow-saved__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 32px;
+}
+.ow-saved__swatch { display: block; width: 28px; height: 28px; border-radius: 50%; }
+.ow-saved__clear { padding: 16px; }

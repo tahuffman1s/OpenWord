@@ -1,0 +1,10 @@
+/* Text that may hold Hebrew or a Strong's transliteration: the bundled
+   ScriptureSerif stands behind the face the text is set in, or in front of
+   it where the text is Hebrew. Doubled so it outranks a typescale class's
+   `font` shorthand whichever sheet loads first. */
+.ow-scripture-type.ow-scripture-type {
+  font-family: Roboto, ScriptureSerif, 'Segoe UI', system-ui, -apple-system, sans-serif;
+}
+.ow-scripture-type--hebrew.ow-scripture-type--hebrew {
+  font-family: ScriptureSerif, var(--md-ref-typeface-brand);
+}

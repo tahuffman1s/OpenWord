@@ -1,0 +1,23 @@
+/* Adding a translation: what can be read, the reading, what was found. */
+.m3-sheet.ow-import-sheet { height: 85%; }
+.ow-import { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 0 24px 20px; }
+.ow-import__lead { margin: 4px 0 20px; }
+.ow-import__input { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.ow-import__body { flex: 1; min-height: 0; overflow-y: auto; }
+.ow-import__body--centred { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+.ow-import__reading { margin: 16px 0 4px; }
+.ow-import__why { margin-top: 16px; }
+.ow-import__actions { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.ow-import__licence { margin: 2px 0 16px; }
+.ow-import__facts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+.ow-import__fact {
+  padding: 6px 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
+  background: var(--md-sys-color-surface-container-highest);
+}
+.ow-import__verdict { margin-top: 8px; }
+.ow-import__warnings { margin-top: 16px; }
+.ow-import__warning { margin-top: 4px; }
+.ow-import__warnings .m3-label-large { margin-bottom: 6px; }
+.ow-import__point { display: flex; align-items: flex-start; gap: 14px; padding-bottom: 16px; }
+.ow-import__point-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }

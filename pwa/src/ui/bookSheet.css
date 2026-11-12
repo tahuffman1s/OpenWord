@@ -1,0 +1,38 @@
+.ow-book-sheet { padding: 0 20px 28px; }
+.ow-book-sheet__facts { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0 20px; }
+.ow-book-sheet__fact {
+  padding: 6px 12px;
+  border-radius: 12px;
+  background: var(--md-sys-color-surface-container-highest);
+  font: var(--md-sys-typescale-label-large);
+}
+.ow-book-sheet__row-label {
+  font: var(--md-sys-typescale-label-small);
+  letter-spacing: 1.1px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.ow-book-sheet__paragraph { margin: 0 0 12px; }
+.ow-book-sheet__section {
+  border-radius: 16px;
+  background: var(--md-sys-color-surface-container-high);
+  overflow: hidden;
+}
+.ow-book-sheet__section-title {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: 56px;
+  padding: 0 16px;
+  font: var(--md-sys-typescale-title-small);
+  font-weight: 700;
+  color: var(--md-sys-color-on-surface);
+}
+.ow-book-sheet__section-title .m3-icon {
+  color: var(--md-sys-color-on-surface-variant);
+  transition: transform 200ms var(--md-sys-motion-standard);
+}
+.ow-book-sheet__section-title--open .m3-icon {
+  color: var(--md-sys-color-primary);
+  transform: rotate(180deg);
+}
+.ow-book-sheet__section-body { padding: 0 16px 12px; }

@@ -1,0 +1,64 @@
+.ow-search__field {
+  width: 100%;
+  border: 0;
+  outline: none;
+  background: none;
+  padding: 8px 0;
+  font: var(--md-sys-typescale-body-large);
+  color: var(--md-sys-color-on-surface);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.ow-search__field::placeholder { color: var(--md-sys-color-on-surface-variant); }
+.ow-search__field::-webkit-search-cancel-button { display: none; }
+
+.ow-search__body { display: flex; flex-direction: column; overflow: hidden; }
+.ow-search__filters {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ow-search__filters::-webkit-scrollbar { display: none; }
+.ow-search__results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: var(--ow-safe-bottom);
+}
+.ow-search__empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 32px;
+  text-align: center;
+}
+.ow-search__count {
+  padding: 12px 16px 4px;
+  font: var(--md-sys-typescale-label-large);
+  color: var(--md-sys-color-on-surface-variant);
+}
+.ow-search__book { display: flex; align-items: baseline; padding: 14px 16px 2px; }
+.ow-search__book-name {
+  flex: 1;
+  font: var(--md-sys-typescale-title-small);
+  font-weight: 700;
+  color: var(--md-sys-color-primary);
+}
+.ow-search__snippet {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+}
+.ow-search__match {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-surface);
+  font-weight: 700;
+}

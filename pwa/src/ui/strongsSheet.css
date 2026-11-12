@@ -1,0 +1,16 @@
+.ow-strongs { padding: 0 24px 16px; }
+.ow-strongs__head { display: flex; align-items: center; gap: 12px; }
+.ow-strongs__lemma { flex: 1; min-width: 0; line-height: 1.8; text-align: left; }
+.ow-strongs__number {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 28px;
+  padding: 0 12px;
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-small);
+  font: var(--md-sys-typescale-label-large);
+  color: var(--md-sys-color-on-surface-variant);
+}
+.ow-strongs__morphology { margin-top: 10px; font-style: italic; }
+.ow-strongs__uses.m3-button { width: 100%; }

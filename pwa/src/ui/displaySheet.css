@@ -1,0 +1,11 @@
+.m3-sheet__body.ow-display { padding: 0 20px 24px; }
+.ow-display__size { display: flex; align-items: center; gap: 4px; margin-top: 12px; }
+.ow-display__size .m3-icon-button { font-weight: 500; }
+.ow-display__size .m3-slider { flex: 1; min-width: 0; }
+.ow-display__slider-head { display: flex; justify-content: space-between; align-items: baseline; }
+.ow-display__fonts.m3-segmented { display: flex; }
+/* The chosen face is told by its fill, not by a tick. */
+.ow-display__fonts .m3-icon { display: none; }
+.ow-display__switch.m3-list-tile { padding-left: 0; padding-right: 0; }
+.ow-display__divider { margin: 12px 0; }
+.ow-display__compare { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }

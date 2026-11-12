@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>OpenWord voice harness</title>
+    <style>
+      body { font: 14px/1.4 system-ui, sans-serif; margin: 16px; }
+      pre { white-space: pre-wrap; }
+    </style>
+  </head>
+  <body>
+    <h1>OpenWord voice harness</h1>
+    <p>
+      Loads the voice's worker, says one verse with Bella, and reports what it made. Driven by
+      <code>scripts/tts-smoke.mjs</code>; not part of the app.
+    </p>
+    <pre id="log"></pre>
+    <script type="module" src="/src/speech/harness.ts"></script>
+  </body>
+</html>

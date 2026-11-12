@@ -1,0 +1,12 @@
+/* The guess before a plan chapter, and the answer after it. */
+.ow-pretest {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 12px 12px 16px;
+  border-radius: var(--md-sys-shape-corner-medium, 12px);
+}
+.ow-pretest--before { margin-bottom: 20px; }
+.ow-pretest--after { margin-bottom: 12px; }
+.ow-pretest__text { flex: 1; min-width: 0; }
+.ow-pretest .m3-button { flex: none; }

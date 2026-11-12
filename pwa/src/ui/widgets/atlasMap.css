@@ -1,0 +1,16 @@
+.ow-atlas-map {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+}
+.ow-atlas-map__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Dragging and pinching move the map, not the page. */
+  touch-action: none;
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.ow-atlas-map__canvas:active { cursor: grabbing; }

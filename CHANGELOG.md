@@ -1,5 +1,52 @@
 # Changelog
 
+## Unreleased
+
+### Added
+- **OpenWord as an installable web app.** `pwa/` is the app again in
+  TypeScript, one for one: the reader and its printed-Bible layout, the
+  go-to field, search, compare, highlights, bookmarks and notes, maps,
+  book introductions, cross-references, the Hebrew and Greek, reading
+  plans, quizzes, learning by heart with its streaks, points and badges,
+  and the backup. Material You from the seed colour, following the
+  system's light or dark. It works offline once opened.
+- **The voice on the web.** KittenTTS runs in the browser through ONNX
+  Runtime's WebAssembly build, fetched once from your own server and
+  kept. The lock screen, a headset and a car's media buttons pause it and
+  step it by verse. Android Auto and CarPlay as apps are not something a
+  web app can be, and are left to the Android build.
+- **Imported translations kept in the browser.** An EPUB is converted on
+  the device, in a worker, and the `.bib` is kept in IndexedDB. Nothing
+  is uploaded.
+- **Accounts and friends.** Optional. A profile with a photo, friends by
+  username, an achievements feed to cheer, a streak kept together with
+  each friend, a daily reminder and one before a shared streak ends, and
+  a backup to the account. `server/` is the API (Go, Postgres);
+  `docs/api.md` is its contract.
+- **A walkthrough** on first launch, and a guide to installing the app in
+  whichever browser is in hand.
+- **One command to host it on a Raspberry Pi**: nginx, the API, Postgres
+  and a Cloudflare Tunnel under compose, sized for a Pi 4 with 2 GB.
+  `deploy/README.md` has the guide.
+
+### Fixed
+- **Listening starts sooner, and says what it is waiting for.** The first
+  Listen used to look stuck while 57 MB of voice came down unannounced.
+  The bar now reads *Getting the voice · 34%* and then *Preparing the
+  voice…*; the voice is fetched in the background shortly after launch,
+  so it is usually there already; the model is no longer run once to warm
+  it while someone is waiting; it runs on several threads where the
+  browser allows; and behind Cloudflare it is served from the edge.
+- **The strip under Android's gesture bar matches the page.** It took the
+  manifest's purple; the app now links a manifest in the colours of the
+  theme it is showing. An installed copy picks this up when Chrome next
+  refreshes it, or on reinstalling.
+
+### Changed
+- `deploy/` now serves the PWA and its API. The Flutter web build is
+  still made by the release workflow, but is no longer what `deploy/`
+  runs.
+
 ## 1.30.0
 
 ### Added

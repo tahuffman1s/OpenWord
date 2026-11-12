@@ -1,0 +1,15 @@
+/* A row swiped away to the left, the bin showing behind it. */
+.ow-dismissible { position: relative; overflow: hidden; }
+.ow-dismissible__background {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 24px;
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-on-error-container);
+}
+.ow-dismissible__row { position: relative; background: var(--md-sys-color-surface); touch-action: pan-y; }
+.ow-dismissible__row--settling { transition: transform 200ms var(--md-sys-motion-standard); }
+.ow-dismissible--leaving { pointer-events: none; }

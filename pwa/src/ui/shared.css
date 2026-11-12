@@ -1,0 +1,32 @@
+/* A handful of helpers the learning, plans and settings screens share. */
+.ow-muted { color: var(--md-sys-color-on-surface-variant); }
+.ow-tertiary { color: var(--md-sys-color-tertiary); }
+.ow-centre { text-align: center; }
+.ow-ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.ow-clamp-1 { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ow-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.ow-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.ow-prewrap { white-space: pre-line; }
+
+/* The paragraph under a sheet's title. */
+.ow-sheet-lead {
+  margin: 0;
+  padding: 0 24px 8px;
+  font: var(--md-sys-typescale-body-medium);
+  color: var(--md-sys-color-on-surface-variant);
+}
+
+/* Flutter's DropdownButton: the value and an arrow, opening a menu. */
+.ow-dropdown {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 40px;
+  padding: 0 4px 0 12px;
+  border-radius: var(--md-sys-shape-corner-small);
+  border-bottom: 1px solid var(--md-sys-color-outline);
+  font: var(--md-sys-typescale-body-large);
+  color: var(--md-sys-color-on-surface);
+  overflow: hidden;
+}

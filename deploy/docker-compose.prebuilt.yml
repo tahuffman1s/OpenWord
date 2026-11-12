@@ -1,0 +1,19 @@
+# Prebuilt overlay: pull the images GitHub Actions published instead of
+# building on the Pi (see .github/workflows/deploy-images.yml). Saves the
+# 10-15 minute first build and the RAM it needs.
+#
+#   OPENWORD_VERSION=v2.0.0 docker compose -f docker-compose.yml \
+#       -f docker-compose.prebuilt.yml [--profile tunnel] up -d
+#
+# `!reset null` drops the build: section, so `up` never tries to build
+# these and `pull` knows where to get them. It needs Compose v2.24 or later,
+# which is what get.docker.com installs.
+services:
+  web:
+    image: ghcr.io/tahuffman1s/openword-web:${OPENWORD_VERSION:-latest}
+    build: !reset null
+    pull_policy: always
+  api:
+    image: ghcr.io/tahuffman1s/openword-api:${OPENWORD_VERSION:-latest}
+    build: !reset null
+    pull_policy: always

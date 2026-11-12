@@ -30,6 +30,74 @@ jobs:
       # describes what is actually in it.
       - run: dart run tool/bib_lint.dart assets/bible/*.bib
 
+  # The PWA (pwa/) and the API (server/) that deploy/ puts on a Raspberry Pi.
+  # Independent of the Flutter jobs: neither needs the other's toolchain.
+  pwa:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pwa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: pwa/package-lock.json
+      - run: npm ci
+      # Both are generated and git-ignored: the bundled Scripture is copied
+      # in from ../assets, and the icon table is cut from icons.txt.
+      - run: node scripts/sync-assets.mjs
+      - run: node scripts/gen-icons.mjs
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      # What deploy/nginx.conf and deploy/web.Dockerfile rely on being there.
+      - name: Check the shape of the build
+        run: |
+          test -f dist/index.html
+          test -f dist/sw.js
+          test -f dist/manifest.webmanifest
+          test -f dist/manifest-dark.webmanifest
+          test -d dist/assets/bible
+          test -f dist/ort/ort-wasm-simd-threaded.wasm
+
+  server:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: server
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: server/go.sum
+      - run: go vet ./...
+      - run: go test ./...
+
+  # The deployment itself: the compose files must parse in every combination
+  # the installer uses, and the shell scripts must at least be valid shell.
+  deploy-config:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compose files parse
+        env:
+          POSTGRES_PASSWORD: ci
+        run: |
+          docker compose -f docker-compose.yml --profile tunnel config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.lan.yml config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.prebuilt.yml --profile tunnel config --quiet
+          docker compose -f docker-compose.yml -f docker-compose.lan.yml -f docker-compose.prebuilt.yml config --quiet
+      - name: Scripts are valid shell
+        run: |
+          bash -n install.sh backup.sh restore.sh
+          shellcheck install.sh backup.sh restore.sh
+
   build-web:
     runs-on: ubuntu-latest
     needs: analyze-and-test
