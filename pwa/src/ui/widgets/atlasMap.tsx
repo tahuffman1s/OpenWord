@@ -515,6 +515,8 @@ export function AtlasMap({ data, places, selected = null, onSelected, controller
       <canvas
         ref={canvas}
         class="ow-atlas-map__canvas"
+        // Panned with a finger: a sheet it is shown in is not to follow it down.
+        data-sheet-drag="off"
         role="img"
         aria-label="Map of the places this passage names"
         onPointerDown={onPointerDown}
