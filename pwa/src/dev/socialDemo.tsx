@@ -50,7 +50,6 @@ async function boot() {
   const now = new Date();
   const ago = (ms: number) => new Date(now.getTime() - ms);
   const server = new MockServer();
-  server.latency = 120;
   if (flag('invite')) server.inviteCode = 'friends-only';
 
   // ---- the people
@@ -134,6 +133,8 @@ async function boot() {
 
   const account = new AccountController({ prefs, reading });
   await account.start();
+  // From here on answers take a moment, so the spinners can be seen.
+  server.latency = 120;
   if (flag('offline')) server.offline = true;
   // For poking at from the console, and for the screenshot script.
   Object.assign(window, { demo: { server, account, reading, prefs } });
