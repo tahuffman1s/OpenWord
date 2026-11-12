@@ -184,3 +184,5 @@ water
 whatshot
 wifi_off
 workspace_premium
+record_voice_over
+system_update

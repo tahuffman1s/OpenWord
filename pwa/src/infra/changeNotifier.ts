@@ -66,6 +66,9 @@ export function useNotifier(...notifiers: (ChangeNotifier | null | undefined)[])
     const live = notifiers.filter((n): n is ChangeNotifier => n != null);
     const listener = () => bump(undefined as unknown as void);
     for (const n of live) n.addListener(listener);
+    // A change between this component's render and this effect would
+    // otherwise be lost: catch up once, now that we are listening.
+    listener();
     return () => {
       for (const n of live) n.removeListener(listener);
     };

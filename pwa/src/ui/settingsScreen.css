@@ -1,0 +1,58 @@
+/* Settings: the headers, the swatches, the sliders, and the licences. */
+.ow-settings__page {
+  max-width: 720px;
+  margin: 0 auto;
+  width: 100%;
+  padding-bottom: calc(32px + var(--ow-safe-bottom));
+}
+.ow-settings__header { padding: 24px 16px 4px; color: var(--md-sys-color-primary); font-weight: 700; }
+.ow-settings__inset { padding: 0 16px; }
+.ow-settings__segments { display: flex; }
+
+.ow-settings__swatches { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 16px 16px; }
+.ow-swatch {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  color: var(--md-sys-color-on-surface);
+}
+.ow-swatch--selected { border-color: var(--md-sys-color-on-surface); }
+
+.ow-slider-tile { padding: 0 16px; }
+.ow-slider-tile__head { display: flex; justify-content: space-between; align-items: baseline; padding-top: 12px; }
+
+.ow-settings__chips { padding: 0 16px 8px; display: flex; flex-wrap: wrap; gap: 8px; }
+.ow-settings__translation .m3-list-tile__trailing { margin-right: -8px; }
+.ow-settings__danger, .ow-settings__danger .m3-list-tile__leading { color: var(--md-sys-color-error); }
+
+.ow-settings__dialog-text { margin: 0 0 12px; }
+.ow-settings__tidy-line { padding-bottom: 6px; }
+.ow-settings__backup {
+  width: 100%;
+  padding: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
+  border: 1px solid var(--md-sys-color-outline);
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  font: var(--md-sys-typescale-body-small);
+  font-family: ui-monospace, 'Roboto Mono', Menlo, Consolas, monospace;
+  resize: vertical;
+}
+
+.ow-voice { padding: 0 24px; }
+.ow-voice__rates { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.ow-voice__heading { margin-top: 20px; }
+.ow-voice__loading { padding: 16px 24px; }
+.ow-voice__tile { padding-left: 16px; padding-right: 24px; }
+.ow-voice__note { padding: 8px 24px 0; }
+
+.ow-licences__problem { padding: 16px; }
+.ow-licences__text {
+  margin: 0;
+  padding: 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-monospace, 'Roboto Mono', Menlo, Consolas, monospace;
+  color: var(--md-sys-color-on-surface);
+}
