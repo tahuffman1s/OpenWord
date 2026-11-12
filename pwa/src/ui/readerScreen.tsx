@@ -17,7 +17,8 @@ import { readAloudSessionError, startReadAloudSession, type ReadAloudHandler } f
 import { ReferenceMatcher } from '../data/referenceSearch';
 import { Settings } from '../data/settings';
 import { ChangeNotifier, useNotifier } from '../infra/changeNotifier';
-import { type Bible, type Book, type Chapter, isVerseText, ReadingDirection, Reference } from '../model/bible';
+import { type Bible, type Book, type Chapter, isVerseText, Markup, ReadingDirection, Reference } from '../model/bible';
+import { comparable, differingWords, markedRuns, wordsOf } from '../model/verseCompare';
 import { BookSection } from '../model/bookMeta';
 import { QuizKind, QuizMaker, type QuizQuestion } from '../model/quiz';
 import { Passage, type PlanDay } from '../model/readingPlan';
@@ -49,6 +50,7 @@ import {
   highlightNames,
   highlightSwatch,
   highlights,
+  redLetter,
   overlays,
   rgba,
   showSnackBar,
@@ -69,12 +71,14 @@ import {
   type PosttestCardProps,
   type PretestCardProps,
 } from './optionalScreens';
+import { showCompareSheet, useOpened } from './compareSheet';
 import { showOriginal } from './originalSheet';
 import { hasReader, registerReaderGoTo } from './readerNav';
 import { showSearch } from './searchScreen';
 import { showInstallGuide } from './tutorial/installGuide';
 import { VerseSharing, copyText, showVerseImageSheet, type ShareParams } from './verseShare';
 import { LinkedText, ScriptureBlock, ScriptureStyle, tintLayer, tintOver, useVerseGestures } from './widgets/scriptureText';
+import { MarkedVerse } from './widgets/markedVerse';
 import './readerScreen.css';
 
 /**
@@ -890,6 +894,39 @@ class ReaderController extends ChangeNotifier {
     this.clearSelection();
   };
 
+  /**
+   * Sets verses of this chapter beside themselves in the other
+   * translations on the shelf.
+   */
+  readonly compare = (verses: readonly number[]): void => {
+    if (verses.length === 0) return;
+    void showCompareSheet({
+      library: this.library,
+      settings: this.settings,
+      chapter: this.current,
+      verses,
+      onRead: (translationId, verse) => this.readIn(translationId, verse),
+      onSideBySide: (translationId) => {
+        this.settings.compareTranslationId = translationId;
+        showSnackBar(`Reading beside ${this.library.infoFor(translationId).abbreviation}. Turn it off under Display.`);
+      },
+    });
+  };
+
+  readonly compareSelection = (): void => {
+    const verses = [...this.selected].sort((a, b) => a - b);
+    this.clearSelection();
+    this.compare(verses);
+  };
+
+  /** Goes on reading in another translation, at the verse that was being looked at. */
+  private readIn(translationId: string, verse: number): void {
+    const place = this.current.withVerse(verse);
+    this.settings.translationId = translationId;
+    this.goTo(place);
+    showSnackBar(`Reading the ${this.library.infoFor(translationId).name}`);
+  }
+
   readonly highlightSelection = async (): Promise<void> => {
     const verses = [...this.selected];
     const chapter = this.current;
@@ -914,6 +951,9 @@ class ReaderController extends ChangeNotifier {
       <VerseSheet
         reference={reference}
         text={chapter.verseText(verse)}
+        library={this.library}
+        settings={this.settings}
+        onCompare={() => this.compare([verse])}
         // Matthew 17:21 and the others the critical texts leave out are
         // numbered in the tradition and absent from the text. Saying so
         // beats an empty sheet with no explanation.
@@ -1293,6 +1333,7 @@ export function ReaderScreen() {
             onShare={() => void controller.shareSelection()}
             onImage={() => void controller.shareSelectionAsImage()}
             onHighlight={() => void controller.highlightSelection()}
+            onCompare={library.available.length > 1 ? controller.compareSelection : null}
           />
         ) : voice !== null && voice.isActive ? (
           <PlayerBar voice={voice} rate={settings.speechRate} onSettings={() => void controller.openVoiceSettings()} />
@@ -1940,9 +1981,14 @@ function compareBody(props: ChapterPageProps, other: Chapter, gestures: ReturnTy
   const count = chapter.verseCount > other.verseCount ? chapter.verseCount : other.verseCount;
   const rows: VNode[] = [];
   for (let verse = 1; verse <= count; verse++) {
-    const mine = chapter.verseText(verse);
-    const theirs = other.verseText(verse);
+    // With their marks, as the page sets them: the words of Jesus are
+    // red here as they are everywhere else.
+    const mine = chapter.verseMarked(verse);
+    const theirs = other.verseMarked(verse);
     if (mine.length === 0 && theirs.length === 0) continue;
+    const set = (marked: string) => (
+      <MarkedVerse marked={marked} redLetter={props.style.redLetter} wjColor={props.style.wjColor} />
+    );
     const tint = props.highlights.get(verse);
     rows.push(
       <div class="ow-compare__row" key={verse} data-vs={verse}>
@@ -1952,11 +1998,11 @@ function compareBody(props: ChapterPageProps, other: Chapter, gestures: ReturnTy
           style={tint === undefined ? undefined : { backgroundImage: tint }}
         >
           <span class="ow-vn ow-compare__number">{verse}</span>
-          {mine.length === 0 ? '—' : mine}
+          {mine.length === 0 ? '—' : set(mine)}
         </div>
         <div class="ow-sb ow-compare__cell ow-compare__cell--other">
           <span class="ow-vn ow-compare__number">{verse}</span>
-          {theirs.length === 0 ? '—' : theirs}
+          {theirs.length === 0 ? '—' : set(theirs)}
         </div>
       </div>,
     );
@@ -2157,6 +2203,9 @@ function HighlightSheet({ title }: { title: string }) {
 function VerseSheet({
   reference,
   text,
+  library,
+  settings,
+  onCompare,
   reading,
   crossReferences,
   onCrossReferences,
@@ -2170,6 +2219,13 @@ function VerseSheet({
 }: {
   reference: Reference;
   text: string;
+
+  /** The shelf, for the verse in its other translations. */
+  library: LibraryController;
+  settings: Settings;
+
+  /** Sets the verse beside itself in every translation at once. */
+  onCompare: () => void;
 
   /** Whether this translation leaves the verse out on purpose. */
   omitted?: boolean;
@@ -2188,8 +2244,28 @@ function VerseSheet({
   onListen?: (() => void) | null;
 }) {
   const overlay = useOverlay();
-  useNotifier(reading);
+  useNotifier(reading, settings);
   const mark = reading.markFor(reference);
+
+  // The verse in the other translations, a tap away: the one being read
+  // is shown, and choosing another sets its words in its place — marked
+  // where they differ, so the eye lands on what changed.
+  const mine = library.translation;
+  const versions = [mine, ...library.available.filter((translation) => translation.id !== mine.id && !settings.compareHidden.has(translation.id))];
+  const [peeking, setPeeking] = useState(mine.id);
+  const opened = useOpened(library, peeking === mine.id ? [] : [peeking]);
+  const peeked = peeking === mine.id ? null : opened.get(peeking);
+  const peekedChapter =
+    peeked === null || peeked === undefined || peeked === 'failed'
+      ? null
+      : (peeked.bookByCode(reference.bookCode)?.chapter(reference.chapter) ?? null);
+  const peekedMarked = peekedChapter?.verseMarked(reference.verse ?? 0) ?? '';
+  const peekedInfo = versions.find((translation) => translation.id === peeking) ?? mine;
+  const mineMarked = library.bible?.bookByCode(reference.bookCode)?.chapter(reference.chapter)?.verseMarked(reference.verse ?? 0) ?? '';
+  const wjColor = redLetter(currentScheme().brightness);
+  /** The words on show: this translation's, or the one being looked at. */
+  const shownText = peeking === mine.id ? text : Markup.strip(peekedMarked).trim();
+  const shownAbbreviation = peekedInfo.abbreviation;
 
   let passageCount = 0;
   for (const anchor of crossReferences) passageCount += anchor.ranges.length;
@@ -2220,11 +2296,57 @@ function VerseSheet({
   return (
     <Sheet class="ow-verse-sheet">
       <div class="m3-title-medium">{reference.label}</div>
-      <div class={`ow-verse-sheet__text${absent ? ' ow-verse-sheet__text--absent' : ''}`}>
-        {absent
-          ? 'This translation does not include this verse. It is numbered in the tradition and absent from the manuscripts this edition follows.'
-          : text}
+      <div
+        class={`ow-verse-sheet__text${(peeking === mine.id ? absent : peekedMarked.length === 0) ? ' ow-verse-sheet__text--absent' : ''}${peeking === mine.id ? '' : ' ow-verse-sheet__text--peek'}`}
+        aria-live="polite"
+      >
+        {peeking === mine.id ? (
+          absent ? (
+            'This translation does not include this verse. It is numbered in the tradition and absent from the manuscripts this edition follows.'
+          ) : mineMarked.length > 0 ? (
+            <MarkedVerse marked={mineMarked} redLetter={settings.redLetter} wjColor={wjColor} />
+          ) : (
+            text
+          )
+        ) : peeked === undefined ? (
+          '…'
+        ) : peekedMarked.length === 0 ? (
+          `${peekedInfo.abbreviation} does not have this verse.`
+        ) : (
+          <MarkedVerse
+            marked={peekedMarked}
+            redLetter={settings.redLetter}
+            wjColor={wjColor}
+            differing={
+              settings.compareDifferences && comparable(peekedInfo.language, mine.language)
+                ? differingWords(wordsOf(markedRuns(mineMarked)), wordsOf(markedRuns(peekedMarked)))
+                : undefined
+            }
+          />
+        )}
       </div>
+      {versions.length > 1 && (
+        <div class="ow-verse-sheet__versions" role="group" aria-label="This verse in another translation">
+          {versions.map((translation) => (
+            <Chip
+              variant="choice"
+              label={translation.abbreviation}
+              aria-label={translation.name}
+              selected={peeking === translation.id}
+              onClick={() => setPeeking(translation.id)}
+            />
+          ))}
+          <Chip
+            variant="assist"
+            icon="compare_arrows"
+            label="Compare all"
+            onClick={() => {
+              overlay.close();
+              onCompare();
+            }}
+          />
+        </div>
+      )}
       <div class="ow-verse-sheet__swatches">
         {swatches}
         {(mark?.highlighted ?? false) && (
@@ -2284,9 +2406,12 @@ function VerseSheet({
         <TonalButton
           icon="content_copy"
           onClick={async () => {
-            await copyText(`${reference.label} — ${text}`);
+            // What is on show is what is copied, and it says whose words they are.
+            await copyText(
+              peeking === mine.id ? `${reference.label} — ${text}` : `${reference.label} (${shownAbbreviation}) — ${shownText}`,
+            );
             overlay.close();
-            showSnackBar('Verse copied');
+            showSnackBar(peeking === mine.id ? 'Verse copied' : `Verse copied from ${shownAbbreviation}`);
           }}
         >
           Copy
@@ -2474,6 +2599,7 @@ function SelectionBar({
   onShare,
   onImage,
   onHighlight,
+  onCompare,
 }: {
   citation: string;
   count: number;
@@ -2482,6 +2608,9 @@ function SelectionBar({
   onShare: () => void;
   onImage: () => void;
   onHighlight: () => void;
+
+  /** Sets the verses beside themselves in the other translations; null where there are none. */
+  onCompare: (() => void) | null;
 }) {
   return (
     <div class="ow-reader-bar">
@@ -2492,6 +2621,7 @@ function SelectionBar({
           {count === 1 ? '1 verse · tap more to add' : `${count} verses`}
         </div>
       </div>
+      {onCompare !== null && <IconButton icon="compare_arrows" label="Compare translations" onClick={onCompare} />}
       <IconButton icon="content_copy" label="Copy" onClick={onCopy} />
       <IconButton icon="share" label="Share" onClick={onShare} />
       <IconButton icon="image_outlined" label="Share as an image" onClick={onImage} />

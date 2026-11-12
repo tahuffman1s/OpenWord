@@ -366,6 +366,9 @@ export function OverlayHost() {
 function OverlayFrame({ entry, hidden, isTop }: { entry: Entry; hidden: boolean; isTop: boolean }) {
   const { kind, options, exiting } = entry;
   const ref = useRef<HTMLDivElement>(null);
+  const sheet = useRef<HTMLDivElement>(null);
+  const scrim = useRef<HTMLDivElement>(null);
+  useSheetDrag(sheet, scrim, kind === 'sheet' && options.dismissible !== false && !exiting, () => overlays.close(entry.id));
   // Focus goes into a new dialog or sheet, and the page under it is inert.
   useEffect(() => {
     if (kind === 'screen' || exiting) return;
@@ -411,12 +414,168 @@ function OverlayFrame({ entry, hidden, isTop }: { entry: Entry; hidden: boolean;
   }
   return (
     <div style={hiddenStyle} {...inertAttr} ref={ref}>
-      <div class={`m3-scrim${exiting ? ' m3-scrim--exit' : ''}`} onClick={dismiss} />
-      <div class={`m3-sheet${options.full ? ' m3-sheet--full' : ''}${exiting ? ' m3-sheet--exit' : ''}${options.class ? ` ${options.class}` : ''}`} role="dialog" aria-modal="true">
+      <div class={`m3-scrim${exiting ? ' m3-scrim--exit' : ''}`} onClick={dismiss} ref={scrim} />
+      <div
+        class={`m3-sheet${options.full ? ' m3-sheet--full' : ''}${exiting ? ' m3-sheet--exit' : ''}${options.class ? ` ${options.class}` : ''}`}
+        role="dialog"
+        aria-modal="true"
+        ref={sheet}
+      >
         {entry.node}
       </div>
     </div>
   );
+}
+
+/** How far down a sheet is pulled before letting go closes it, in pixels. */
+const pullToClose = 96;
+
+/** Or how fast it is flicked, in pixels a millisecond. */
+const flickToClose = 0.45;
+
+/**
+ * Lets a bottom sheet be pulled down and away with a finger.
+ *
+ * A sheet that slides up from the bottom of a phone is expected to go
+ * back the way it came: the handle at its top says so. The finger may
+ * start anywhere on it. Where it starts on something that scrolls, the
+ * sheet only follows once that is at its top, so a list is scrolled back
+ * up before the sheet begins to move — one gesture, as the platform's own
+ * sheets do it — and a drag that is mostly sideways is left to whatever
+ * scrolls that way.
+ *
+ * The sheet follows the finger exactly, the scrim clearing as it goes.
+ * Let go past a third of the way, or with a flick, and it is closed;
+ * short of that it settles back.
+ */
+function useSheetDrag(
+  sheet: { current: HTMLDivElement | null },
+  scrim: { current: HTMLDivElement | null },
+  enabled: boolean,
+  close: () => void,
+): void {
+  const latest = useRef(close);
+  latest.current = close;
+  useEffect(() => {
+    const el = sheet.current;
+    if (el === null || !enabled) return;
+    // On a wide window a sheet is a card in the middle, not a drawer.
+    const wide = typeof matchMedia === 'function' ? matchMedia('(min-width: 840px)') : null;
+    let startX = 0;
+    let startY = 0;
+    let lastY = 0;
+    let lastTime = 0;
+    let speed = 0;
+    let offset = 0;
+    /** Not yet known whether this touch is a pull, a scroll, or a tap. */
+    let deciding = false;
+    let dragging = false;
+    let scrollers: HTMLElement[] = [];
+
+    const scrollersFrom = (target: EventTarget | null): HTMLElement[] => {
+      const found: HTMLElement[] = [];
+      for (let node = target as HTMLElement | null; node !== null && node !== el; node = node.parentElement) {
+        if (node.scrollHeight <= node.clientHeight + 1) continue;
+        const overflow = getComputedStyle(node).overflowY;
+        if (overflow === 'auto' || overflow === 'scroll') found.push(node);
+      }
+      return found;
+    };
+
+    const place = (y: number, animate: boolean) => {
+      offset = y;
+      el.style.transition = animate ? 'transform 220ms cubic-bezier(0.2, 0, 0, 1)' : 'none';
+      el.style.transform = y === 0 && animate ? '' : `translateY(${y}px)`;
+      const shade = scrim.current;
+      if (shade !== null) {
+        shade.style.transition = animate ? 'opacity 220ms' : 'none';
+        shade.style.opacity = y === 0 ? '' : `${Math.max(0, 1 - y / Math.max(1, el.offsetHeight))}`;
+      }
+    };
+
+    const settle = () => {
+      place(0, true);
+      const tidy = () => {
+        el.removeEventListener('transitionend', tidy);
+        if (offset === 0) {
+          el.style.transition = '';
+          el.style.transform = '';
+        }
+      };
+      el.addEventListener('transitionend', tidy);
+    };
+
+    const onStart = (event: TouchEvent) => {
+      dragging = false;
+      deciding = false;
+      if (event.touches.length !== 1 || wide?.matches === true) return;
+      const target = event.target as HTMLElement | null;
+      // A slider is dragged, a map is panned, and text being typed is
+      // selected: those keep their finger.
+      if (target?.closest?.('input, textarea, select, [contenteditable], [data-sheet-drag="off"]') != null) return;
+      const touch = event.touches[0];
+      startX = touch.clientX;
+      startY = lastY = touch.clientY;
+      lastTime = event.timeStamp;
+      speed = 0;
+      scrollers = scrollersFrom(event.target);
+      deciding = true;
+    };
+
+    const onMove = (event: TouchEvent) => {
+      if (!deciding && !dragging) return;
+      const touch = event.touches[0];
+      if (touch === undefined) return;
+      const dx = touch.clientX - startX;
+      const dy = touch.clientY - startY;
+      if (deciding) {
+        if (Math.abs(dx) < 6 && Math.abs(dy) < 6) return;
+        deciding = false;
+        // Down, more than sideways, and nothing under the finger left to
+        // scroll back up first.
+        if (dy <= 0 || Math.abs(dx) > dy || scrollers.some((scroller) => scroller.scrollTop > 0)) return;
+        dragging = true;
+        // From where the finger is now, so the sheet does not jump the
+        // few pixels it took to tell.
+        startY = touch.clientY;
+      }
+      if (event.cancelable) event.preventDefault();
+      const elapsed = event.timeStamp - lastTime;
+      if (elapsed > 0) speed = speed * 0.4 + ((touch.clientY - lastY) / elapsed) * 0.6;
+      lastY = touch.clientY;
+      lastTime = event.timeStamp;
+      place(Math.max(0, touch.clientY - startY), false);
+    };
+
+    const onEnd = (event: TouchEvent) => {
+      deciding = false;
+      if (!dragging) return;
+      dragging = false;
+      // A finger held still before it lifts is not a flick.
+      const flicked = event.timeStamp - lastTime < 80 && speed > flickToClose;
+      const far = offset > Math.min(pullToClose, el.offsetHeight / 3);
+      if (event.type === 'touchend' && (far || (flicked && offset > 12))) {
+        // Left where it is: the exit animation takes it from there.
+        el.style.transition = '';
+        const shade = scrim.current;
+        if (shade !== null) shade.style.transition = '';
+        latest.current();
+      } else {
+        settle();
+      }
+    };
+
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd);
+    el.addEventListener('touchcancel', onEnd);
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+    };
+  }, [enabled]);
 }
 
 function MenuPositioner({ anchor, exiting, cls, children }: { anchor?: HTMLElement | { x: number; y: number }; exiting: boolean; cls?: string; children: ComponentChildren }) {

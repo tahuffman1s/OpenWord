@@ -126,6 +126,45 @@ export class LibraryController extends ChangeNotifier {
     this.notifyListeners();
   }
 
+  /**
+   * A translation to look at beside the one being read: a verse in
+   * every version on the shelf, say. The one being read and the one
+   * beside it are handed over as they are; any other is read once and
+   * kept while it is among the last few asked for, so that stepping from
+   * verse to verse does not read a whole Bible again each time.
+   */
+  open(translationId: string): Promise<Bible> {
+    if (this._bible?.translation.id === translationId) return Promise.resolve(this._bible);
+    if (this._comparison?.translation.id === translationId) return Promise.resolve(this._comparison);
+    const kept = this._opened.get(translationId);
+    if (kept !== undefined) {
+      // Asked for again: the newest once more.
+      this._opened.delete(translationId);
+      this._opened.set(translationId, kept);
+      return kept;
+    }
+    const reading = this.read(translationId);
+    reading.catch(() => {
+      if (this._opened.get(translationId) === reading) this._opened.delete(translationId);
+    });
+    this._opened.set(translationId, reading);
+    while (this._opened.size > LibraryController.keptOpen) {
+      this._opened.delete(this._opened.keys().next().value as string);
+    }
+    return reading;
+  }
+
+  /** Lets go of what `open` kept: a translation taken off the shelf, or memory wanted back. */
+  closeOpened(translationId?: string): void {
+    if (translationId === undefined) this._opened.clear();
+    else this._opened.delete(translationId);
+  }
+
+  private readonly _opened = new Map<string, Promise<Bible>>();
+
+  /** How many translations `open` keeps to hand. */
+  static readonly keptOpen = 6;
+
   /** True where this id names a translation that can actually be read. */
   knows(translationId: string): boolean {
     return Translations.all.some((t) => t.id === translationId) || (this.shelf?.has(translationId) ?? false);

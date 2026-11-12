@@ -1,6 +1,6 @@
 import { ValueNotifier } from '../infra/changeNotifier';
 import type { Reference } from '../model/bible';
-import { hasWebAudio, speechAudioContext } from '../speech/audio';
+import { hasWebAudio, speechAudioContext, speechPlayback } from '../speech/audio';
 import { ReadAloud, ReadAloudState } from './readAloud';
 
 /**
@@ -251,7 +251,10 @@ export class ReadAloudHandler {
   }
 
   private _publishState(state: PlaybackState): void {
-    if (state.processingState === AudioProcessingState.ready) this._keepAlive.start();
+    const reading = state.processingState === AudioProcessingState.ready;
+    // Before the sound, so that an iPhone on silent plays it (see audio.ts).
+    speechPlayback(reading);
+    if (reading) this._keepAlive.start();
     else this._keepAlive.stop();
     const session = this._session;
     if (session === null) return;

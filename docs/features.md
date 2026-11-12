@@ -17,6 +17,11 @@ three things that need one.
   `mat` and the navigator offers the jump; the same field filters the book
   list, which is grouped by division or sorted A–Z, and leads on to chapter
   and verse grids.
+- **A verse in every translation.** Tap a verse and the translations on
+  the device are offered under it; choosing one shows its words in place,
+  and *Compare all* stacks every one of them with the words that differ
+  from the one being read marked. Step from verse to verse without leaving,
+  or select several verses and compare them together.
 - **Compare two translations** verse by verse, in columns on a wide window and
   stacked on a phone. The second translation is loaded only while you are
   comparing.

@@ -1,6 +1,7 @@
 import { speechAudioContext } from '../speech/audio';
 import { levelled as levelledSamples, limited as limitedSamples } from '../speech/kitten';
-import type { WorkerReply, WorkerRequest } from '../speech/ttsWorker';
+import { BackendChoice } from '../speech/backendChoice';
+import type { Backend, WorkerReply, WorkerRequest } from '../speech/ttsWorker';
 import { NeuralModel, type VoiceFiles } from './neuralVoices';
 import type { ConfigureOptions, SpeakOptions, SpeechEngine, SpeechVoice } from './readAloud';
 
@@ -108,23 +109,45 @@ export class NeuralSpeechEngine implements SpeechEngine {
 
   async speak(text: string, options: SpeakOptions = {}): Promise<boolean> {
     this._reading?.cancel();
-    const synth = this._synth;
-    const context = this._context;
-    if (synth === null || context === null) return false;
-    const reading = (this._reading = new Reading({
-      text,
-      breaks: options.breaks ?? [],
-      synth,
-      context,
-      speaker: this._speaker,
-      speed: this._speed,
-      onProgress: options.onProgress,
-      onStart: options.onStart,
-      onHeard: () => this._checkPace(),
-    }));
-    const said = await reading.run();
-    if (this._reading === reading) this._reading = null;
-    return said;
+    let from = 0;
+    for (let attempt = 0; ; attempt++) {
+      const synth = this._synth;
+      const context = this._context;
+      if (synth === null || context === null) return false;
+      const reading = (this._reading = new Reading({
+        text: text.substring(from),
+        breaks: (options.breaks ?? []).map((at) => at - from).filter((at) => at >= 0),
+        synth,
+        context,
+        speaker: this._speaker,
+        speed: this._speed,
+        onProgress: options.onProgress === undefined ? undefined : ((base) => (offset: number) => options.onProgress!(base + offset))(from),
+        onStart: attempt === 0 ? options.onStart : undefined,
+        onHeard: () => this._checkPace(),
+      }));
+      const said = await reading.run();
+      const mine = this._reading === reading;
+      if (mine) this._reading = null;
+      // The graphics processor gave out part way: the voice is loaded
+      // again without it, and goes on from the piece it had reached,
+      // rather than leave the reader with a chapter that stopped.
+      if (said || !mine || reading.cancelled || !synth.backendFailed || attempt > 0) return said;
+      from += reading.reached;
+      try {
+        await this._reload();
+      } catch {
+        return false;
+      }
+    }
+  }
+
+  /** Starts the model afresh, on whatever is now thought best. */
+  private async _reload(): Promise<void> {
+    const model = this._model;
+    if (model === null) throw new Error('no voice to load again');
+    this._synth?.close();
+    this._synth = null;
+    this._synth = await this._startSynthesiser(model, await this.files(model));
   }
 
   private _checkPace(): void {
@@ -344,6 +367,12 @@ class Reading {
     return this._unpaused !== null;
   }
 
+  /** Where in the text the piece last begun starts: where to go on from. */
+  get reached(): number {
+    return this._reached;
+  }
+  private _reached = 0;
+
   /** How many pieces are made ahead of the one being heard. */
   private static readonly _ahead = 3;
 
@@ -380,6 +409,7 @@ class Reading {
   async run(): Promise<boolean> {
     try {
       for (let i = 0; i < this.pieces.length; i++) {
+        this._reached = this.pieces[i][0];
         const buffer = await this._load(i);
         if (buffer === null || this.cancelled) return false;
         // The next is loaded while this one plays, and those after it are
@@ -511,7 +541,19 @@ export class Synthesiser {
     private readonly _worker: SynthesiserPort,
     private readonly _phonemesHere: ((text: string) => Promise<string>) | null,
     readonly sampleRate: number,
+    /** What the model runs on: this device's graphics processor, or its processor. */
+    readonly backend: Backend = 'wasm',
+    private readonly _choice: BackendChoice | null = null,
   ) {}
+
+  /**
+   * Whether the graphics processor stopped making sound while this was
+   * speaking; nothing more will come of it, and the engine starts another.
+   */
+  get backendFailed(): boolean {
+    return this._backendFailed;
+  }
+  private _backendFailed = false;
 
   private readonly _waiting = new Map<number, Completer<Float32Array | null>>();
   private _next = 0;
@@ -545,8 +587,11 @@ export class Synthesiser {
   static async start(
     model: NeuralModel,
     files: VoiceFiles,
-    options: { createWorker?: () => SynthesiserPort; wasmPaths?: string } = {},
+    options: { createWorker?: () => SynthesiserPort; wasmPaths?: string; choice?: BackendChoice | null } = {},
   ): Promise<Synthesiser> {
+    const choice = options.choice === undefined ? BackendChoice.forThisBrowser() : options.choice;
+    const plan = choice?.plan() ?? { backends: ['wasm' as Backend], prove: false };
+    if (plan.backends.length === 0) throw new Error('The voice could not be loaded: it has not run on this device');
     const worker = (options.createWorker ?? Synthesiser.createWorker)();
     const first = new Completer<WorkerReply | string>();
     let synth: Synthesiser | null = null;
@@ -561,9 +606,22 @@ export class Synthesiser {
       }
       synth?._receive(message);
     };
-    worker.postMessage({ type: 'load', files, wasmPaths: options.wasmPaths }, [files.model, files.voices]);
+    // Marked before it begins: a phone short of memory ends the page
+    // rather than fail the load, and the mark is how that is known of.
+    choice?.begin(plan);
+    // A page closed on purpose while it loads is not a page that died:
+    // leaving is told of, and being ended for want of memory is not.
+    const leaving = () => choice?.failed();
+    const page = typeof addEventListener === 'function' && typeof removeEventListener === 'function';
+    if (page) addEventListener('pagehide', leaving);
+    worker.postMessage(
+      { type: 'load', files, wasmPaths: options.wasmPaths, backends: plan.backends, prove: plan.prove },
+      [files.model, files.voices],
+    );
     const answer = await first.promise;
+    if (page) removeEventListener('pagehide', leaving);
     if (typeof answer === 'string' || answer.type !== 'ready') {
+      choice?.failed();
       worker.terminate();
       const why = typeof answer === 'string' ? answer : answer.type === 'error' ? answer.message : answer.type;
       throw new Error(`The voice could not be loaded: ${why}`);
@@ -574,7 +632,11 @@ export class Synthesiser {
       ? null
       : async (text: string) => (await import('../speech/phonemes')).phonemesFor(text);
     if (phonemesHere !== null) console.warn(`OpenWord: ${model.title}'s phonemes are made on the page`);
-    return (synth = new Synthesiser(worker, phonemesHere, 24000));
+    const backend = answer.backend ?? 'wasm';
+    const refused = answer.refused ?? [];
+    choice?.loaded(backend, refused);
+    for (const { backend: failed, why } of refused) console.warn(`OpenWord: the voice will not run on ${failed}: ${why}`);
+    return (synth = new Synthesiser(worker, phonemesHere, 24000, backend, choice));
   }
 
   private _receive(message: WorkerReply): void {
@@ -585,6 +647,8 @@ export class Synthesiser {
           const pace = message.ms / 1000 / lasts;
           this._pace = this._made === 0 ? pace : this._pace * 0.7 + pace * 0.3;
           this._made++;
+          // Kept once there is enough to judge by, and now and then after.
+          if (this._made === 4 || this._made % 25 === 0) this._choice?.paced(this.backend, this._pace);
         }
         this._waiting.get(message.id)?.complete(message.samples);
         this._waiting.delete(message.id);
@@ -593,6 +657,10 @@ export class Synthesiser {
       case 'error':
         if (message.id === undefined) return;
         console.warn(`OpenWord: the voice could not say a piece: ${message.message}`);
+        if (message.backendFailed === true && !this._backendFailed) {
+          this._backendFailed = true;
+          this._choice?.broke(this.backend);
+        }
         this._waiting.get(message.id)?.complete(null);
         this._waiting.delete(message.id);
         break;
@@ -636,7 +704,22 @@ export class Synthesiser {
       this._worker.postMessage(request.message);
       return;
     }
-    this._phonemesHere(request.message.text).then(
+    // Given a time to answer in: eSpeak has been seen to hang on a phone,
+    // and a piece that fails is better than a reading that waits for ever.
+    const phonemes = new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('eSpeak did not answer')), 15000);
+      this._phonemesHere!(request.message.text).then(
+        (made) => {
+          clearTimeout(timer);
+          resolve(made);
+        },
+        (error: unknown) => {
+          clearTimeout(timer);
+          reject(error);
+        },
+      );
+    });
+    phonemes.then(
       (phonemes) => {
         if (this._closed) return;
         this._worker.postMessage({ ...request.message, phonemes });

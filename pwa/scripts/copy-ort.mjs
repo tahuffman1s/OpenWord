@@ -12,7 +12,14 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const source = join(root, 'node_modules', 'onnxruntime-web', 'dist');
 const target = join(root, 'public', 'ort');
 
-const files = ['ort-wasm-simd-threaded.wasm', 'ort-wasm-simd-threaded.mjs'];
+// The plain build runs the voice on the processor; the asyncify one is the
+// same runtime with its WebGPU kernels, for the graphics processor.
+const files = [
+  'ort-wasm-simd-threaded.wasm',
+  'ort-wasm-simd-threaded.mjs',
+  'ort-wasm-simd-threaded.asyncify.wasm',
+  'ort-wasm-simd-threaded.asyncify.mjs',
+];
 
 if (!existsSync(source)) {
   console.error(`copy-ort: ${source} is missing; run npm install first`);

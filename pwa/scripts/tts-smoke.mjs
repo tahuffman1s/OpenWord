@@ -5,6 +5,11 @@
 //   node scripts/tts-smoke.mjs            (dev server)
 //   node scripts/tts-smoke.mjs --preview  (vite preview of a build made
 //                                          with OPENWORD_TTS_HARNESS=1)
+//   node scripts/tts-smoke.mjs --webgpu   (the model on the graphics
+//                                          processor, drawn in software
+//                                          where the machine has none:
+//                                          slow, but the same shaders)
+//   node scripts/tts-smoke.mjs --wasm     (the model on the processor)
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -13,6 +18,7 @@ import { chromium } from './playwright.mjs';
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const port = Number(process.env.TTS_SMOKE_PORT ?? 5177);
 const preview = process.argv.includes('--preview');
+const backend = process.argv.includes('--webgpu') ? 'webgpu' : process.argv.includes('--wasm') ? 'wasm' : null;
 
 const server = spawn(
   'npx',
@@ -31,7 +37,7 @@ const server = spawn(
 server.stdout.on('data', (d) => process.stdout.write(`[vite] ${d}`));
 server.stderr.on('data', (d) => process.stderr.write(`[vite] ${d}`));
 
-const url = `http://localhost:${port}/tts-harness.html`;
+const url = `http://localhost:${port}/tts-harness.html${backend === null ? '' : `?backend=${backend}`}`;
 
 async function waitForServer() {
   for (let i = 0; i < 100; i++) {
@@ -49,7 +55,19 @@ async function waitForServer() {
 let failed = false;
 try {
   await waitForServer();
-  const browser = await chromium.launch();
+  const browser = await chromium.launch({
+    args:
+      backend === 'webgpu'
+        ? [
+            '--enable-unsafe-webgpu',
+            '--enable-features=Vulkan',
+            '--use-angle=swiftshader',
+            '--use-vulkan=swiftshader',
+            '--enable-unsafe-swiftshader',
+            '--ignore-gpu-blocklist',
+          ]
+        : [],
+  });
   const page = await browser.newPage();
   page.on('console', (m) => console.log(`[page:${m.type()}] ${m.text()}`));
   page.on('pageerror', (e) => console.log(`[page:error] ${e.message}`));
@@ -67,6 +85,7 @@ try {
     [!result.error, `no error (${result.error ?? ''})`],
     [result.durationSeconds >= 2 && result.durationSeconds <= 6, `duration ${result.durationSeconds.toFixed(2)} s in [2, 6]`],
     [result.rms > 0.01, `rms ${result.rms.toFixed(4)} > 0.01`],
+    [backend === null || result.backend === backend, `ran on ${result.backend} (refused: ${JSON.stringify(result.refused ?? [])})`],
     [result.engine?.said === true, `the engine said two verses through Web Audio (${result.engine?.error ?? ''})`],
     [
       (result.engine?.progress ?? []).length >= 2,

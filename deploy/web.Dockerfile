@@ -61,6 +61,7 @@ RUN set -eux; \
     test -f dist/manifest-dark.webmanifest; \
     test -d dist/assets/bible; \
     test -f dist/ort/ort-wasm-simd-threaded.wasm; \
+    test -f dist/ort/ort-wasm-simd-threaded.asyncify.wasm; \
     test -f dist/version.json; \
     # The voice comes from the stage below, never from a working tree.
     rm -rf dist/voice; \

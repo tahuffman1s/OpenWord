@@ -31,7 +31,7 @@ export default defineConfig({
       manifest: false, // public/manifest.webmanifest is hand-written
       injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,ttf,bib,gz,json,wasm,webmanifest}'],
-        // The voice and the ONNX runtime that runs it (15 MB) are fetched
+        // The voice and the ONNX runtime that runs it (15 to 29 MB) are fetched
         // the first time Listen is used and kept by the worker's runtime
         // caches, rather than downloaded by every reader at install.
         // Vite also emits the runtime's wasm beside the bundle that names it;

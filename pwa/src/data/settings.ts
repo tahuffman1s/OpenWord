@@ -58,6 +58,8 @@ const kDeuterocanon = 'deuterocanon';
 const kBookOrder = 'bookOrder';
 const kTranslation = 'translation';
 const kCompare = 'compareTranslation';
+const kCompareHidden = 'compareHidden';
+const kCompareDifferences = 'compareDifferences';
 const kCheckUpdates = 'checkForUpdates';
 const kLastCheck = 'lastUpdateCheck';
 const kSkippedUpdate = 'skippedUpdate';
@@ -248,6 +250,31 @@ export class Settings extends ChangeNotifier {
       return;
     }
     this.writeString(kCompare, value);
+  }
+
+  /**
+   * The translations left out when a verse is set beside itself in the
+   * others: everything on the shelf is shown until the reader says not.
+   */
+  get compareHidden(): Set<string> {
+    return new Set(this.prefs.getStringList(kCompareHidden) ?? []);
+  }
+
+  setCompareHidden(id: string, hidden: boolean): void {
+    const ids = this.compareHidden;
+    if (hidden ? ids.has(id) : !ids.has(id)) return;
+    if (hidden) ids.add(id);
+    else ids.delete(id);
+    this.prefs.setStringList(kCompareHidden, [...ids].sort(compareCodeUnits));
+    this.notifyListeners();
+  }
+
+  /** Whether the words another translation words differently are marked. */
+  get compareDifferences(): boolean {
+    return this.prefs.getBool(kCompareDifferences) ?? true;
+  }
+  set compareDifferences(value: boolean) {
+    this.writeBool(kCompareDifferences, value);
   }
 
   /**
