@@ -1,5 +1,6 @@
 import { ChangeNotifier } from '../infra/changeNotifier';
 import { hasWebAudio } from '../speech/audio';
+import { BackendChoice } from '../speech/backendChoice';
 import { NeuralSpeechEngine } from './neuralSpeech';
 import { NoSpeechEngine, SpeechVoice, type SpeechEngine } from './readAloud';
 
@@ -163,6 +164,11 @@ export abstract class NeuralVoices extends ChangeNotifier {
     return null;
   }
 
+  /** The runtime this device will be loading: the one worth fetching ahead. */
+  get runtimeUrl(): string {
+    return runtimeWasmUrl;
+  }
+
   /**
    * Fetches the voice ahead of its being asked for, where that is a fair
    * thing to do with someone's connection: not when they have asked the
@@ -172,11 +178,11 @@ export abstract class NeuralVoices extends ChangeNotifier {
   prefetch(): void {
     if (!this.isSupported || !mayFetchUnasked()) return;
     this.ready.catch(() => {});
-    // And the runtime the voice runs on, fifteen megabytes of WebAssembly
-    // the worker would otherwise fetch when Listen is pressed. Asked for
+    // And the runtime the voice runs on, megabytes of WebAssembly the
+    // worker would otherwise fetch when Listen is pressed. Asked for
     // here, it is in the service worker's cache by then.
     try {
-      void fetch(runtimeWasmUrl).then(
+      void fetch(this.runtimeUrl).then(
         // Read to its end, so the copy the service worker keeps is whole.
         (response) => void response.arrayBuffer().catch(() => {}),
         () => {},
@@ -189,6 +195,9 @@ export abstract class NeuralVoices extends ChangeNotifier {
 
 /** Where the ONNX runtime's WebAssembly is served from; see ttsWorker.ts. */
 export const runtimeWasmUrl = '/ort/ort-wasm-simd-threaded.wasm';
+
+/** The runtime's build for the graphics processor, served beside it. */
+export const runtimeGpuWasmUrl = '/ort/ort-wasm-simd-threaded.asyncify.wasm';
 
 interface NetworkInformation {
   saveData?: boolean;
@@ -236,9 +245,22 @@ export class WebNeuralVoices extends NeuralVoices {
       } satisfies VoiceStore);
   }
 
-  /** Everywhere with WebAssembly, a worker to run it on, and Web Audio to hear it. */
+  /**
+   * Everywhere with WebAssembly, a worker to run it on, and Web Audio to
+   * hear it — less a device the model has been found not to run on at
+   * all, which reads with its own voices instead (see backendChoice.ts).
+   */
   override get isSupported(): boolean {
-    return typeof WebAssembly !== 'undefined' && typeof Worker !== 'undefined' && hasWebAudio();
+    return (
+      typeof WebAssembly !== 'undefined' &&
+      typeof Worker !== 'undefined' &&
+      hasWebAudio() &&
+      BackendChoice.forThisBrowser().canRun
+    );
+  }
+
+  override get runtimeUrl(): string {
+    return BackendChoice.forThisBrowser().plan().backends[0] === 'webgpu' ? runtimeGpuWasmUrl : runtimeWasmUrl;
   }
 
   /**

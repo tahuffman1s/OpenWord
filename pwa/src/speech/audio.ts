@@ -49,6 +49,43 @@ export function unlockAudio(): void {
   }
 }
 
+/** `navigator.audioSession`, where a browser has it: Safari, since 16.4. */
+interface AudioSessionLike {
+  type: string;
+}
+
+/**
+ * Tells the system that what is playing is someone being read to, while
+ * it is.
+ *
+ * On an iPhone a page's Web Audio is by default "ambient": the ring
+ * switch silences it, and it stops when the screen locks. A chapter read
+ * aloud is the other kind of sound — wanted with the phone on silent, in
+ * a pocket — and Safari lets a page say so. Only while reading, though:
+ * said for good, the first tap anywhere would stop the music someone
+ * had on while they read.
+ */
+export function speechPlayback(on: boolean): void {
+  try {
+    const session = (navigator as Navigator & { audioSession?: AudioSessionLike }).audioSession;
+    if (session === undefined) return;
+    const wanted = on ? 'playback' : 'auto';
+    if (session.type !== wanted) session.type = wanted;
+  } catch {
+    // Not a browser that has it, or not one that lets it be set.
+  }
+}
+
+/**
+ * A phone call, an alarm, or Siri takes the sound away and leaves the
+ * context "interrupted" (Safari's word) or suspended; it does not always
+ * give it back. Coming back to the page does.
+ */
+function wakeIfInterrupted(): void {
+  if (context === null || document.visibilityState !== 'visible') return;
+  if ((context.state as string) === 'interrupted') void context.resume().catch(() => {});
+}
+
 const gestures = ['pointerdown', 'touchend', 'keydown'] as const;
 
 function onGesture(): void {
@@ -60,4 +97,5 @@ function onGesture(): void {
 
 if (typeof document !== 'undefined' && hasWebAudio()) {
   for (const type of gestures) document.addEventListener(type, onGesture, { capture: true, passive: true });
+  document.addEventListener('visibilitychange', wakeIfInterrupted);
 }

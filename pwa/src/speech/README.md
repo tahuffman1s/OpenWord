@@ -1,7 +1,8 @@
 # The voice
 
 How OpenWord reads aloud in the browser. A neural text-to-speech model, KittenTTS, runs
-on a Web Worker with onnxruntime-web; eSpeak NG, compiled to WebAssembly in the
+on a Web Worker with onnxruntime-web — on the graphics processor (WebGPU) where there is
+one, on the processor (WebAssembly) where there is not; eSpeak NG, compiled to WebAssembly in the
 `phonemizer` package, turns the words into the sounds the model speaks; and the Web
 Audio API plays what comes back. Three layers sit on top of each other: the reader
 (`src/data/readAloud.ts`) decides what is read and where it has got to, the engine
@@ -19,7 +20,7 @@ ttsWorker.ts
   │     "həlˈoʊ, wˈɜːld. hˈaʊ ɑːɹ juː?"   — punctuation put back, the model pauses on it
   │  kitten.ts: tokenIds() → [0, …ids…, 10, 0]; styleRow() = content tokens, max 399
   │             styleVector(voices.bin, speaker, row); modelSpeed() = rate (prior cancels)
-  │  onnxruntime-web (wasm, 1 thread): input_ids int64 [1,T], style f32 [1,256], speed f32 [1]
+  │  onnxruntime-web (webgpu, or wasm): input_ids int64 [1,T], style f32 [1,256], speed f32 [1]
   │     → waveform f32 [N] at 24 kHz
   │  kitten.ts: trimSilence() → levelled() → limited()
   ▼
@@ -49,12 +50,34 @@ speakers
   before the tensor is made, so the prior cancels and 1× is the pace the voice was trained
   at.
 
+## Which backend (`backendChoice.ts`)
+
+The worker is told what to try, in order — `['webgpu', 'wasm']` unless something has been
+learnt — and answers with what it ended up on and what it refused, and why.
+
+- **WebGPU** is `onnxruntime-web/webgpu` (the `asyncify` binary under `/ort/`). It is
+  passed over where `navigator.gpu` gives no adapter, or one drawn in software.
+- **Proving it.** A graphics driver that gets an operation wrong returns silence or
+  noise, not an error. The first time on a device the worker synthesises a word on the
+  GPU and checks that it is sound (`notSpeech`); every piece after is checked for
+  numbers that are not numbers. A failure mid-chapter (`backendFailed`) reloads the
+  voice on wasm and goes on from the piece it had reached.
+- **A page that dies.** A phone short of memory does not fail the load: iOS ends the
+  page. A mark is written to localStorage before a load and wiped when it returns (or
+  when the page is left on purpose, `pagehide`); found standing twice, the backend it
+  was trying is passed over for a fortnight. With both passed over the voice is not
+  offered and the device's own voices read instead.
+- **Pace.** Each backend's measured pace is kept; a GPU that falls behind gives way to
+  the processor unless the processor has been found slower.
+
+What is learnt is kept per browser version (the user agent), so an update starts afresh.
+
 ## Worker protocol (`ttsWorker.ts`)
 
 | In | Out |
 |---|---|
-| `{type:'load', files:{model: ArrayBuffer, voices: ArrayBuffer, tokens: string}, wasmPaths?}` | `{type:'ready', phonemizer: boolean}` or `{type:'error', message}` |
-| `{type:'speak', id, text, sid, speed, phonemes?}` | `{type:'audio', id, samples: Float32Array, sampleRate: 24000, ms}`, `{type:'error', id, message}` or `{type:'cancelled', id}` |
+| `{type:'load', files:{model: ArrayBuffer, voices: ArrayBuffer, tokens: string}, wasmPaths?, backends?, prove?}` | `{type:'ready', phonemizer: boolean, backend, refused}` or `{type:'error', message}` |
+| `{type:'speak', id, text, sid, speed, phonemes?}` | `{type:'audio', id, samples: Float32Array, sampleRate: 24000, ms}`, `{type:'error', id, message, backendFailed?}` or `{type:'cancelled', id}` |
 | `{type:'cancel', id}` | `{type:'cancelled', id}` if it had not begun |
 | `{type:'close'}` | — (frees the session, closes the worker) |
 
@@ -86,7 +109,10 @@ carries its own JS loader (the `.mjs` is copied too, for a non-bundled ORT build
 `npm run tts:smoke` (`scripts/tts-smoke.mjs`) starts Vite, opens `tts-harness.html` in
 headless Chromium, synthesises Genesis 1:1 with Bella and checks the duration (2–6 s) and
 the RMS (> 0.01), printing the synthesis time. `vite build` leaves the harness out unless
-`OPENWORD_TTS_HARNESS=1` is set; the dev server serves it regardless.
+`OPENWORD_TTS_HARNESS=1` is set; the dev server serves it regardless. `--webgpu` runs the
+model on the graphics processor instead — drawn in software (SwiftShader) on a machine
+without one, so many times slower than real time, but through the same shaders — and
+`--wasm` on the processor; `--preview` runs any of them against a build.
 
 ## Caveats
 
@@ -104,10 +130,18 @@ the RMS (> 0.01), printing the synthesis time. `vite build` leaves the harness o
   background a few seconds after launch (not on a metered or data-saving connection),
   the model is not run once "to warm it" while someone is waiting to hear, and a
   reader who has listened before has the model loaded as the app opens.
-- **iOS Safari.** The model (57 MB) plus the runtime's arena is a lot for a Safari tab;
-  the worker releases the session on `close`, and the files are never held on the main
-  thread. Web Audio there needs a user gesture before any sound: `src/speech/audio.ts`
-  makes and resumes the shared AudioContext on the first tap anywhere on the page.
+- **iOS Safari.** Safari gives a page no threads here (it does not know
+  `credentialless`), so on the processor an iPhone falls behind; WebGPU, which it has
+  from iOS 26, is what keeps up, and is tried first. None of this has been run on an
+  iPhone by the people who wrote it: it is built to fail safe (see "Which backend")
+  rather than known to succeed. The model (57 MB) plus the runtime's arena is a lot for
+  a Safari tab; the worker releases the session on `close`, and the files are never held
+  on the main thread. eSpeak is given twelve seconds to answer on the worker and fifteen
+  on the page, having been reported to hang there. Web Audio needs a user gesture before
+  any sound: `src/speech/audio.ts` makes and resumes the shared AudioContext on the first
+  tap anywhere on the page, sets `navigator.audioSession.type = 'playback'` while reading
+  (so the ring switch does not silence it and the lock screen does not stop it), and
+  resumes a context a phone call left "interrupted".
 - **Media session.** Lock-screen and headset controls (`src/data/readAloudSession.ts`)
   are active only while the page plays audio; a silent loop at near-zero gain keeps the
   context running between pieces. A web page cannot be an Android Auto or CarPlay app,

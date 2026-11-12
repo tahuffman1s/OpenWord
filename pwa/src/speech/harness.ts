@@ -4,7 +4,7 @@
  * voices. Loaded by tts-harness.html and read by scripts/tts-smoke.mjs,
  * which looks for `window.__ttsResult`. Not part of the app.
  */
-import type { WorkerReply, WorkerRequest } from './ttsWorker';
+import type { Backend, WorkerReply, WorkerRequest } from './ttsWorker';
 
 interface HarnessResult {
   samples: number;
@@ -14,6 +14,9 @@ interface HarnessResult {
   loadMs: number;
   phonemizerOnWorker: boolean;
   deviceVoices: number;
+  /** What the model ran on, and what was tried before it. */
+  backend?: Backend;
+  refused?: { backend: Backend; why: string }[];
   engine?: EngineResult;
   error?: string;
 }
@@ -57,11 +60,24 @@ async function run(): Promise<HarnessResult> {
     });
 
   const ready = next();
-  send({ type: 'load', files: { model, voices, tokens } }, [model, voices]);
+  // ?backend=webgpu or ?backend=wasm asks for that one alone; with neither,
+  // the worker chooses as it does in the app. A test machine's graphics
+  // are drawn in software, which the app would pass over.
+  const asked = new URLSearchParams(location.search).get('backend') as Backend | null;
+  send(
+    {
+      type: 'load',
+      files: { model, voices, tokens },
+      backends: asked === null ? undefined : [asked],
+      prove: true,
+      softwareGpu: asked === 'webgpu',
+    },
+    [model, voices],
+  );
   const loaded = await ready;
   if (loaded.type !== 'ready') throw new Error(`load: ${loaded.type === 'error' ? loaded.message : loaded.type}`);
   const loadMs = performance.now() - started;
-  say(`worker ready in ${loadMs.toFixed(0)} ms; eSpeak on worker: ${loaded.phonemizer}`);
+  say(`worker ready in ${loadMs.toFixed(0)} ms on ${loaded.backend}; eSpeak on worker: ${loaded.phonemizer}; refused: ${JSON.stringify(loaded.refused)}`);
 
   let phonemes: string | undefined;
   if (!loaded.phonemizer) {
@@ -84,6 +100,8 @@ async function run(): Promise<HarnessResult> {
     synthMs: made.ms,
     loadMs,
     phonemizerOnWorker: loaded.phonemizer,
+    backend: loaded.backend,
+    refused: loaded.refused,
     deviceVoices: typeof speechSynthesis === 'undefined' ? -1 : speechSynthesis.getVoices().length,
   };
   say(JSON.stringify(result, null, 2));
