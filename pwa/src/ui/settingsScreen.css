@@ -10,14 +10,14 @@
 .ow-settings__segments { display: flex; }
 
 .ow-settings__swatches { display: flex; flex-wrap: wrap; gap: 12px; padding: 4px 16px 16px; }
-.ow-swatch {
+.ow-seed-swatch {
   width: 44px;
   height: 44px;
   border-radius: 50%;
   border: 3px solid transparent;
   color: var(--md-sys-color-on-surface);
 }
-.ow-swatch--selected { border-color: var(--md-sys-color-on-surface); }
+.ow-seed-swatch--selected { border-color: var(--md-sys-color-on-surface); }
 
 .ow-slider-tile { padding: 0 16px; }
 .ow-slider-tile__head { display: flex; justify-content: space-between; align-items: baseline; padding-top: 12px; }

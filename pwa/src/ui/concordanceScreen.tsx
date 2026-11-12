@@ -3,7 +3,8 @@ import type { Originals } from '../data/originals';
 import type { Bible, Reference } from '../model/bible';
 import { BookMeta } from '../model/bookMeta';
 import type { StrongsNumber } from '../model/strongsCodec';
-import { AppBar, Chip, ListTile, Screen, nav, useOverlay } from './m3';
+import { AppBar, Chip, ListTile, Screen, useOverlay } from './m3';
+import { openScreen } from './overlaySettle';
 import { scriptureStyle } from './scriptureType';
 import './concordanceScreen.css';
 
@@ -20,7 +21,7 @@ export function showConcordance(options: {
   originals: Originals;
   bible: Bible;
 }): Promise<Reference | undefined> {
-  return nav.push<Reference>(<ConcordanceScreen {...options} />, { name: 'concordance' });
+  return openScreen<Reference>(<ConcordanceScreen {...options} />, { name: 'concordance' });
 }
 
 /** How many verses are laid out at a time; the common words run to thousands. */

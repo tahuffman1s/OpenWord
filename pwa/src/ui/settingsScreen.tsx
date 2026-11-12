@@ -47,7 +47,6 @@ import {
   showDialog,
   showSheet,
   showSnackBar,
-  snackBars,
   useOverlay,
 } from './m3';
 import { openSocial } from './optionalSocial';
@@ -116,7 +115,7 @@ export function SettingsScreen() {
               key={color}
               aria-checked={settings.seedColor === color}
               aria-label={`Colour ${hexOf(color)}`}
-              class={`ow-swatch m3-interactive${settings.seedColor === color ? ' ow-swatch--selected' : ''}`}
+              class={`ow-seed-swatch m3-interactive${settings.seedColor === color ? ' ow-seed-swatch--selected' : ''}`}
               style={`background:${hexOf(color)}`}
               onClick={() => {
                 settings.seedColor = color;
@@ -662,13 +661,11 @@ function TranslationMenu({ translation, settings, library }: { translation: Tran
     return library.bundle.load(Translations.assetFor(id));
   };
 
-  // Each message replaces the one before it. Queued, the outcome would
-  // wait behind "Looking through…" for as long as that takes to time
-  // out, which reads as nothing having happened.
-  const say = (message: string): void => {
-    snackBars.clear();
-    showSnackBar(message);
-  };
+  // Each message replaces the one before it — the snackbar host hides
+  // what is showing for what comes next — so the outcome does not wait
+  // behind "Looking through…" for as long as that takes to time out,
+  // which would read as nothing having happened.
+  const say = (message: string): void => showSnackBar(message);
 
   /**
    * Takes an edition's furniture out of a translation already on the
@@ -803,6 +800,9 @@ function TranslationMenu({ translation, settings, library }: { translation: Tran
   };
 
   const chose = async (choice: string): Promise<void> => {
+    // The menu is still stepping back out of the history: a dialog opened
+    // before it has would be closed along with it.
+    await historySettled();
     if (choice === 'anchor') {
       const wanted = !settings.anchoredAnyway.has(id);
       settings.setAnchoredAnyway(id, wanted);

@@ -104,7 +104,6 @@ export function AddFriendSheet() {
           />
           <TextField
             label="Add a note (optional)"
-            placeholder="It’s me, from the Tuesday group"
             value={message}
             onInput={setMessage}
             maxLength={200}

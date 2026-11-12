@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import { useAppScope } from '../../app/scope';
 import { useNotifier } from '../../infra/changeNotifier';
-import { AppBar, Fab, Icon, IconButton, NavigationBar, Screen, nav } from '../m3';
+import { AppBar, Fab, IconButton, NavigationBar, Screen, nav } from '../m3';
 import { AccountTab } from './accountTab';
 import { showAddFriend } from './addFriendSheet';
 import { FeedTab } from './feedTab';
@@ -63,6 +63,7 @@ export function SocialScreen({ initial = 'feed' }: { initial?: SocialTab }) {
   const title = tab === 'feed' ? 'Friends' : tab === 'friends' ? 'Friends' : 'You';
   return (
     <Screen
+      class="ow-social-screen"
       appBar={(scrolled) => (
         <AppBar
           scrolled={scrolled}
@@ -75,7 +76,7 @@ export function SocialScreen({ initial = 'feed' }: { initial?: SocialTab }) {
           }
         />
       )}
-      fab={signedIn && tab === 'friends' ? <Fab icon="person_add" label="Add friend" onClick={() => void addFriend()} /> : undefined}
+      fab={account.status === 'signedIn' && tab === 'friends' && account.counts.friends > 0 ? <Fab icon="person_add" label="Add friend" onClick={() => void addFriend()} /> : undefined}
       bottom={
         <NavigationBar<SocialTab>
           destinations={[
@@ -96,14 +97,6 @@ export function SocialScreen({ initial = 'feed' }: { initial?: SocialTab }) {
         <SignedOutInvite title={tab === 'feed' ? 'Cheer each other on' : 'Learn alongside friends'} />
       ) : (
         <>
-          {account.status === 'offline' && (
-            <div class="ow-social" style="padding-bottom:0">
-              <div class="ow-social-banner">
-                <Icon name="cloud_off" />
-                You’re offline. Your learning is saved here and will catch up when you’re back.
-              </div>
-            </div>
-          )}
           {tab === 'feed' ? (
             <FeedTab refreshKey={refreshKey} onOpenProfile={(username) => void openProfile(username)} onFindFriends={() => setTab('friends')} />
           ) : (

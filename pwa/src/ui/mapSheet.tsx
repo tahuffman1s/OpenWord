@@ -1,6 +1,7 @@
 import { useRef, useState } from 'preact/hooks';
 import { Atlas, type AtlasData, type ChapterPlace, type Place } from '../data/atlas';
-import { Chip, Icon, IconButton, SheetHandle, showSheet, useOverlay } from './m3';
+import { Chip, Icon, IconButton, SheetHandle, useOverlay } from './m3';
+import { openSheet } from './overlaySettle';
 import { AtlasMap, type AtlasMapHandle } from './widgets/atlasMap';
 import './sheets.css';
 import './mapSheet.css';
@@ -18,7 +19,7 @@ export function showMapSheet(options: {
   onVerse?: (verse: number) => void;
 }): void {
   if (options.places.length === 0) return;
-  void showSheet(<MapSheet {...options} />, { class: 'ow-sheet--h90', name: 'map' });
+  void openSheet(<MapSheet {...options} />, { class: 'ow-sheet--h90', name: 'map' });
 }
 
 function MapSheet({

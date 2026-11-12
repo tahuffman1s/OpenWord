@@ -94,6 +94,10 @@ export interface Achievement {
   title: string;
   detail: string;
   earnedAt: string;
+  /** How many have cheered it, where the endpoint says (profiles and the feed do). */
+  cheers?: number;
+  /** Whether you have cheered it, where the endpoint says. */
+  cheered?: boolean;
 }
 
 export interface AchievementInput {

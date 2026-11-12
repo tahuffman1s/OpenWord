@@ -4,7 +4,8 @@ import { type BookNote, bookNotes } from '../data/bookNotes';
 import type { Book } from '../model/bible';
 import { bookDivisionLabel, bookSectionLabel } from '../model/bookMeta';
 import { useAsync } from './hooks';
-import { CircularProgress, Icon, SheetHandle, showSheet } from './m3';
+import { CircularProgress, Icon, SheetHandle } from './m3';
+import { openSheet } from './overlaySettle';
 import { SimpleMarkdown } from './optionalScreens';
 import './sheets.css';
 import './bookSheet.css';
@@ -14,7 +15,7 @@ import './bookSheet.css';
  * how big it is, and an introduction to it.
  */
 export function showBookSheet(book: Book, options: { intros?: BookIntros | null } = {}): void {
-  void showSheet(<BookSheet book={book} intros={options.intros ?? null} />, { class: 'ow-sheet--h88', name: 'book' });
+  void openSheet(<BookSheet book={book} intros={options.intros ?? null} />, { class: 'ow-sheet--h88', name: 'book' });
 }
 
 function BookSheet({ book, intros }: { book: Book; intros: BookIntros | null }) {

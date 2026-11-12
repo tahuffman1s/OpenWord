@@ -78,6 +78,9 @@ export class ScriptureStyle {
     set('--ow-reading-font', this.readingFont === ReadingFont.serif ? 'Literata' : 'var(--md-ref-typeface-brand)');
     set('--ow-reading-scale', `${this.fontScale}`);
     set('--ow-reading-line-height', `${this.lineHeight}`);
+    // How tall the face's own box is, so a highlight can be padded out to
+    // the line it sits on and run down a paragraph without gaps.
+    set('--ow-reading-content', `${contentAreaOf(this.readingFont)}`);
   }
 
   /** The body size in pixels, as the Dart's `body.fontSize`. */
@@ -102,6 +105,45 @@ export class ScriptureStyle {
       this.paragraphLayout,
     ].join('|');
   }
+}
+
+const contentAreas = new Map<string, number>();
+
+/**
+ * The height of the reading face's inline box as a multiple of its size —
+ * its ascent and descent together. A background behind a run of text
+ * covers exactly that and no more, which at any generous line height
+ * leaves stripes of bare page between the lines of a highlighted verse;
+ * knowing it lets the stylesheet pad the difference.
+ *
+ * Measured rather than known, because it belongs to whichever face the
+ * browser actually found, and measured again once the fonts have landed.
+ */
+function contentAreaOf(font: ReadingFont): number {
+  if (typeof document === 'undefined' || document.body === null) return 1.3;
+  const key = `${font}`;
+  const known = contentAreas.get(key);
+  if (known !== undefined) return known;
+  // Literata is fetched the first time it is used, so the first measure
+  // may be of its stand-in: that one is answered but not kept.
+  let landed = true;
+  if (font === ReadingFont.serif && document.fonts !== undefined) {
+    try {
+      landed = document.fonts.check('400 17px Literata');
+    } catch {
+      landed = true;
+    }
+  }
+  const probe = document.createElement('span');
+  probe.className = 'ow-sb';
+  probe.textContent = 'Hg';
+  probe.style.cssText = 'position:absolute;visibility:hidden;white-space:nowrap;font-size:100px;line-height:normal;letter-spacing:0';
+  document.body.appendChild(probe);
+  const measured = probe.getBoundingClientRect().height / 100;
+  probe.remove();
+  const ratio = measured > 0.8 && measured < 2.5 ? Math.round(measured * 1000) / 1000 : 1.3;
+  if (landed) contentAreas.set(key, ratio);
+  return ratio;
 }
 
 /** One translucent colour as a background layer. */

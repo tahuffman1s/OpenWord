@@ -13,7 +13,7 @@
 //   ?clock=real              the real time of day rather than two in the afternoon
 //   ?noreader=1              no reader registered: screens answer through their pop results
 import { render, type VNode } from 'preact';
-import { useEffect, useMemo, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import '../ui/m3/m3.css';
 import '../ui/app.css';
 import { AppScope, setGlobalScope, type AppScopeValue } from '../app/scope';
@@ -185,9 +185,8 @@ function seed(reading: ReadingStore, clock: { now: Date }): void {
     reading.recordLearning({ xp: earned[i] - 12, right: true, confidence: i % 3 === 0 ? Confidence.fairly : Confidence.sure });
     reading.recordLearning({ xp: 12, right: true, scribed: i === 4, confidence: Confidence.sure });
     if (i % 4 === 1) reading.recordLearning({ xp: 0, right: false, confidence: i === 1 ? Confidence.sure : Confidence.guessing });
+    if (i === 6) reading.recordLearning({ xp: 20, perfectRound: true });
   }
-  clock.now = at(3);
-  reading.recordLearning({ xp: 20, perfectRound: true });
 
   // A plan five days in with two days read — behind, gently — and one begun today.
   clock.now = at(4);
@@ -254,6 +253,19 @@ function Demo({ booted }: { booted: Booted }) {
   const [answered, setAnswered] = useState<number | null>(null);
   const bible = library.bible;
 
+  // For a script driving the page: a verse's text by its label, and the books in order.
+  useEffect(() => {
+    const hooks = globalThis as { demoTextOf?: (label: string) => string; demoBooks?: string[] };
+    hooks.demoBooks = bible?.books.map((book) => book.name) ?? [];
+    hooks.demoTextOf = (label) => {
+      for (const verse of reading.memoryVerses) {
+        if (verse.reference.label !== label) continue;
+        return bible?.bookByCode(verse.reference.bookCode)?.chapter(verse.reference.chapter)?.verseText(verse.reference.verse!) ?? '';
+      }
+      return '';
+    };
+  }, [bible, reading]);
+
   const goTo = (reference: Reference, plan?: PlanReading): void => {
     setCurrent(reference);
     if (plan !== undefined) setPlanFocus(plan);
@@ -313,9 +325,12 @@ function Demo({ booted }: { booted: Booted }) {
     [],
   );
 
-  // Straight to a screen or a sheet, for a screenshot.
+  // Straight to a screen or a sheet, for a screenshot — once, not again
+  // each time another translation has been read in.
+  const opened = useRef(false);
   useEffect(() => {
-    if (!library.isReady) return;
+    if (!library.isReady || opened.current) return;
+    opened.current = true;
     const timer = setTimeout(() => {
       const open = params.get('open');
       const sheet = params.get('sheet');

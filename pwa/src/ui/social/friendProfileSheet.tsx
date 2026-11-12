@@ -36,11 +36,14 @@ export function FriendProfileSheet({ username }: { username: string }) {
     try {
       const [loaded, feed] = await Promise.all([account.profile(username), account.feed().catch(() => null)]);
       setProfile(loaded);
-      if (feed) {
-        const found: Record<string, CheerState> = {};
-        for (const item of feed.items) found[item.id] = { cheers: item.cheers, cheered: item.cheered };
-        setCheers((have) => ({ ...found, ...have }));
+      // The profile says how each is cheered; a server from before it did
+      // leaves the first page of the feed to fill in what it can.
+      const found: Record<string, CheerState> = {};
+      if (feed) for (const item of feed.items) found[item.id] = { cheers: item.cheers, cheered: item.cheered };
+      for (const item of loaded.achievements) {
+        if (item.cheers !== undefined) found[item.id] = { cheers: item.cheers, cheered: item.cheered ?? false };
       }
+      setCheers((have) => ({ ...found, ...have }));
     } catch (e) {
       setError(messageOf(e));
     }

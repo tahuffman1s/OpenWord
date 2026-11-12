@@ -216,35 +216,35 @@ export function ActivePlanCard({
     const label = !due ? `Read ahead: ${Passage.labelFor(chapter)}` : started ? `Continue: ${Passage.labelFor(chapter)}` : 'Start reading';
     if (!has(chapter)) {
       return (
-        <div class="m3-body-medium ow-plan-card__missing">
+        <div class="m3-body-medium ow-active-plan__missing">
           {Passage.labelFor(chapter)} is not in this translation. Tick it off when you have read it elsewhere.
         </div>
       );
     }
     return due ? (
-      <FilledButton class="ow-plan-card__continue" icon="menu_book" onClick={() => open(of, chapter)}>
+      <FilledButton class="ow-active-plan__continue" icon="menu_book" onClick={() => open(of, chapter)}>
         {label}
       </FilledButton>
     ) : (
-      <TonalButton class="ow-plan-card__continue" icon="menu_book" onClick={() => open(of, chapter)}>
+      <TonalButton class="ow-active-plan__continue" icon="menu_book" onClick={() => open(of, chapter)}>
         {label}
       </TonalButton>
     );
   };
 
   return (
-    <div class="ow-plan-card" data-key={`plan/${plan.id}`}>
-      <div class="ow-plan-card__head">
-        <div class="m3-title-medium ow-plan-card__name">{plan.name}</div>
+    <div class="ow-active-plan" data-key={`plan/${plan.id}`}>
+      <div class="ow-active-plan__head">
+        <div class="m3-title-medium ow-active-plan__name">{plan.name}</div>
         <PlanMenu progress={progress} reading={reading} onOpen={onOpen} />
       </div>
-      <div class="ow-plan-card__body">
+      <div class="ow-active-plan__body">
         <div class="m3-label-large ow-muted">{day === null ? `All ${plan.length} days read` : `Day ${day.number} of ${plan.length}`}</div>
-        <LinearProgress class="ow-plan-card__progress" value={progress.fraction} height={6} />
+        <LinearProgress class="ow-active-plan__progress" value={progress.fraction} height={6} />
         {day === null ? (
           <>
             <div class="m3-body-large">You read the whole plan. Well done.</div>
-            <div class="ow-plan-card__finished">
+            <div class="ow-active-plan__finished">
               <TonalButton onClick={() => reading.startPlan(plan)}>Read it again</TonalButton>
               <TextButton onClick={() => reading.stopPlan(plan.id)}>Remove</TextButton>
             </div>
@@ -252,7 +252,7 @@ export function ActivePlanCard({
         ) : (
           <>
             {behind >= PlanProgress.behindThreshold && <BehindNote days={behind} onPickUp={() => reading.pickUpPlanToday(plan.id)} />}
-            <div class="m3-label-large m3-primary ow-plan-card__today">{due ? 'Today' : 'Done for today — next up'}</div>
+            <div class="m3-label-large m3-primary ow-active-plan__today">{due ? 'Today' : 'Done for today — next up'}</div>
             {day.passages.map((passage) => (
               <PassageRow
                 key={passage.label}
@@ -264,7 +264,7 @@ export function ActivePlanCard({
                 onOpen={() => open(day, firstUnread(day, passage))}
               />
             ))}
-            <div class="ow-plan-card__next">{continueButton(day)}</div>
+            <div class="ow-active-plan__next">{continueButton(day)}</div>
           </>
         )}
       </div>
@@ -339,9 +339,11 @@ type MenuAction = 'allDays' | 'pickUp' | 'restart' | 'remove';
 function PlanMenu({ progress, reading, onOpen }: { progress: PlanProgress; reading: ReadingStore; onOpen: (chosen: PlanReading) => void }) {
   const act = async (action: MenuAction): Promise<void> => {
     const plan = progress.plan;
+    // The menu is still stepping back out of the history: a screen or a
+    // dialog opened before it has would be closed along with it.
+    await historySettled();
     switch (action) {
       case 'allDays': {
-        await historySettled();
         const chosen = await nav.push<PlanReading>(<PlanDaysScreen planId={plan.id} />);
         // Where a reader has registered, it was sent there as the days closed.
         if (chosen !== undefined && !hasReader()) onOpen(chosen);

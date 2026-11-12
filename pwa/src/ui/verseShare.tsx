@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { saveBytes } from '../data/saveFile';
-import { Button, Chip, Sheet, currentScheme, hexOf, showSheet, showSnackBar, useOverlay } from './m3';
+import { Button, Chip, Sheet, currentScheme, hexOf, showSnackBar, useOverlay } from './m3';
+import { openSheet } from './overlaySettle';
 import './verseShare.css';
 
 /** What is handed to the share sheet — share_plus's `ShareParams`, as far as the app uses it. */
@@ -332,7 +333,7 @@ function drawSpaced(canvas: Canvas2D, text: string, x: number, y: number, spacin
  * shares it as an image.
  */
 export function showVerseImageSheet(options: { text: string; citation: string; translation: string }): Promise<void> {
-  return showSheet(<VerseImageSheet {...options} />, { name: 'verse-image' }).then(() => undefined);
+  return openSheet(<VerseImageSheet {...options} />, { name: 'verse-image' }).then(() => undefined);
 }
 
 export function VerseImageSheet({ text, citation, translation }: { text: string; citation: string; translation: string }) {

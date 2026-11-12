@@ -848,7 +848,7 @@ export class AccountController extends ChangeNotifier {
     // A round with every answer right is a round finished.
     if (progress.perfectRounds > shadow.perfectRounds) {
       this.queueActivity(shadow, 'quiz', today);
-      earn(`quiz:perfect:${today}`, 'quiz', 'Perfect round', 'Every answer in a round right.', now);
+      earn(`quiz:perfect:${today}`, 'quiz', 'Perfect round', 'A whole round without a miss.', now);
     }
     shadow.perfectRounds = progress.perfectRounds;
 

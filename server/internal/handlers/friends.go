@@ -16,6 +16,8 @@ type friendStreakJSON struct {
 	Current int    `json:"current"`
 	Best    int    `json:"best"`
 	LastDay string `json:"lastDay"`
+	// AtRisk: alive from yesterday, and one of the two has yet to learn today.
+	AtRisk bool `json:"atRisk"`
 }
 
 type friendJSON struct {
@@ -58,7 +60,7 @@ func (s *Server) friendViews(r *http.Request, me *model.User, friends []model.Fr
 	for _, f := range friends {
 		v := friendJSON{User: f.User.Public(), Since: f.Since.UTC(), Streak: snaps[f.User.ID].JSON()}
 		if st, ok := fs[f.User.ID]; ok && st.Best > 0 {
-			v.FriendStreak = &friendStreakJSON{Current: st.Current, Best: st.Best, LastDay: st.LastDay}
+			v.FriendStreak = &friendStreakJSON{Current: st.Current, Best: st.Best, LastDay: st.LastDay, AtRisk: st.AtRisk}
 		}
 		if d, ok := lastActive[f.User.ID]; ok {
 			v.LastActiveDay = &d

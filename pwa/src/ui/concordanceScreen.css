@@ -7,7 +7,7 @@
 }
 .ow-concordance__bar--scrolled { background: var(--md-sys-color-surface-container); }
 .ow-concordance__head { padding: 0 16px 8px; }
-.ow-concordance__lemma { line-height: 1.7; }
+.ow-concordance__lemma { line-height: 1.7; white-space: pre-wrap; }
 .ow-concordance__books {
   display: flex;
   align-items: center;

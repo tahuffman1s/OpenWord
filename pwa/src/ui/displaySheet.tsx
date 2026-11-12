@@ -2,12 +2,13 @@ import { type Settings, ReadingFont, readingFontLabel } from '../data/settings';
 import { Translations } from '../data/translations';
 import type { TranslationInfo } from '../model/bible';
 import { useNotifier } from '../infra/changeNotifier';
-import { Chip, Divider, ListTile, SegmentedButton, Sheet, Slider, Switch, showSheet } from './m3';
+import { Chip, Divider, ListTile, SegmentedButton, Sheet, Slider, Switch } from './m3';
+import { openSheet } from './overlaySettle';
 import './displaySheet.css';
 
 /** Opens the display sheet over the reader. */
 export function showDisplaySheet(options: { settings: Settings; current: TranslationInfo }): Promise<void> {
-  return showSheet(<DisplaySheet settings={options.settings} current={options.current} />, { name: 'display' }).then(() => undefined);
+  return openSheet(<DisplaySheet settings={options.settings} current={options.current} />, { name: 'display' }).then(() => undefined);
 }
 
 function clamp(value: number, low: number, high: number): number {

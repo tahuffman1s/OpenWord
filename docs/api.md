@@ -296,7 +296,8 @@ name. Excludes yourself. Up to 20 results, username-prefix matches first.
 ```
 
 `friendStreak` is present only when you are friends. `achievements` is
-their 20 most recent, newest first. `404 not_found` for unknown usernames.
+their 20 most recent, newest first; each one also carries `cheers` (a
+count) and `cheered` (whether you have cheered it), as a feed item does. `404 not_found` for unknown usernames.
 
 ---
 
@@ -313,7 +314,7 @@ Sorted by display name (then username).
       "user": PublicUser,
       "since": "2026-02-01T18:00:00Z",
       "streak": StreakSnapshot | null,
-      "friendStreak": {"current": 5, "best": 9, "lastDay": "2026-03-10"} | null,
+      "friendStreak": {"current": 5, "best": 9, "lastDay": "2026-03-10", "atRisk": false} | null,
       "lastActiveDay": "2026-03-10" | null
     }
   ]

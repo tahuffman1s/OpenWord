@@ -113,6 +113,12 @@
   color: var(--md-sys-color-primary);
 }
 
+/* A highlight fills the line it is on, as it does on the printed page a
+   reader marks: the run is padded from the face's own height out to the
+   line height, a hair short so two lines' tints never overlap. */
+.ow-run {
+  padding-block: max(0px, calc((var(--ow-reading-line-height) - var(--ow-reading-content, 1.3)) * 0.48em));
+}
 .ow-run--wj { color: var(--ow-wj); }
 .ow-run--italic { font-style: italic; }
 .ow-run--divine { font-size: 0.82em; letter-spacing: 0.4px; }

@@ -351,7 +351,7 @@ function Reminders({ account }: { account: AccountController }) {
       />
       {on && (
         <div class="ow-reminder">
-          <TextField class="ow-reminder__time" type="time" label="Remind me at" value={time} onInput={pickTime} leading={<Icon name="alarm" />} />
+          <TextField class="ow-reminder__time" type="time" label="Remind me at" value={time} onInput={pickTime} />
           <ChipRow>
             {weekdays.map((day) => {
               const selected = (settings.reminderDays & day.bit) !== 0;
@@ -370,6 +370,7 @@ function Reminders({ account }: { account: AccountController }) {
       )}
       {on && (
         <SwitchListTile
+          icon="done_all"
           title="Only if I haven’t learnt yet"
           subtitle="No reminder on a day you’ve already done."
           value={settings.reminderOnlyIfUndone}

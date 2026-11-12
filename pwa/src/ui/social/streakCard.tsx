@@ -118,8 +118,11 @@ export function FriendStreaksCard({ showInvite = false, limit = 4 }: { showInvit
             <button type="button" class="ow-friend-streak m3-interactive" key={entry.user.id} onClick={() => void openSocial('friends')}>
               <Avatar user={entry.user} size={32} />
               <span class="ow-friend-streak__name">{entry.user.displayName}</span>
-              {entry.atRisk && <Pill kind="risk">Today still to do</Pill>}
-              {entry.current > 0 ? (
+              {entry.atRisk ? (
+                <Pill kind="risk" icon="local_fire_department">
+                  {entry.current} · today still to do
+                </Pill>
+              ) : entry.current > 0 ? (
                 <Pill kind="together" icon="local_fire_department">
                   {entry.current} together
                 </Pill>

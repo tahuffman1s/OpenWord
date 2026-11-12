@@ -6,7 +6,8 @@ import { useNotifier } from '../infra/changeNotifier';
 import { type Book, Reference } from '../model/bible';
 import { bookDivisionLabel } from '../model/bookMeta';
 import { compareCodeUnits } from '../model/searchIndex';
-import { Icon, IconButton, ListTile, SegmentedButton, SheetHandle, TextButton, showSheet, useOverlay } from './m3';
+import { Icon, IconButton, ListTile, SegmentedButton, SheetHandle, TextButton, useOverlay } from './m3';
+import { openSheet } from './overlaySettle';
 import './sheets.css';
 import './navigatorSheet.css';
 
@@ -17,7 +18,7 @@ export function showBibleNavigator(options: {
   reading: ReadingStore;
   current?: Reference | null;
 }): Promise<Reference | undefined> {
-  return showSheet<Reference>(
+  return openSheet<Reference>(
     <NavigatorSheet books={options.books} settings={options.settings} reading={options.reading} current={options.current ?? null} />,
     { class: 'ow-sheet--h92', name: 'navigator' },
   );

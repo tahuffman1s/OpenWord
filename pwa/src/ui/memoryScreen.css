@@ -132,8 +132,8 @@
 .ow-memory__finished > .ow-muted { margin-top: 8px; }
 .ow-memory__streak { margin-top: 16px; }
 
-.ow-stats { margin-top: 20px; display: flex; gap: 10px; }
-.ow-stat {
+.ow-learn-stats { margin-top: 20px; display: flex; gap: 10px; }
+.ow-learn-stat {
   flex: 1;
   min-width: 0;
   padding: 12px 10px;
@@ -144,7 +144,7 @@
   align-items: center;
   text-align: center;
 }
-.ow-stat__value { margin-top: 6px; font-weight: 700; }
+.ow-learn-stat__value { margin-top: 6px; font-weight: 700; }
 
 .ow-good-news {
   margin-top: 10px;
@@ -156,7 +156,7 @@
   align-items: center;
   gap: 10px;
 }
-.ow-stats + .ow-good-news { margin-top: 16px; }
+.ow-learn-stats + .ow-good-news { margin-top: 16px; }
 .ow-badge-won { margin-top: 10px; display: flex; align-items: center; gap: 12px; }
 .ow-badge-won__text { flex: 1; min-width: 0; }
 

@@ -2,7 +2,8 @@ import { CrossReferences } from '../data/crossReferences';
 import { type Bible, Reference } from '../model/bible';
 import { BookMeta } from '../model/bookMeta';
 import type { XrefAnchor, XrefRange } from '../model/xrefCodec';
-import { ListTile, SheetHandle, showSheet, useOverlay } from './m3';
+import { ListTile, SheetHandle, useOverlay } from './m3';
+import { openSheet } from './overlaySettle';
 import './sheets.css';
 import './crossReferenceSheet.css';
 
@@ -18,7 +19,7 @@ export function showCrossReferences(options: {
   anchors: readonly XrefAnchor[];
   bible: Bible;
 }): Promise<Reference | undefined> {
-  return showSheet<Reference>(<CrossReferenceSheet {...options} />, { class: 'ow-sheet--h85', name: 'cross-references' });
+  return openSheet<Reference>(<CrossReferenceSheet {...options} />, { class: 'ow-sheet--h85', name: 'cross-references' });
 }
 
 function CrossReferenceSheet({ reference, anchors, bible }: { reference: Reference; anchors: readonly XrefAnchor[]; bible: Bible }) {

@@ -363,6 +363,9 @@ button:disabled {
 .m3-screen {
   position: absolute;
   inset: 0;
+  /* Its own stacking context, so an app bar's z-index never climbs over a
+     sheet or dialog opened above the screen. */
+  isolation: isolate;
   display: flex;
   flex-direction: column;
   background: var(--md-sys-color-surface);

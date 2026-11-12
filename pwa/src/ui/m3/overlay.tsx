@@ -111,6 +111,9 @@ class OverlayStack extends ChangeNotifier {
         settled: false,
       };
       this.entries.push(entry);
+      // Something may be pushed before the host has mounted (a deep link
+      // opening a screen at launch): history is hooked up here if not yet.
+      this.attachHistory();
       if (this.historyReady) history.pushState({ owDepth: this.live.length }, '');
       this.notifyListeners();
     });

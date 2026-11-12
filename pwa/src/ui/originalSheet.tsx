@@ -2,7 +2,8 @@ import { useState } from 'preact/hooks';
 import { Originals } from '../data/originals';
 import type { Reference } from '../model/bible';
 import type { OriginalWord, StrongsNumber } from '../model/strongsCodec';
-import { SheetHandle, showSheet, useOverlay } from './m3';
+import { SheetHandle, useOverlay } from './m3';
+import { historySettled, openSheet } from './overlaySettle';
 import { scriptureStyle } from './scriptureType';
 import { showStrongsEntry } from './strongsSheet';
 import './sheets.css';
@@ -26,7 +27,7 @@ export function showOriginal(options: {
   words: readonly OriginalWord[];
   originals: Originals;
 }): Promise<StrongsNumber | undefined> {
-  return showSheet<StrongsNumber>(<OriginalSheet {...options} />, { class: 'ow-sheet--h85', name: 'original' });
+  return openSheet<StrongsNumber>(<OriginalSheet {...options} />, { class: 'ow-sheet--h85', name: 'original' });
 }
 
 function OriginalSheet({
@@ -80,7 +81,10 @@ function OriginalSheet({
     setTappedEnglish(null);
     setNoMatch(false);
     const wanted = await showStrongsEntry({ number, originals, morphology: word.morphology, surface: word.text });
-    if (wanted !== undefined) overlay.close(wanted);
+    if (wanted === undefined) return;
+    // The entry's own step back in history lands first; then this closes.
+    await historySettled();
+    overlay.close(wanted);
   };
 
   const tagged = words.filter((word) => word.strongs !== null).length;

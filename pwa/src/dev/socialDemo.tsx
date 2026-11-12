@@ -201,12 +201,16 @@ void boot().then((world) => {
   );
   const tab = params.get('tab');
   const open = params.get('open');
-  if (tab || open) void openSocial(tab ?? 'feed');
+  // Once the overlay host has mounted and hooked into history, as it has
+  // in the app by the time anyone can tap anything.
+  setTimeout(() => {
+    if (tab || open) void openSocial(tab ?? 'feed');
+  }, 60);
   // After the screen has been pushed, so the sheet sits on top of it.
   setTimeout(() => {
     if (open === 'signin') void showSignIn('login');
     else if (open === 'register') void showSignIn('register');
     else if (open === 'add') void showAddFriend();
     else if (open === 'profile') void showFriendProfile(params.get('user') ?? 'ben_okafor');
-  }, 50);
+  }, 160);
 });

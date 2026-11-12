@@ -475,7 +475,7 @@ function Result({
           {right} of {total}
         </div>
         <div class="m3-title-medium ow-centre">{remark}</div>
-        <div class="ow-stats ow-quiz__stats">
+        <div class="ow-learn-stats ow-quiz__stats">
           <StatTile dataKey="stat/xp" label={perfectBonus ? 'Earned, with bonus' : 'Earned'} value={`+${xp} XP`} icon="bolt" />
           <StatTile label="Right" value={`${Math.round((100 * right) / total)}%`} icon="check_circle_outline" />
         </div>

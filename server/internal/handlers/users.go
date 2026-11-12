@@ -129,6 +129,8 @@ type achievementJSON struct {
 	Title    string    `json:"title"`
 	Detail   string    `json:"detail"`
 	EarnedAt time.Time `json:"earnedAt"`
+	Cheers   int       `json:"cheers"`
+	Cheered  bool      `json:"cheered"`
 }
 
 func toAchievementJSON(a model.Achievement) achievementJSON {
@@ -175,14 +177,19 @@ func (s *Server) getUserProfile(w http.ResponseWriter, r *http.Request) {
 		f := fs[u.ID]
 		friendStreak = &f
 	}
-	achs, err := s.store.ListAchievements(ctx, u.ID, 20)
+	// Read as a page of the feed rather than a bare list, so each one comes
+	// with its cheers and whether the viewer has cheered it.
+	page, err := s.store.Feed(ctx, []string{u.ID}, s.now().AddDate(100, 0, 0), 20, me.ID)
 	if err != nil {
 		httpx.Internal(w, err)
 		return
 	}
-	out := make([]achievementJSON, 0, len(achs))
-	for _, a := range achs {
-		out = append(out, toAchievementJSON(a))
+	out := make([]achievementJSON, 0, len(page.Items))
+	for _, a := range page.Items {
+		j := toAchievementJSON(a)
+		j.Cheers = page.Cheers[a.ID]
+		j.Cheered = page.Cheered[a.ID]
+		out = append(out, j)
 	}
 	httpx.JSON(w, http.StatusOK, map[string]any{
 		"user":         u.Public(),

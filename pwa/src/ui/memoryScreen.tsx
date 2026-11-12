@@ -1033,7 +1033,7 @@ function Finished({
         <div class="m3-title-large ow-centre">{heading}</div>
         {detail.length > 0 && <div class="m3-body-medium ow-muted ow-centre">{detail}</div>}
         {answered > 0 && (
-          <div class="ow-stats">
+          <div class="ow-learn-stats">
             <StatTile dataKey="stat/xp" label="Earned" value={`+${xp} XP`} icon="bolt" />
             <StatTile label="Right" value={`${right} of ${answered}`} icon="check_circle_outline" />
             <StatTile label="Best run" value={bestCombo === 0 ? '—' : `${bestCombo} in a row`} icon="trending_up" />
@@ -1073,9 +1073,9 @@ export function BadgeWon({ badge }: { badge: Achievement }) {
 /** A number worth a glance, with its name under it. */
 export function StatTile({ label, value, icon, dataKey }: { label: string; value: string; icon: string; dataKey?: string }) {
   return (
-    <div class="ow-stat" data-key={dataKey}>
+    <div class="ow-learn-stat" data-key={dataKey}>
       <Icon name={icon} class="m3-primary" />
-      <div class="m3-title-small ow-stat__value">{value}</div>
+      <div class="m3-title-small ow-learn-stat__value">{value}</div>
       <div class="m3-label-small ow-muted">{label}</div>
     </div>
   );

@@ -11,12 +11,13 @@ import {
 } from '../data/search';
 import type { Bible, Reference } from '../model/bible';
 import { BookMeta } from '../model/bookMeta';
-import { AppBar, Chip, CircularProgress, Divider, IconButton, ListTile, Screen, nav, useOverlay } from './m3';
+import { AppBar, Chip, CircularProgress, Divider, IconButton, ListTile, Screen, useOverlay } from './m3';
+import { openScreen } from './overlaySettle';
 import './searchScreen.css';
 
 /** Opens the search and resolves to the verse chosen, if one was. */
 export function showSearch(options: { bible: Bible; from?: Reference | null }): Promise<Reference | undefined> {
-  return nav.push<Reference>(<SearchScreen bible={options.bible} from={options.from ?? null} />, { name: 'search' });
+  return openScreen<Reference>(<SearchScreen bible={options.bible} from={options.from ?? null} />, { name: 'search' });
 }
 
 export interface SearchScreenProps {

@@ -42,20 +42,20 @@
 .ow-plan-preview__label { flex: 1; min-width: 0; }
 .ow-plan-preview__start { margin-top: 20px; align-self: stretch; }
 
-.ow-plan-card {
+.ow-active-plan {
   padding: 8px 4px 16px 16px;
   border-radius: var(--md-sys-shape-corner-medium);
   background: var(--md-sys-color-surface-container-high);
   color: var(--md-sys-color-on-surface);
 }
-.ow-plan-card__head { display: flex; align-items: center; }
-.ow-plan-card__name { flex: 1; min-width: 0; }
-.ow-plan-card__body { padding-right: 12px; display: flex; flex-direction: column; }
-.ow-plan-card__progress { margin: 8px 0 16px; border-radius: 4px; }
-.ow-plan-card__today { padding-bottom: 4px; }
-.ow-plan-card__next { margin-top: 12px; display: flex; flex-direction: column; }
-.ow-plan-card__continue { align-self: stretch; }
-.ow-plan-card__finished { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
+.ow-active-plan__head { display: flex; align-items: center; }
+.ow-active-plan__name { flex: 1; min-width: 0; }
+.ow-active-plan__body { padding-right: 12px; display: flex; flex-direction: column; }
+.ow-active-plan__progress { margin: 8px 0 16px; border-radius: 4px; }
+.ow-active-plan__today { padding-bottom: 4px; }
+.ow-active-plan__next { margin-top: 12px; display: flex; flex-direction: column; }
+.ow-active-plan__continue { align-self: stretch; }
+.ow-active-plan__finished { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 8px; }
 
 .ow-passage { display: flex; align-items: center; margin-left: -8px; }
 .ow-passage__name {

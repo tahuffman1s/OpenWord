@@ -49,14 +49,12 @@ import {
   highlightNames,
   highlightSwatch,
   highlights,
-  nav,
   overlays,
   rgba,
-  showDialog,
-  showSheet,
   showSnackBar,
   useOverlay,
 } from './m3';
+import { historySettled, openDialog, openScreen, openSheet } from './overlaySettle';
 import { showMapSheet } from './mapSheet';
 import { showBibleNavigator } from './navigatorSheet';
 import {
@@ -348,7 +346,7 @@ class ReaderController extends ChangeNotifier {
   private session: ReadAloudHandler | null = null;
 
   readonly openVoiceSettings = async (): Promise<void> => {
-    await showSheet(
+    await openSheet(
       <VoiceSheet settings={this.settings} engine={this.voice.engine} language={this.bible.translation.language} />,
       { name: 'voice' },
     );
@@ -595,7 +593,7 @@ class ReaderController extends ChangeNotifier {
       showSnackBar('The library is not here yet.');
       return;
     }
-    const result = await nav.push<Reference>(<LibraryScreen initialTab={initialTab} />, { name: 'library' });
+    const result = await openScreen<Reference>(<LibraryScreen initialTab={initialTab} />, { name: 'library' });
     if (result instanceof Reference && !this.disposedNow) this.goTo(result);
   };
 
@@ -605,7 +603,7 @@ class ReaderController extends ChangeNotifier {
       showSnackBar('Settings are not here yet.');
       return;
     }
-    await nav.push(<SettingsScreen />, { name: 'settings' });
+    await openScreen(<SettingsScreen />, { name: 'settings' });
   };
 
   /** Friends, the feed and the account. */
@@ -615,6 +613,7 @@ class ReaderController extends ChangeNotifier {
       showSnackBar('Friends are not here yet.');
       return;
     }
+    await historySettled();
     open(tab);
   };
 
@@ -643,7 +642,7 @@ class ReaderController extends ChangeNotifier {
       showSnackBar('Reading plans are not here yet.');
       return;
     }
-    const result = await nav.push<PlanReading>(<PlansScreen />, { name: 'plans' });
+    const result = await openScreen<PlanReading>(<PlansScreen />, { name: 'plans' });
     if (result === undefined || result === null || typeof result !== 'object' || this.disposedNow) return;
     this.planFocus = result;
     this.notifyListeners();
@@ -727,7 +726,7 @@ class ReaderController extends ChangeNotifier {
       showSnackBar('The questions are not here yet.');
       return;
     }
-    const opened = await nav.push<Reference>(
+    const opened = await openScreen<Reference>(
       <QuizScreen
         kind={QuizKind.finishVerse}
         questions={pretest.questions}
@@ -874,7 +873,7 @@ class ReaderController extends ChangeNotifier {
   readonly highlightSelection = async (): Promise<void> => {
     const verses = [...this.selected];
     const chapter = this.current;
-    const chosen = await showSheet<number>(<HighlightSheet title={`Highlight ${VerseSelection.citation(chapter, verses)}`} />, {
+    const chosen = await openSheet<number>(<HighlightSheet title={`Highlight ${VerseSelection.citation(chapter, verses)}`} />, {
       name: 'highlight',
     });
     if (chosen === undefined || this.disposedNow) return;
@@ -891,7 +890,7 @@ class ReaderController extends ChangeNotifier {
     }
     const reference = this.current.withVerse(verse);
     const chapter = this.currentChapter;
-    void showSheet(
+    void openSheet(
       <VerseSheet
         reference={reference}
         text={chapter.verseText(verse)}
@@ -1038,7 +1037,7 @@ class ReaderController extends ChangeNotifier {
   readonly onNoteTap = (index: number): void => {
     const notes = this.currentChapter.notes;
     if (index < 0 || index >= notes.length) return;
-    void showSheet(
+    void openSheet(
       <NoteSheet
         title={`Note on ${this.current.label}`}
         text={notes[index]}
@@ -1084,7 +1083,7 @@ class ReaderController extends ChangeNotifier {
         void this.openSocial('account');
         return true;
       case 'install':
-        void showInstallGuide();
+        void historySettled().then(() => showInstallGuide());
         return true;
       default:
         return false;
@@ -1109,6 +1108,18 @@ export function ReaderScreen() {
   }, [controller]);
 
   useEffect(() => registerFeatureOpener(controller.openFeature), [controller]);
+
+  // The reading face arrives a moment after the first frame; what was
+  // measured in its stand-in is measured again.
+  useEffect(() => {
+    let live = true;
+    void document.fonts?.ready.then(() => {
+      if (live) controller.notifyListeners();
+    });
+    return () => {
+      live = false;
+    };
+  }, [controller]);
 
   // The keyboard, while nothing is open over the text.
   useEffect(() => {
@@ -1358,7 +1369,11 @@ function ChapterPager({
       const slot = Math.round(row.scrollLeft / row.clientWidth);
       if (Math.abs(row.scrollLeft - slot * row.clientWidth) > 1.5) return;
       const delta = slot - centre();
-      if (delta !== 0) latest.current.onPageChanged(latest.current.page + delta);
+      if (delta === 0) return;
+      // Wherever a slide was headed, this is where the pages are now.
+      if (s.fallback !== 0) clearTimeout(s.fallback);
+      s.fallback = 0;
+      latest.current.onPageChanged(latest.current.page + delta);
     };
     const onScroll = () => {
       if (row.clientWidth === 0) return;
@@ -1373,6 +1388,8 @@ function ChapterPager({
     };
     const onTouchStart = () => {
       s.touching = true;
+      if (s.fallback !== 0) clearTimeout(s.fallback);
+      s.fallback = 0;
     };
     const onTouchEnd = (event: TouchEvent) => {
       s.touching = event.touches.length > 0;
@@ -1431,5 +1448,987 @@ function ChapterPager({
         </div>
       ))}
     </div>
+  );
+}
+
+function clamp(value: number, low: number, high: number): number {
+  return Math.min(Math.max(value, low), high);
+}
+
+const easeOutCubic = (t: number): number => 1 - Math.pow(1 - t, 3);
+const easeInOutCubic = (t: number): number => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
+
+/**
+ * Twice, because once reads as a trick of the eye and three times is
+ * fussing. The whole point is to be noticed and then to be over. The
+ * pulse itself is in scriptureText.css; this is how long it runs.
+ */
+const flashLength = 1100;
+
+interface ChapterPageProps {
+  book: Book;
+  chapter: Chapter;
+
+  /**
+   * Which way this translation runs. Everything shipped here runs
+   * left-to-right; an imported Hebrew or Arabic Bible does not, and the
+   * file says so.
+   */
+  direction: ReadingDirection;
+
+  style: ScriptureStyle;
+  highlights: ReadonlyMap<number, string>;
+  flagged: ReadonlySet<number>;
+  matcher: ReferenceMatcher | null;
+  onReferenceTap: (reference: Reference) => void;
+  intros: BookIntros | null;
+
+  /** Read once the atlas asset is decoded; null until then. */
+  atlas: AtlasData | null;
+
+  /** The same chapter in a second translation, when comparing. */
+  comparison: Chapter | null;
+  comparisonLabel: string;
+  primaryLabel: string;
+
+  scrollToVerse: number | null;
+
+  /** Changes with every jump, so the same verse can be gone to again. */
+  jumpToken: number;
+
+  onVerseTap: (verse: number) => void;
+  onVerseLongPress?: (verse: number) => void;
+  onNoteTap: (index: number) => void;
+  onTopVerseChanged: (verse: number) => void;
+  onStep: (delta: number) => void;
+  hasPrevious: boolean;
+  hasNext: boolean;
+
+  /**
+   * Where the chapter is part of a reading plan, the card that ticks it
+   * off; it sits where the reader finishes the chapter.
+   */
+  planCard: VNode | null;
+
+  /**
+   * Shown under the chapter's heading: a plan chapter's questions to
+   * guess at before reading.
+   */
+  pretestCard: VNode | null;
+
+  /** Starts reading the chapter aloud, where the platform can. */
+  onListen: (() => void) | null;
+
+  /** LISTEN, or PAUSE or RESUME while it is being read or has been begun. */
+  listenLabel: string;
+
+  /** The verse being read aloud, which is marked and kept in view. */
+  speakingVerse: number | null;
+}
+
+/** One chapter, scrollable, with the position-tracking that powers resume. */
+function ChapterPage(props: ChapterPageProps) {
+  const { book, chapter, style } = props;
+  const scroller = useRef<HTMLDivElement>(null);
+  const latest = useRef(props);
+  latest.current = props;
+  const s = useRef({
+    debounce: 0 as ReturnType<typeof setTimeout> | 0,
+    reportedVerse: 0,
+    flashTimer: 0 as ReturnType<typeof setTimeout> | 0,
+    animation: 0,
+    /** Until when scrolling is the page's own doing rather than the reader's. */
+    quietUntil: 0,
+    readerScrolled: false,
+  }).current;
+
+  const comparing = props.comparison !== null;
+  const labelFor = useMemo(() => (verse: number) => chapter.labelFor(verse), [chapter]);
+  const gestures = useVerseGestures({ onVerseTap: props.onVerseTap, onVerseLongPress: props.onVerseLongPress });
+
+  /**
+   * The mark where `verse` begins, or the nearest one before it. Every
+   * verse that begins on the page carries one; a verse folded into
+   * another's number does not.
+   */
+  const anchorFor = (verse: number): Element | null => {
+    const root = scroller.current;
+    if (root === null) return null;
+    const exact = root.querySelector(`[data-vs="${verse}"]`);
+    if (exact !== null) return exact;
+    let best = 0;
+    let found: Element | null = null;
+    for (const candidate of root.querySelectorAll('[data-vs]')) {
+      const number = Number(candidate.getAttribute('data-vs'));
+      if (number < verse && number > best) {
+        best = number;
+        found = candidate;
+      }
+    }
+    return found;
+  };
+
+  const stopScrolling = () => {
+    if (s.animation !== 0) cancelAnimationFrame(s.animation);
+    s.animation = 0;
+  };
+
+  /**
+   * Brings `target` to `alignment` of the way down the page — Flutter's
+   * `Scrollable.ensureVisible`. `quiet` keeps the move from being taken
+   * for the reader's own scrolling, which would save the place it passes.
+   */
+  const ensureVisible = (
+    target: Element,
+    options: { duration: number; curve: (t: number) => number; alignment: number; quiet: boolean },
+  ) => {
+    const view = scroller.current;
+    if (view === null) return;
+    const rect = target.getClientRects()[0] ?? target.getBoundingClientRect();
+    const frame = view.getBoundingClientRect();
+    const wanted = view.scrollTop + (rect.top - frame.top) - (view.clientHeight - rect.height) * options.alignment;
+    const to = clamp(wanted, 0, Math.max(0, view.scrollHeight - view.clientHeight));
+    const from = view.scrollTop;
+    stopScrolling();
+    const hush = () => {
+      if (options.quiet) s.quietUntil = performance.now() + 200;
+    };
+    if (options.duration <= 0 || Math.abs(to - from) < 1) {
+      hush();
+      view.scrollTop = to;
+      return;
+    }
+    const started = performance.now();
+    const frameStep = (now: number) => {
+      const t = Math.min(1, (now - started) / options.duration);
+      hush();
+      view.scrollTop = from + (to - from) * options.curve(t);
+      s.animation = t < 1 ? requestAnimationFrame(frameStep) : 0;
+    };
+    s.animation = requestAnimationFrame(frameStep);
+  };
+
+  const clearFlash = () => {
+    if (s.flashTimer !== 0) clearTimeout(s.flashTimer);
+    s.flashTimer = 0;
+    scroller.current?.querySelectorAll('[data-flash]').forEach((marked) => marked.removeAttribute('data-flash'));
+  };
+
+  /**
+   * Marks a verse the reader was sent to, so they do not have to hunt for
+   * it.
+   *
+   * Scrolling a verse into view is not the same as showing it: in prose a
+   * verse is a sentence or two in the middle of a paragraph, with nothing
+   * but a small number to find it by. This puts a colour behind it and
+   * takes it away again, twice, and then the page is as it was.
+   *
+   * Only the verse's own runs are touched. Animating the whole chapter
+   * would redraw every paragraph of it to colour one sentence.
+   */
+  const pointOut = (verse: number) => {
+    const root = scroller.current;
+    if (root === null) return;
+    clearFlash();
+    const marked = root.querySelectorAll(`.ow-verse[data-verse="${verse}"], .ow-compare__row[data-vs="${verse}"]`);
+    // Read back, so a verse pointed out twice running starts over.
+    void root.offsetWidth;
+    marked.forEach((element) => element.setAttribute('data-flash', ''));
+    s.flashTimer = setTimeout(clearFlash, flashLength + 50);
+  };
+
+  /**
+   * Scrolls the chapter to a verse. Used by the pending-jump machinery and
+   * by the map, where tapping a reference should land on the words.
+   */
+  const scrollToVerse = (verse: number | null, options: { instant?: boolean } = {}) => {
+    if (verse === null || verse < 1) return;
+    if (options.instant !== true) pointOut(verse);
+    // Verse 1 is already at the top of the chapter; there is nowhere to
+    // scroll to, which is not a reason to leave it unmarked.
+    if (verse === 1) return;
+    const target = anchorFor(verse);
+    if (target === null) return;
+    ensureVisible(target, {
+      duration: options.instant === true ? 0 : 420,
+      curve: easeOutCubic,
+      alignment: 0.08,
+      quiet: true,
+    });
+  };
+
+  /**
+   * Follows the voice down the page, gently: the verse being read is
+   * brought a third of the way down, not snapped to the top.
+   */
+  const keepInView = (verse: number) => {
+    const target = anchorFor(verse);
+    if (target === null) return;
+    ensureVisible(target, { duration: reduceMotion() ? 0 : 500, curve: easeInOutCubic, alignment: 0.3, quiet: false });
+  };
+
+  /**
+   * Finds the verse nearest the top of the viewport so the app can resume
+   * exactly where the reader left off, independent of font size.
+   */
+  const reportTopVerse = () => {
+    s.debounce = 0;
+    const view = scroller.current;
+    if (view === null) return;
+    const top = view.getBoundingClientRect().top;
+    let best = 0;
+    for (const anchor of view.querySelectorAll('[data-vs]')) {
+      const rect = anchor.getClientRects()[0];
+      if (rect === undefined) continue;
+      // In reading order, so the first one below the line ends the search.
+      if (rect.top > top + 24) break;
+      const verse = Number(anchor.getAttribute('data-vs'));
+      if (verse > best) best = verse;
+    }
+    if (best > 0 && best !== s.reportedVerse) {
+      s.reportedVerse = best;
+      latest.current.onTopVerseChanged(best);
+    }
+  };
+
+  const onScroll = () => {
+    // The page moving itself to a verse it was sent to is not the reader
+    // reading on: the place they were sent to stays the place kept.
+    if (performance.now() < s.quietUntil) return;
+    s.readerScrolled = true;
+    if (s.debounce !== 0) clearTimeout(s.debounce);
+    s.debounce = setTimeout(reportTopVerse, 450);
+  };
+
+  // The verse the reader was sent to: on arriving, and each time after.
+  useEffect(() => {
+    let live = true;
+    const verse = props.scrollToVerse;
+    s.readerScrolled = false;
+    scrollToVerse(verse);
+    // The reading face may still be on its way; when it lands the lines
+    // fall differently, and the verse is found again where it now is.
+    if (verse !== null && typeof document !== 'undefined' && document.fonts !== undefined && document.fonts.status !== 'loaded') {
+      void document.fonts.ready.then(() => {
+        if (live && !s.readerScrolled) scrollToVerse(verse, { instant: true });
+      });
+    }
+    return () => {
+      live = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.scrollToVerse, props.jumpToken]);
+
+  useEffect(() => {
+    if (props.speakingVerse !== null) keepInView(props.speakingVerse);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.speakingVerse]);
+
+  useEffect(
+    () => () => {
+      if (s.debounce !== 0) clearTimeout(s.debounce);
+      if (s.flashTimer !== 0) clearTimeout(s.flashTimer);
+      stopScrolling();
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
+  /** The highlights with the verse being read aloud laid over them. */
+  const highlightsNow = useMemo(() => {
+    const verse = props.speakingVerse;
+    if (verse === null) return props.highlights;
+    const tint = rgba(currentScheme().tertiary, 0.22);
+    const out = new Map(props.highlights);
+    out.set(verse, tintOver(tint, props.highlights.get(verse)));
+    return out;
+  }, [props.highlights, props.speakingVerse]);
+
+  /**
+   * The places this chapter names, with their verses, once the atlas has
+   * been read.
+   */
+  const places: readonly ChapterPlace[] = props.atlas?.inChapter(book.code, chapter.number) ?? [];
+
+  // The cards are the app talking, not the text, so they keep the
+  // device's direction even under a right-to-left translation.
+  const deviceDirection = typeof document !== 'undefined' && document.dir === 'rtl' ? 'rtl' : 'ltr';
+
+  const heading = (
+    <div class="ow-chapter__heading">
+      {/* Wraps rather than runs off a narrow phone: a long book name,
+          its places and Listen do not always fit on one line. */}
+      <div class="ow-chapter__links">
+        {/* Tapping the book's name opens its background note. */}
+        <button
+          type="button"
+          class="ow-chapter__link ow-chapter__link--book m3-interactive"
+          onClick={() => showBookSheet(book, { intros: props.intros })}
+        >
+          <span>{book.name.toUpperCase()}</span>
+          <Icon name="info_outlined" size={14} />
+        </button>
+        {/* Offered only where the chapter names somewhere on the map. */}
+        {places.length > 0 && props.atlas !== null && (
+          <button
+            type="button"
+            class="ow-chapter__link m3-interactive"
+            onClick={() =>
+              showMapSheet({
+                data: props.atlas!,
+                title: `${book.name} ${chapter.number}`,
+                places,
+                // A verse tapped on the map is somewhere to read, so the
+                // map gets out of the way and the chapter scrolls to it.
+                onVerse: (verse) => scrollToVerse(verse),
+              })
+            }
+          >
+            <Icon name="map_outlined" size={14} />
+            <span>{places.length === 1 ? '1 PLACE' : `${places.length} PLACES`}</span>
+          </button>
+        )}
+        {props.onListen !== null && (
+          <button type="button" class="ow-chapter__link m3-interactive" onClick={props.onListen}>
+            <Icon
+              name={props.listenLabel === 'PAUSE' ? 'pause' : props.listenLabel === 'RESUME' ? 'play_arrow' : 'headphones'}
+              size={14}
+            />
+            <span>{props.listenLabel}</span>
+          </button>
+        )}
+      </div>
+      <div class="ow-chapter__title">
+        {/* What the translation calls it, where it says: the Psalter
+            has psalms, not chapters. */}
+        {chapter.label.length > 0 ? chapter.label : book.chapterCount > 1 ? `Chapter ${chapter.number}` : book.name}
+      </div>
+    </div>
+  );
+
+  let body: ComponentChildren;
+  if (props.comparison !== null) {
+    body = compareBody(props, props.comparison, gestures);
+  } else {
+    let isFirst = true;
+    body = chapter.blocks.map((block, i) => {
+      const firstOfBlock = isFirst;
+      // A heading, title or stanza break starts a new passage, and the
+      // paragraph opening it is set flush like the chapter's first.
+      isFirst = !isVerseText(block.style);
+      return (
+        <ScriptureBlock
+          key={i}
+          block={block}
+          labelFor={labelFor}
+          style={style}
+          highlights={highlightsNow}
+          flagged={props.flagged}
+          isFirst={firstOfBlock}
+          matcher={props.matcher}
+          onReferenceTap={props.onReferenceTap}
+          onVerseTap={props.onVerseTap}
+          onVerseLongPress={props.onVerseLongPress}
+          onNoteTap={props.onNoteTap}
+        />
+      );
+    });
+  }
+
+  return (
+    // No scrollbar over the text: a page of Scripture is read, not scrubbed,
+    // and the browser would draw one down the margin.
+    <div
+      class="ow-chapter"
+      ref={scroller}
+      onScroll={onScroll}
+      onWheel={stopScrolling}
+      onTouchStart={stopScrolling}
+      onPointerDown={stopScrolling}
+    >
+      {/* The page runs the way the translation does. The chrome around
+          it keeps following the device, which is the reader's own
+          language rather than the text's. */}
+      <div
+        class={`ow-chapter__column${comparing ? ' ow-chapter__column--compare' : ''}`}
+        dir={props.direction === ReadingDirection.rtl ? 'rtl' : 'ltr'}
+      >
+        {heading}
+        {props.pretestCard !== null && <div dir={deviceDirection}>{props.pretestCard}</div>}
+        {body}
+        {props.planCard !== null && (
+          <div class="ow-chapter__plan" dir={deviceDirection}>
+            {props.planCard}
+          </div>
+        )}
+        <ChapterFooter hasPrevious={props.hasPrevious} hasNext={props.hasNext} onStep={props.onStep} />
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Verse-by-verse view of two translations. Wide windows put them in
+ * columns; narrow ones stack each pair.
+ */
+function compareBody(props: ChapterPageProps, other: Chapter, gestures: ReturnType<typeof useVerseGestures>): VNode {
+  const chapter = props.chapter;
+  const count = chapter.verseCount > other.verseCount ? chapter.verseCount : other.verseCount;
+  const rows: VNode[] = [];
+  for (let verse = 1; verse <= count; verse++) {
+    const mine = chapter.verseText(verse);
+    const theirs = other.verseText(verse);
+    if (mine.length === 0 && theirs.length === 0) continue;
+    const tint = props.highlights.get(verse);
+    rows.push(
+      <div class="ow-compare__row" key={verse} data-vs={verse}>
+        <div
+          class="ow-sb ow-compare__cell ow-flashable"
+          data-verse={verse}
+          style={tint === undefined ? undefined : { backgroundImage: tint }}
+        >
+          <span class="ow-vn ow-compare__number">{verse}</span>
+          {mine.length === 0 ? '—' : mine}
+        </div>
+        <div class="ow-sb ow-compare__cell ow-compare__cell--other">
+          <span class="ow-vn ow-compare__number">{verse}</span>
+          {theirs.length === 0 ? '—' : theirs}
+        </div>
+      </div>,
+    );
+  }
+  return (
+    <div class="ow-compare" {...gestures}>
+      <div class="ow-compare__labels">
+        <span class="ow-compare__chip ow-compare__chip--primary">{props.primaryLabel}</span>
+        <span class="ow-compare__chip">{props.comparisonLabel}</span>
+      </div>
+      {rows}
+    </div>
+  );
+}
+
+/**
+ * The end of a chapter that belongs to a plan: one tap marks it read and
+ * goes on to the next chapter of the day.
+ */
+export function PlanChapterCard({
+  planName,
+  day,
+  read,
+  nextLabel,
+  onDone,
+  onUndo,
+  onNext,
+}: {
+  planName: string;
+  day: number;
+  read: boolean;
+
+  /**
+   * The next chapter of the day still to read, or null when this is the
+   * last.
+   */
+  nextLabel: string | null;
+  onDone: () => void;
+  onUndo: () => void;
+  onNext: (() => void) | null;
+}) {
+  return (
+    <div class="ow-plan-card">
+      <div class="ow-plan-card__head">
+        <Icon name={read ? 'check_circle' : 'event_note'} size={18} />
+        <span class="m3-label-large" style="flex:1;min-width:0">
+          {planName} · day {day}
+        </span>
+      </div>
+      {!read ? (
+        <Button icon="check" class="ow-plan-card__done" onClick={onDone}>
+          {nextLabel === null ? `Done — that’s day ${day}` : `Done — next: ${nextLabel}`}
+        </Button>
+      ) : (
+        <div class="ow-plan-card__read">
+          <span class="m3-body-large" style="flex:1">
+            Read
+          </span>
+          <TextButton onClick={onUndo}>Undo</TextButton>
+          {onNext !== null && <Button onClick={onNext}>Next: {nextLabel}</Button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Before a plan chapter is read: a nudge to guess at two of its verses
+ * first. Guessing before studying makes the guessed-at material stick,
+ * even when the guess is wrong.
+ *
+ * Stands in for `PretestCard` of `pretestCard.tsx` until that file is
+ * there; the words and the shape are the same.
+ */
+function PretestCardStandIn({ questions, guessed, onGuess }: PretestCardProps) {
+  return (
+    <div class="ow-pretest-card" style="margin-bottom:20px">
+      <Icon name="psychology_alt" />
+      <div style="flex:1;min-width:0">
+        <div class="m3-title-small">{guessed === null ? 'Guess before you read' : `You guessed ${guessed} of ${questions}`}</div>
+        <div class="m3-body-small">
+          {guessed === null
+            ? `${questions} of this chapter’s verses to finish. A wrong guess still helps the right one stick.`
+            : 'Read on; the same questions wait at the end.'}
+        </div>
+      </div>
+      {guessed === null && <TonalButton onClick={onGuess}>Guess</TonalButton>}
+    </div>
+  );
+}
+
+/**
+ * After the chapter: the same questions again, and how the two went.
+ * Stands in for `PosttestCard` of `pretestCard.tsx` until that file is
+ * there.
+ */
+function PosttestCardStandIn({ questions, guessed, answered, onAnswer }: PosttestCardProps) {
+  return (
+    <div class="ow-pretest-card" style="margin-bottom:12px">
+      <Icon name={answered === null ? 'quiz' : 'check_circle'} />
+      <div class="m3-body-medium" style="flex:1;min-width:0">
+        {answered === null
+          ? `You guessed ${guessed} of ${questions} before reading. Answer again now?`
+          : `Before reading, ${guessed} of ${questions}; after, ${answered} of ${questions}.`}
+      </div>
+      {answered === null && <TonalButton onClick={onAnswer}>Answer</TonalButton>}
+    </div>
+  );
+}
+
+function ChapterFooter({ hasPrevious, hasNext, onStep }: { hasPrevious: boolean; hasNext: boolean; onStep: (delta: number) => void }) {
+  return (
+    <div class="ow-chapter__footer">
+      <TextButton icon="chevron_left" disabled={!hasPrevious} onClick={() => onStep(-1)}>
+        Previous
+      </TextButton>
+      <TextButton class="ow-chapter__next" disabled={!hasNext} onClick={() => onStep(1)}>
+        Next
+        <Icon name="chevron_right" />
+      </TextButton>
+    </div>
+  );
+}
+
+/** The book-and-chapter button in the app bar. */
+function ReferenceButton({
+  label,
+  onTap,
+  badge = null,
+}: {
+  label: string;
+  onTap: () => void;
+
+  /** Abbreviation of the translation being compared, when there is one. */
+  badge?: string | null;
+}) {
+  return (
+    <button type="button" class="ow-reference-button m3-interactive" onClick={onTap} aria-label={`${label}. Go to another place (G)`}>
+      <span class="ow-reference-button__label">{label}</span>
+      {badge !== null && <span class="ow-reference-button__badge">{badge}</span>}
+      <Icon name="arrow_drop_down" size={20} />
+    </button>
+  );
+}
+
+/** The footnote behind a marker, with any citations in it made tappable. */
+function NoteSheet({
+  title,
+  text,
+  matcher,
+  onReference,
+}: {
+  title: string;
+  text: string;
+  matcher: ReferenceMatcher | null;
+  onReference: (reference: Reference) => void;
+}) {
+  const overlay = useOverlay();
+  return (
+    <Sheet class="ow-note-sheet">
+      <div class="m3-title-medium">{title}</div>
+      <div style="margin-top:12px">
+        <LinkedText
+          text={text}
+          class="m3-body-large"
+          matcher={matcher}
+          onTap={(reference) => {
+            overlay.close();
+            onReference(reference);
+          }}
+        />
+      </div>
+    </Sheet>
+  );
+}
+
+/** The palette, to colour every verse of a selection at once. Answers the colour, or -1 to remove. */
+function HighlightSheet({ title }: { title: string }) {
+  const overlay = useOverlay();
+  const swatches = [];
+  for (let i = 0; i < ReadingStore.paletteSize; i++) {
+    swatches.push(<Swatch color={highlightSwatch(i)} name={highlightNames[i]} selected={false} onTap={() => overlay.close(i)} />);
+  }
+  return (
+    <Sheet class="ow-highlight-sheet">
+      <div class="m3-title-medium">{title}</div>
+      <div class="ow-highlight-sheet__row">
+        {swatches}
+        <TextButton icon="format_color_reset" onClick={() => overlay.close(-1)}>
+          Remove
+        </TextButton>
+      </div>
+    </Sheet>
+  );
+}
+
+/** Actions for a tapped verse: highlight, bookmark, note, copy. */
+function VerseSheet({
+  reference,
+  text,
+  reading,
+  crossReferences,
+  onCrossReferences,
+  originalWords,
+  onOriginal,
+  onSelect,
+  onShare,
+  onImage,
+  onListen = null,
+  omitted = false,
+}: {
+  reference: Reference;
+  text: string;
+
+  /** Whether this translation leaves the verse out on purpose. */
+  omitted?: boolean;
+  reading: ReadingStore;
+  crossReferences: readonly XrefAnchor[];
+  onCrossReferences: () => void;
+  originalWords: readonly { strongs: StrongsNumber | null }[];
+  onOriginal: () => void;
+
+  /** Starts a selection with this verse, to add more to it. */
+  onSelect: () => void;
+  onShare: () => void;
+  onImage: () => void;
+
+  /** Reads aloud from this verse on, where the platform can. */
+  onListen?: (() => void) | null;
+}) {
+  const overlay = useOverlay();
+  useNotifier(reading);
+  const mark = reading.markFor(reference);
+
+  let passageCount = 0;
+  for (const anchor of crossReferences) passageCount += anchor.ranges.length;
+
+  const editNote = async () => {
+    const note = await openDialog<string>(<NoteDialog title={reference.label} initial={reading.markFor(reference)?.note ?? ''} />);
+    if (note === undefined) return;
+    reading.setNote(reference, note);
+  };
+
+  const swatches = [];
+  for (let i = 0; i < ReadingStore.paletteSize; i++) {
+    swatches.push(
+      <Swatch
+        color={highlightSwatch(i)}
+        name={highlightNames[i]}
+        selected={mark?.colorIndex === i}
+        onTap={() => reading.setHighlight(reference, mark?.colorIndex === i ? null : i)}
+      />,
+    );
+  }
+
+  const bookmarked = mark?.bookmarked ?? false;
+  const hasNote = mark?.hasNote ?? false;
+  const memorising = reading.isMemorising(reference);
+  const absent = omitted && text.length === 0;
+
+  return (
+    <Sheet class="ow-verse-sheet">
+      <div class="m3-title-medium">{reference.label}</div>
+      <div class={`ow-verse-sheet__text${absent ? ' ow-verse-sheet__text--absent' : ''}`}>
+        {absent
+          ? 'This translation does not include this verse. It is numbered in the tradition and absent from the manuscripts this edition follows.'
+          : text}
+      </div>
+      <div class="ow-verse-sheet__swatches">
+        {swatches}
+        {(mark?.highlighted ?? false) && (
+          <IconButton icon="format_color_reset" label="Remove highlight" onClick={() => reading.setHighlight(reference, null)} />
+        )}
+      </div>
+      <div class="ow-verse-sheet__actions">
+        <TonalButton
+          icon={bookmarked ? 'bookmark_remove' : 'bookmark_add'}
+          onClick={() => {
+            const added = reading.toggleBookmark(reference);
+            showSnackBar(added ? `Bookmarked ${reference.label}` : 'Bookmark removed');
+          }}
+        >
+          {bookmarked ? 'Bookmarked' : 'Bookmark'}
+        </TonalButton>
+        {originalWords.length > 0 && (
+          <TonalButton
+            icon="translate"
+            onClick={() => {
+              overlay.close();
+              onOriginal();
+            }}
+          >
+            {originalWords.some((word) => word.strongs?.isHebrew ?? false) ? 'Hebrew' : 'Greek'}
+          </TonalButton>
+        )}
+        {crossReferences.length > 0 && (
+          <TonalButton
+            icon="hub_outlined"
+            onClick={() => {
+              overlay.close();
+              onCrossReferences();
+            }}
+          >
+            {passageCount} cross-references
+          </TonalButton>
+        )}
+        {text.length > 0 && (
+          <TonalButton
+            icon={memorising ? 'psychology' : 'psychology_outlined'}
+            onClick={() => {
+              const added = reading.toggleMemorise(reference);
+              showSnackBar(
+                added
+                  ? `Memorising ${reference.label}: practise it under Learn in your library`
+                  : `No longer memorising ${reference.label}`,
+              );
+            }}
+          >
+            {memorising ? 'Memorising' : 'Memorise'}
+          </TonalButton>
+        )}
+        <TonalButton icon={hasNote ? 'edit_note' : 'note_add_outlined'} onClick={() => void editNote()}>
+          {hasNote ? 'Note' : 'Add note'}
+        </TonalButton>
+        <TonalButton
+          icon="content_copy"
+          onClick={async () => {
+            await copyText(`${reference.label} — ${text}`);
+            overlay.close();
+            showSnackBar('Verse copied');
+          }}
+        >
+          Copy
+        </TonalButton>
+        {text.length > 0 && onListen !== null && (
+          <TonalButton
+            icon="headphones"
+            onClick={() => {
+              overlay.close();
+              onListen();
+            }}
+          >
+            Listen from here
+          </TonalButton>
+        )}
+        {text.length > 0 && (
+          <>
+            <TonalButton
+              icon="share"
+              onClick={() => {
+                overlay.close();
+                onShare();
+              }}
+            >
+              Share
+            </TonalButton>
+            <TonalButton
+              icon="image_outlined"
+              onClick={() => {
+                overlay.close();
+                onImage();
+              }}
+            >
+              Image
+            </TonalButton>
+          </>
+        )}
+        <TonalButton
+          icon="checklist"
+          onClick={() => {
+            overlay.close();
+            onSelect();
+          }}
+        >
+          Select more
+        </TonalButton>
+      </div>
+      {hasNote && <div class="ow-verse-sheet__note m3-body-medium">{mark!.note}</div>}
+    </Sheet>
+  );
+}
+
+/** The reader's own note on a verse. Answers the text, or nothing if cancelled. */
+function NoteDialog({ title, initial }: { title: string; initial: string }) {
+  const overlay = useOverlay();
+  const [text, setText] = useState(initial);
+  return (
+    <AlertDialog
+      title={title}
+      actions={
+        <>
+          <DialogAction>Cancel</DialogAction>
+          <Button onClick={() => overlay.close(text)}>Save</Button>
+        </>
+      }
+    >
+      <TextField value={text} onInput={setText} placeholder="Your note" multiline rows={3} autoFocus />
+    </AlertDialog>
+  );
+}
+
+/** "1×", "1.25×", "1.5×". */
+export function rateLabel(rate: number): string {
+  return `${rate.toFixed(2).replace(/\.?0+$/, '')}×`;
+}
+
+/**
+ * Reading aloud, along the bottom of the reader while it goes on: where
+ * it has got to, and the few controls a listener needs.
+ */
+function PlayerBar({ voice, rate, onSettings }: { voice: ReadAloud; rate: number; onSettings: () => void }) {
+  const current = voice.current;
+  const where =
+    current === null ? '' : current.verse === null ? ReadAloud.announcement(current).replaceAll('.', '') : current.label;
+  return (
+    <div class="ow-reader-bar">
+      <IconButton icon="close" label="Stop reading aloud" onClick={() => voice.stop()} />
+      <div class="ow-reader-bar__text">
+        <div class="m3-title-small ow-truncate">{where}</div>
+        <div class="m3-label-small m3-on-surface-variant ow-truncate">
+          {voice.isPlaying ? `Reading aloud · ${rateLabel(rate)}` : 'Paused'}
+        </div>
+      </div>
+      <IconButton icon="skip_previous" label="Previous verse" onClick={() => voice.skip(-1)} />
+      <IconButton
+        variant="filled"
+        icon={voice.isPlaying ? 'pause' : 'play_arrow'}
+        label={voice.isPlaying ? 'Pause' : 'Resume'}
+        onClick={() => (voice.isPlaying ? voice.pause() : voice.resume())}
+      />
+      <IconButton icon="skip_next" label="Next verse" onClick={() => voice.skip(1)} />
+      <IconButton icon="tune" label="Speed and voice" onClick={onSettings} />
+    </div>
+  );
+}
+
+/** How fast, and in whose voice. */
+function VoiceSheet({ settings, engine, language }: { settings: Settings; engine: SpeechEngine; language: string }) {
+  useNotifier(settings);
+  const voices = useAsync<SpeechVoice[]>(() => engine.voices(language).catch(() => []), [engine, language]);
+  const list = voices.value ?? [];
+  // A voice kept from an earlier version, or none: the first is the one
+  // heard.
+  const chosen = list.some((voice) => voice.name === settings.speechVoice) ? settings.speechVoice : (list[0]?.name ?? null);
+  return (
+    <Sheet class="ow-voice-sheet">
+      <div class="m3-title-medium">Speed</div>
+      <div class="ow-voice-sheet__rates">
+        {Settings.speechRates.map((rate) => (
+          <Chip
+            variant="choice"
+            label={rateLabel(rate)}
+            selected={settings.speechRate === rate}
+            onClick={() => (settings.speechRate = rate)}
+          />
+        ))}
+      </div>
+      <div class="m3-title-medium" style="margin-top:20px">
+        Voice
+      </div>
+      <div style="margin-top:4px">
+        {voices.loading ? (
+          <div style="padding:16px">
+            <LinearProgress />
+          </div>
+        ) : (
+          list.map((voice) => (
+            <ListTile
+              class="ow-voice-sheet__voice"
+              icon={voice.name === chosen ? 'radio_button_checked' : 'radio_button_unchecked'}
+              title={voice.title ?? voice.name}
+              subtitle={voice.locale}
+              onClick={() => (settings.speechVoice = voice.name)}
+            />
+          ))
+        )}
+      </div>
+      <div class="m3-body-small m3-on-surface-variant" style="margin-top:8px">
+        OpenWord’s own voices are read by KittenTTS (Apache-2.0), on this device with ONNX Runtime. Nothing leaves it. The
+        others are this device’s own.
+      </div>
+    </Sheet>
+  );
+}
+
+/**
+ * What can be done with the verses selected, along the bottom of the
+ * reader while there are any.
+ */
+function SelectionBar({
+  citation,
+  count,
+  onClose,
+  onCopy,
+  onShare,
+  onImage,
+  onHighlight,
+}: {
+  citation: string;
+  count: number;
+  onClose: () => void;
+  onCopy: () => void;
+  onShare: () => void;
+  onImage: () => void;
+  onHighlight: () => void;
+}) {
+  return (
+    <div class="ow-reader-bar">
+      <IconButton icon="close" label="Clear selection" onClick={onClose} />
+      <div class="ow-reader-bar__text">
+        <div class="m3-title-small ow-truncate">{citation}</div>
+        <div class="m3-label-small m3-on-surface-variant ow-truncate">
+          {count === 1 ? '1 verse · tap more to add' : `${count} verses`}
+        </div>
+      </div>
+      <IconButton icon="content_copy" label="Copy" onClick={onCopy} />
+      <IconButton icon="share" label="Share" onClick={onShare} />
+      <IconButton icon="image_outlined" label="Share as an image" onClick={onImage} />
+      <IconButton icon="format_color_fill" label="Highlight" onClick={onHighlight} />
+    </div>
+  );
+}
+
+function Swatch({ color, name, selected, onTap }: { color: string; name: string; selected: boolean; onTap: () => void }) {
+  const label = selected ? `Remove ${name} highlight` : `Highlight ${name}`;
+  return (
+    <button
+      type="button"
+      class={`ow-swatch m3-interactive${selected ? ' ow-swatch--selected' : ''}`}
+      style={{ background: color }}
+      aria-label={label}
+      aria-pressed={selected}
+      title={label}
+      onClick={onTap}
+    >
+      {selected && <Icon name="check" size={18} />}
+    </button>
   );
 }

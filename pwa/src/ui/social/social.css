@@ -17,6 +17,10 @@
 }
 .ow-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
+/* A pushed screen's app bar and FAB carry a z-index; kept to the screen's
+   own stacking context, they stay under a sheet or dialog opened over it. */
+.ow-social-screen { isolation: isolate; }
+
 .ow-social { width: 100%; max-width: 720px; margin: 0 auto; padding-bottom: 24px; }
 .ow-social--fab { padding-bottom: 96px; }
 .ow-social-muted { color: var(--md-sys-color-on-surface-variant); }

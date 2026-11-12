@@ -1,6 +1,7 @@
 import { Originals } from '../data/originals';
 import type { StrongsNumber } from '../model/strongsCodec';
-import { SheetHandle, TonalButton, showSheet, useOverlay } from './m3';
+import { SheetHandle, TonalButton, useOverlay } from './m3';
+import { openSheet } from './overlaySettle';
 import { scriptureStyle } from './scriptureType';
 import './sheets.css';
 import './strongsSheet.css';
@@ -17,7 +18,7 @@ export function showStrongsEntry(options: {
   morphology?: string;
   surface?: string | null;
 }): Promise<StrongsNumber | undefined> {
-  return showSheet<StrongsNumber>(
+  return openSheet<StrongsNumber>(
     <StrongsSheet
       number={options.number}
       originals={options.originals}

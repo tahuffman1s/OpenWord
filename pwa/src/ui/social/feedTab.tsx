@@ -129,6 +129,7 @@ export function FeedTab({ refreshKey = 0, onOpenProfile, onFindFriends }: { refr
       setItems(page.items);
       setNext(page.nextBefore);
       setMoreFailed(false);
+      paged.current = false;
     } catch (e) {
       if (mine !== generation.current) return;
       setError(messageOf(e));
@@ -138,6 +139,18 @@ export function FeedTab({ refreshKey = 0, onOpenProfile, onFindFriends }: { refr
   useEffect(() => {
     void load();
   }, [load, refreshKey, userId]);
+
+  // What this device has just told the server belongs at the top: when a
+  // sync lands, the first page is fetched again — unless the reader has
+  // gone further down, where swapping the list would lose their place.
+  const syncedAt = account.lastSyncedAt?.getTime() ?? 0;
+  const firstSync = useRef(syncedAt);
+  const paged = useRef(false);
+  useEffect(() => {
+    if (syncedAt === firstSync.current) return;
+    firstSync.current = syncedAt;
+    if (!paged.current) void load();
+  }, [syncedAt, load]);
 
   const more = useCallback(async () => {
     if (next === null || loadingMore) return;
@@ -152,6 +165,7 @@ export function FeedTab({ refreshKey = 0, onOpenProfile, onFindFriends }: { refr
       });
       setNext(page.nextBefore);
       setMoreFailed(false);
+      paged.current = true;
     } catch {
       if (mine === generation.current) setMoreFailed(true);
     } finally {
