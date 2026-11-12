@@ -8,10 +8,7 @@
 import { spawn } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createRequire } from 'node:module';
-
-const require = createRequire(import.meta.url);
-const { chromium } = require('playwright');
+import { chromium } from './playwright.mjs';
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const port = Number(process.env.TTS_SMOKE_PORT ?? 5177);

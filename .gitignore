@@ -1,71 +1,24 @@
-# Flutter / Dart
-.dart_tool/
-.packages
-.flutter-plugins
-.flutter-plugins-dependencies
-build/
-*.iml
-.idea/
-.vscode/
-pubspec.lock.bak
-
-# Android
-android/.gradle/
-android/local.properties
-android/key.properties
-android/app/debug/
-android/app/profile/
-android/app/release/
-android/.kotlin/
-*.jks
-*.keystore
-
-# iOS / macOS
-ios/Pods/
-ios/.symlinks/
-ios/Flutter/Flutter.framework/
-ios/Flutter/Flutter.podspec
-ios/Flutter/App.framework/
-ios/Flutter/ephemeral/
-macos/Pods/
-macos/Flutter/ephemeral/
-**/Flutter/flutter_export_environment.sh
-**/.generated/
-*.xcuserstate
-**/xcuserdata/
-DerivedData/
-
-# Linux / Windows
-linux/flutter/ephemeral/
-windows/flutter/ephemeral/
-
-# Web
-
-# OS noise
+# OS and editor noise
 .DS_Store
 Thumbs.db
+.idea/
+.vscode/
+*.iml
 
-# Logs and crash dumps
+# Logs
 *.log
-hs_err_pid*
-replay_pid*
 
-# The voice, fetched by tool/fetch_voice.dart rather than kept in git
-assets/voice/kitten.tar.gz
+# The app: dependencies, the build, and what is generated or fetched into it
 pwa/node_modules/
 pwa/dist/
+pwa/.vite/
+pwa/test-results/
 pwa/public/assets/
 pwa/public/voice/
 pwa/public/ort/
+pwa/public/manifest-dark.webmanifest
 pwa/src/ui/m3/iconData.ts
-pwa/.vite/
-pwa/test-results/
 
-# The voice the PWA serves, fetched at build time rather than kept in git
-pwa/public/voice/
-pwa/public/ort/
-
-# Deployment secrets and local backups (see deploy/README.md)
+# The deployment's secrets and backups
 deploy/.env
 deploy/backups/
-pwa/public/manifest-dark.webmanifest

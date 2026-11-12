@@ -223,12 +223,16 @@ curl -fsSL .../install.sh | bash -s -- --lan
 questions again), `--prebuilt`, `--branch NAME`, `--dir PATH`,
 `--allow-root`, `--help`.
 
-**Prebuilt images.** Every release tag, GitHub Actions builds both images
-for arm64 and amd64 and pushes them to `ghcr.io/tahuffman1s/openword-web`
-and `openword-api` (`.github/workflows/deploy-images.yml`). With
-`OPENWORD_PREBUILT=1` the Pi pulls those instead of building: a few
-minutes rather than fifteen, and no need for swap. This only works once a
-release has been published and the two packages have been made public.
+**Prebuilt images.** Every change to `main` is built by GitHub Actions
+into two images, run as a whole stack and tested, and only then pushed to
+`ghcr.io/tahuffman1s/openword-web` and `openword-api`, for arm64 and amd64
+(`.github/workflows/ci.yml`). With `OPENWORD_PREBUILT=1` (or `--prebuilt`)
+the Pi pulls those instead of building: a few minutes rather than fifteen,
+and no need for swap. The tag `latest` follows `main`; a release tag such
+as `v2.0.0` is published under its own name. This only works once the two
+packages have been made public (repository → Packages → the package →
+Package settings → Change visibility); until then a Pi would need
+`docker login ghcr.io` to pull them.
 
 **Unattended.** With `OPENWORD_NONINTERACTIVE=1` (or with no terminal at
 all) nothing is asked and settings come from the environment:
@@ -285,8 +289,9 @@ If `git pull` refuses because you edited a tracked file, `git -C ~/openword
 stash` puts your edit aside. `deploy/.env` and `deploy/backups/` are not
 tracked and are never touched by an update.
 
-To follow a release rather than `main` when using prebuilt images, set
-`OPENWORD_VERSION=v2.0.0` in `deploy/.env`.
+With prebuilt images, `latest` is whatever `main` last passed its tests
+as. To hold a Pi at one release instead, set `OPENWORD_VERSION=v2.0.0` in
+`deploy/.env`.
 
 ## Backups and restoring
 

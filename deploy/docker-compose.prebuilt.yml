@@ -1,6 +1,7 @@
 # Prebuilt overlay: pull the images GitHub Actions published instead of
-# building on the Pi (see .github/workflows/deploy-images.yml). Saves the
-# 10-15 minute first build and the RAM it needs.
+# building on the Pi (see .github/workflows/ci.yml: each is built, run and
+# tested before it is pushed). Saves the 10-15 minute first build and the
+# RAM it needs. "latest" follows main; a release has its own tag.
 #
 #   OPENWORD_VERSION=v2.0.0 docker compose -f docker-compose.yml \
 #       -f docker-compose.prebuilt.yml [--profile tunnel] up -d

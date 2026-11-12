@@ -16,6 +16,7 @@ Free, open source, and yours to host.
 ![Licence: MIT](https://img.shields.io/badge/licence-MIT-6750A4)
 ![Works offline](https://img.shields.io/badge/works-offline-6750A4)
 ![No tracking](https://img.shields.io/badge/tracking-none-6750A4)
+[![CI](https://github.com/tahuffman1s/OpenWord/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/tahuffman1s/OpenWord/actions/workflows/ci.yml)
 ![Runs on a Raspberry Pi](https://img.shields.io/badge/runs%20on-a%20Raspberry%20Pi-6750A4)
 
 <br>
@@ -141,13 +142,19 @@ Only accounts, friends, streaks and the backups you ask for ever reach the serve
 | [`server/`](server) | The API: Go over Postgres, for accounts, friends, streaks, reminders and backups |
 | [`deploy/`](deploy) | Docker Compose, nginx, the Cloudflare Tunnel and the installer |
 | [`assets/`](assets) | The translations, maps, cross-references, originals and fonts that ship |
-| [`lib/`](lib) | The native apps, in Flutter |
 | [`docs/`](docs) | The guides below |
 
 ```bash
 cd pwa && npm ci && npm run dev      # the app, at localhost:5173
 npm test && npm run typecheck        # tests run against the data that ships
 cd ../server && go test ./...        # the API
+```
+
+OpenWord ships as two Docker images, `openword-web` and `openword-api`. Every push is built into them, started as a whole stack with Postgres, and tested over HTTP and in a browser; what passes on `main` is published to the GitHub Container Registry for `arm64` and `amd64`. To run the same checks against a stack of your own:
+
+```bash
+deploy/smoke.sh http://localhost:8080                  # the stack, from outside
+node pwa/scripts/image-smoke.mjs http://localhost:8080 # the app, in a browser
 ```
 
 ### Documentation
@@ -161,12 +168,7 @@ cd ../server && go test ./...        # the API
 | [Study layers](docs/study-layers.md) | Book introductions, the Hebrew and Greek, cross-references and maps |
 | [API](docs/api.md) | The server's contract |
 | [The voice](pwa/src/speech/README.md) | How speech is made in the browser |
-| [Native apps](docs/native-apps.md) | Building, signing and releasing the Flutter builds |
 | [Changelog](CHANGELOG.md) | What changed, release by release |
-
-## Native apps
-
-The same reader is also here as native builds for Android, iOS, Linux, macOS and Windows, made with Flutter. They have no accounts or friends, and they are where Android Auto lives. See [Native apps](docs/native-apps.md).
 
 ## Licence and credits
 

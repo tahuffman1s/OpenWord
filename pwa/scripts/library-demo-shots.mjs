@@ -2,8 +2,7 @@
 // dark phone and wide sizes. Start the dev server first:
 //   npx vite --port 5204
 //   OUT=/tmp/library-demo/ node scripts/library-demo-shots.mjs [filter]
-import { createRequire } from 'node:module';
-const { chromium } = createRequire(import.meta.url)('/opt/node-tools/node_modules/playwright');
+import { chromium } from './playwright.mjs';
 const base = process.env.BASE ?? 'http://localhost:5204/library-demo.html';
 import { mkdirSync } from 'node:fs';
 const out = process.env.OUT ?? '/tmp/library-demo/';

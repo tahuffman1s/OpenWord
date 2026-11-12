@@ -1,28 +1,16 @@
 # Build context for deploy/web.Dockerfile is the repository root: it needs
 # pwa/ (the app), assets/ (the bundled Scripture it copies into the build)
-# and deploy/nginx.conf. Everything else is kept out so the Pi does not
-# spend a minute sending the Flutter tree and node_modules to the daemon.
-# The API builds from server/ with its own context and .dockerignore.
+# and deploy/nginx.conf. Everything else is kept out so a Pi does not spend
+# a minute sending node_modules to the daemon. The API builds from server/
+# with its own context and .dockerignore.
 .git
 .github
-.dart_tool
 .idea
 .vscode
-build
-android
-ios
-linux
-macos
-windows
-web
-lib
-test
-tool
 docs
 server
 *.iml
 *.md
-assets/voice
 
 # Generated in the image, never taken from the working tree.
 pwa/node_modules
@@ -30,6 +18,7 @@ pwa/dist
 pwa/public/assets
 pwa/public/voice
 pwa/public/ort
+pwa/public/manifest-dark.webmanifest
 pwa/test-results
 pwa/.vite
 
