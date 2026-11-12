@@ -37,20 +37,29 @@
   Open Font License 1.1 — see `assets/fonts/NotoSerif-OFL.txt`. Merged and
   subset to the two gaps Literata leaves: the Hebrew block and the thirteen
   modifier letters Strong's transliterates with, 16 kB in all. It is bundled
-  because no platform can be relied on for a face carrying the vowel points
-  and cantillation marks the Hebrew text uses; the web has none at all.
-- Speech: [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx) and
-  [ONNX Runtime](https://github.com/microsoft/onnxruntime), Apache-2.0 and
-  MIT. sherpa-onnx's native library has
-  [eSpeak NG](https://github.com/espeak-ng/espeak-ng) compiled in, to turn
-  text into the sounds the voices speak, and eSpeak NG is GPL-3.0: a build
-  of OpenWord carries that library, so its binaries are distributed under
-  the GPL's terms as well as the MIT licence of the code here. The voice is
-  [KittenTTS](https://github.com/KittenML/KittenTTS) nano 0.8, Apache-2.0,
-  bundled with eSpeak NG's English pronunciation data (GPL-3.0). Settings
-  credits all of these, links the source of the eSpeak NG built in, and
-  shows every licence in full under *Licences*; the texts are in
+  because no device can be relied on for a face carrying the vowel points
+  and cantillation marks the Hebrew text uses.
+- Speech: made in the browser by
+  [ONNX Runtime Web](https://github.com/microsoft/onnxruntime), MIT,
+  running [KittenTTS](https://github.com/KittenML/KittenTTS) nano 0.8,
+  Apache-2.0. How each word is said comes from
+  [eSpeak NG](https://github.com/espeak-ng/espeak-ng), compiled to
+  WebAssembly, with its pronunciation data, inside the
+  [`phonemizer`](https://github.com/xenova/phonemizer.js) package. The
+  package is Apache-2.0; eSpeak NG itself is GPL-3.0, and the app as built
+  and served carries it, so the built app is distributed under the GPL's
+  terms as well as the MIT licence of the code here. Settings credits all
+  of these and says where the source of the eSpeak NG built in can be had,
+  and Settings → *Licences* shows these licences in full; the texts are in
   `assets/licences/`.
 - Bundled typeface: [Literata](https://fonts.google.com/specimen/Literata),
   SIL Open Font License 1.1 — see `assets/fonts/Literata-OFL.txt`. It is
   subset to Latin, Greek and the punctuation the text uses.
+- Libraries the app is built with: [Preact](https://preactjs.com/), MIT;
+  [Material Color Utilities](https://github.com/material-foundation/material-color-utilities),
+  Apache-2.0; [Material Design icons](https://github.com/google/material-design-icons),
+  Apache-2.0; [fflate](https://github.com/101arrowz/fflate), MIT;
+  [Workbox](https://github.com/GoogleChrome/workbox), MIT; and
+  [htmlparser2](https://github.com/fb55/htmlparser2), MIT. The smaller ones
+  — Preact Signals (MIT), domhandler and domutils (BSD-2-Clause), idb (ISC)
+  — are named with these under Settings → *Licences*.

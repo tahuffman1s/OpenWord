@@ -2,6 +2,13 @@
 
 [← Back to the README](../README.md)
 
+Each layer is a file under `assets/` — `notes/`, `strongs/`, `refs/`,
+`maps/` and `fonts/` — and each is built data, committed as it ships. The
+tools that built them from the sources named below lived in the former
+native app's source tree and are no longer in this repository; commit
+`51e8e36` has them. What follows says where each layer's data comes from,
+under what licence, and how the app reads it.
+
 ## Book introductions
 
 Each of the sixty-six books of the Protestant canon opens with an
@@ -12,21 +19,14 @@ House Publishers, both licensed
 [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). They ship as
 one gzipped JSON asset (about 200 kB) and are read only when a book sheet is
 opened. The deuterocanonical books are not covered by that resource, so they
-fall back to the short notes in `lib/src/data/book_notes.dart`.
+fall back to the short notes in `pwa/src/data/bookNotes.ts`.
 
-To rebuild the asset from source:
-
-```bash
-mkdir -p intros && cd intros
-for i in $(seq -w 1 66); do
-  curl -sSLO "https://raw.githubusercontent.com/BibleAquifer/AquiferOpenStudyNotesBookIntros/main/eng/md/$i.content.md"
-done
-cd .. && dart run tool/build_notes.dart intros
-```
-
-It writes `assets/notes/book-intros-eng.json.gz`, dropping each file's licence
-preamble and title line — the licence is shown by the app from its own copy,
-in the book sheet and in Settings, as CC BY-SA requires.
+The asset is `assets/notes/book-intros-eng.json.gz`, read by
+`pwa/src/data/bookIntros.ts`. It was built from the sixty-six Markdown files
+of that repository (`eng/md/01.content.md` to `66.content.md`), with each
+file's licence preamble and title line dropped — the licence is shown by the
+app from its own copy, in the book sheet and in Settings, as CC BY-SA
+requires.
 
 ## The original languages
 
@@ -56,7 +56,7 @@ vocabulary it will match less often; it will not match wrongly more often.
 superscriptions are counted, Joel and Malachi divide their chapters
 differently, and some forty other places. The Open Scriptures Hebrew Bible
 ships `VerseMap.xml`, an authoritative WLC-to-English map, and the build
-applies it, so Malachi 4:1 finds the words that Hebrew calls Malachi 3:19.
+applied it, so Malachi 4:1 finds the words that Hebrew calls Malachi 3:19.
 
 **What it does not cover**: the deuterocanonical books, which are in neither
 the Hebrew Bible nor the Greek New Testament as this app carries them. Those
@@ -67,39 +67,27 @@ gunzipped once into a byte array that stays put, and a verse's words are
 decoded only when that verse is looked at — holding them all as objects
 would cost more memory than the Scripture itself.
 
-To rebuild it:
-
-```bash
-git clone https://github.com/openscriptures/morphhb
-git clone https://github.com/byztxt/byzantine-majority-text
-git clone https://github.com/openscriptures/strongs
-dart run tool/build_strongs.dart morphhb byzantine-majority-text strongs
-```
-
-It writes `assets/strongs/originals.ows.gz` and reads back what it wrote.
-The Greek arrives as two files that align word for word — one accented, one
-carrying the numbers and parsing — and the build checks that alignment for
-every verse rather than assuming it.
+The asset is `assets/strongs/originals.ows.gz`, read by
+`pwa/src/data/originals.ts`; its encoding is specified in
+`pwa/src/model/strongsCodec.ts`. It was built from three sources:
+[openscriptures/morphhb](https://github.com/openscriptures/morphhb) for the
+Hebrew, [byztxt/byzantine-majority-text](https://github.com/byztxt/byzantine-majority-text)
+for the Greek, and [openscriptures/strongs](https://github.com/openscriptures/strongs)
+for the dictionaries. The Greek arrives as two files that align word for
+word — one accented, one carrying the numbers and parsing — and the build
+checked that alignment for every verse rather than assuming it.
 
 **The typeface this needs.** Literata, the reading face, has Latin and Greek
 and stops there. The Hebrew needs a face with the vowel points and all
 thirty-one cantillation marks, and the transliterations need thirteen
 modifier letters no reading face carries — the turned comma for ayin, the
-apostrophe for aleph, the superscript vowels. Without them the app draws
-boxes, and the web, which has no system fonts to fall back on, draws nothing
-but boxes. So the two gaps are cut out of Noto Serif Hebrew and Noto Serif,
-which share metrics, and merged into one 16 kB face:
-
-```bash
-pip install fonttools brotli
-git clone https://github.com/notofonts/hebrew   # sources/, or a built TTF
-python3 tool/build_scripture_font.py NotoSerifHebrew.ttf NotoSerif.ttf
-```
-
-It writes `assets/fonts/ScriptureSerif-Subset.ttf` and refuses to declare
-success if the coverage came out short. `test/scripture_font_test.dart`
-reads the shipped file's `cmap` and checks the same thing, so a bad rebuild
-cannot reach a release unnoticed.
+apostrophe for aleph, the superscript vowels. Without them the words fall
+to whatever face the device happens to have, and where it has none that
+carries them, to boxes. So the two gaps were cut out of
+[Noto Serif Hebrew](https://github.com/notofonts/hebrew) and Noto Serif,
+which share metrics, and merged into one 16 kB face,
+`assets/fonts/ScriptureSerif-Subset.ttf`, which stands behind the reading
+face wherever Scripture is set.
 
 ## Cross-references
 
@@ -114,18 +102,13 @@ the TSK, re-anchored so that each translation has its own phrases and its own
 versification — this app reads the Berean Standard Bible columns, since the
 BSB is one of the three it ships. 305,935 references across 29,057 verses,
 built into a 1.3 MB asset: a table of the phrases (which repeat endlessly —
-"the LORD", "God") and LEB128 varints for the rest. It is read in a
-background isolate the first time a verse is opened.
+"the LORD", "God") and LEB128 varints for the rest. It is read in the
+background as the reader opens, so opening a chapter never waits on it.
 
-To rebuild it:
-
-```bash
-git clone https://github.com/CrossReferences-org/bible-cross-references
-dart run tool/build_xrefs.dart bible-cross-references/json
-```
-
-It writes `assets/refs/xrefs.owx.gz` and reads back what it wrote before
-declaring success.
+The asset is `assets/refs/xrefs.owx.gz`, read by
+`pwa/src/data/crossReferences.ts`; its encoding is specified in
+`pwa/src/model/xrefCodec.ts`. It was built from the JSON in
+[CrossReferences-org/bible-cross-references](https://github.com/CrossReferences-org/bible-cross-references).
 
 ## Maps
 
@@ -155,12 +138,7 @@ that name it, each one a link into the text.
   inland site is not a blank page.
 
 Everything is clipped to the world the Bible names, simplified with
-Ramer–Douglas–Peucker, and written as one 600 kB asset — read in a background
-isolate the first time a chapter is opened. No tiles are fetched and nothing
-needs a connection.
-
-```bash
-git clone --depth 1 https://github.com/openbibleinfo/Bible-Geocoding-Data
-git clone --depth 1 https://github.com/martynafford/natural-earth-geojson
-dart run tool/build_maps.dart Bible-Geocoding-Data natural-earth-geojson
-```
+Ramer–Douglas–Peucker, and written as one 600 kB asset,
+`assets/maps/atlas.json.gz`, read by `pwa/src/data/atlas.ts` in the
+background as the reader opens. No tiles are fetched and nothing needs a
+connection.

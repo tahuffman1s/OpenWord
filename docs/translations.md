@@ -13,55 +13,31 @@
 The WEB edition includes the deuterocanonical books, which are hidden by
 default and can be switched on in Settings.
 
-Each one is built from [USFX](https://ebible.org/usfx/) — the XML form of USFM
-— into a [`.bib` file](#importing-a-translation-epub-and-bib), the same format
-an imported translation takes. There is one way to read Scripture here, not
-two: the three that ship are `.bib` files under `assets/bible/`, and one the
-reader brings is a `.bib` file in the app's documents. Adding another freely
-licensed USFX translation takes two steps:
+Each one was built from [USFX](https://ebible.org/usfx/) — the XML form of
+USFM — into a [`.bib` file](#importing-a-translation-epub-and-bib), the same
+format an imported translation takes. There is one way to read Scripture
+here, not two: the three that ship are `.bib` files under `assets/bible/`,
+and one the reader brings is a `.bib` file in the browser's IndexedDB.
 
-```bash
-# 1. add an entry to lib/src/data/translations.dart, then
-dart run tool/build_assets.dart <directory-with-usfx-files>
-```
-
-`tool/build_assets.dart` writes `assets/bible/<id>.bib`, checking that what it
-wrote reads back — both the header and the same verse count behind it. It
-takes the USFX in whatever shape its publisher hands it over: eBible.org's
-`eng-web_usfx.zip`, the `eng-web_usfx.xml` inside it, or a renamed
-`eng-web.usfx.xml` all work, so there is nothing to unpack or rename first.
-
-### Rebuilding the three that ship
-
-The typography the reader can draw — heading levels, the divine name in
-small capitals, tables, lists, acrostic letters, speakers, printed verse
-labels, omitted verses — is read out of the USFX at build time, so a
-translation only gains it when it is rebuilt. All three come from eBible.org,
-under the names eBible gives them; the tool knows `eng-webbe` is
-`eng-gb-webbe` and `engbsb` is `eng-bsb`, and finds the USFX among the other
-files in each zip:
-
-```bash
-mkdir -p /tmp/usfx && cd /tmp/usfx
-curl -O https://ebible.org/Scriptures/eng-web_usfx.zip
-curl -O https://ebible.org/Scriptures/eng-webbe_usfx.zip
-curl -O https://ebible.org/Scriptures/engbsb_usfx.zip
-cd /path/to/OpenWord && dart run tool/build_assets.dart /tmp/usfx
-```
-
-Then `dart run tool/bib_lint.dart assets/bible/*.bib` before committing the
-result.
+The three bundled files were built from eBible.org's USFX by tools that were
+part of the former native app's source tree, and those tools are no longer
+in this repository; commit `51e8e36` has them. The files are committed as
+they ship, with the typography the reader can draw — heading levels, the
+divine name in small capitals, tables, lists, acrostic letters, speakers,
+printed verse labels, omitted verses — already read out of the USFX. Adding
+a translation today is done in the app, by importing an EPUB or a `.bib`.
 
 ## Importing a translation: EPUB and `.bib`
 
 Settings → *Add a translation* takes a file from the device, and every
 translation's menu offers *Save a copy…* — the three that ship as well as
 anything imported, since a format only one app can write is that app's
-cache rather than a format. *Save a copy with cross-references…* writes the
-app's reference set into the file first, so the copy carries them wherever
-it is opened rather than needing this app's assets. Nothing is
-uploaded: the file is read where it sits, converted on the device, and kept in
-the app's own documents directory. An imported translation is then a
+cache rather than a format. *Save a copy with the study layers…* writes the
+app's cross-references and its Hebrew and Greek into the file first, so the
+copy carries them wherever it is opened rather than needing this app's
+assets. Nothing is uploaded: the file is read where it sits, converted on
+the device, and kept in the browser's IndexedDB. An imported translation is
+then a
 translation like any other — it appears in the translation list and the
 compare chips, and search, maps, highlights, bookmarks and notes all work
 against it.
@@ -121,27 +97,22 @@ Per-book compression costs 4% against one stream over the whole Bible
 dictionary does not win it back.
 
 Version 1 — one gzip stream, a fixed header, no outline — is still read, so
-a shelf full of them keeps working. `dart run tool/upgrade_bib.dart
-<file.bib>` rewrites one as version 2, comparing the result with the
-original verse by verse before replacing it.
+a shelf full of them keeps working. Nothing writes it any more: a `.bib`
+that is imported is kept byte for byte, whichever version it is, and
+whatever the app writes itself — a converted EPUB, a copy saved with the
+study layers — is version 2.
 
-```bash
-dart run tool/bib_lint.dart <file.bib>     # check one
-dart run tool/build_bib_corpus.dart        # rebuild test/corpus/
-```
-
-`bib_lint` reports the version, the chunks, whether every checksum matches,
-whether the outline agrees with the text it stands for, and whether the
-metadata describes what is actually in the file.
-[`test/corpus/`](../test/corpus/) holds small files named for what a reader is
-supposed to do with each — the ones that must read alike, the unknown
-ancillary chunk that must be skipped, the unknown critical chunk that must
-not be, and the damaged, truncated, too-new and not-a-`.bib` files that
-must be refused — so another implementation has a fixed point to test
+An imported `.bib` is checked as it comes in: every chunk's checksum, since
+that is the one moment the whole file is in hand.
+[`pwa/test/corpus/`](../pwa/test/corpus/) holds small files named for what a
+reader is supposed to do with each — the ones that must read alike, the
+unknown ancillary chunk that must be skipped, the unknown critical chunk
+that must not be, and the damaged, truncated, too-new and not-a-`.bib` files
+that must be refused — so another implementation has a fixed point to test
 against.
 
-It is implemented in `lib/src/model/bib_file.dart` and
-`lib/src/model/bible_codec.dart`, both MIT like the rest of the app. It is
+It is implemented in `pwa/src/model/bibFile.ts` and
+`pwa/src/model/bibleCodec.ts`, both MIT like the rest of the app. It is
 a reading format, not an archival one: it keeps what a reader displays, not
 the full semantics of the USFM behind it.
 
@@ -171,22 +142,21 @@ over the bundled ones, so a differently-numbered Bible gets what is right
 for it rather than nothing at all, and a `.bib` needs none of this app's
 assets to be read with its study layers intact.
 
-```bash
-dart run tool/attach_xrefs.dart     <file.bib> <xrefs.owx.gz>
-dart run tool/attach_originals.dart <file.bib> <originals.ows.gz>
-```
-
-In the app, a translation's menu offers *Save a copy with the study
-layers…*, which does both to a copy. **The layer is cut to the verses the
+The app writes them in itself: a translation's menu offers *Save a copy
+with the study layers…*, which puts both into a copy
+(`pwa/src/data/bibExport.ts`), and reads the result back before handing it
+over. A file that already carries a layer of its own keeps it. **The layer
+is cut to the verses the
 file has**: written into a New Testament it carries the Greek and not the
 whole Hebrew Bible, which takes it from 3.94 MB to 1.08 MB — 0.15 MB for a
 single gospel — and drops every dictionary entry and concordance line that
 only the missing verses reached.
 
 Otherwise an import is measured. Its per-chapter verse counts are compared with
-the English scheme (`lib/src/model/versification_table.dart`, generated
-from the Berean Standard Bible, since that is what the cross-references
-were anchored to), and where it does not match, the translation is marked
+the English scheme (`pwa/src/model/versificationTable.ts`, generated from
+the Berean Standard Bible, since that is what the cross-references were
+anchored to; the comparison is `pwa/src/model/versificationCheck.ts`), and
+where it does not match, the translation is marked
 `other` and those two layers are not offered for it. The import says so,
 and so does Settings, rather than leaving a reader to notice that a
 feature quietly went missing.
@@ -217,13 +187,9 @@ ordinary import. A Bible too small to judge, under 100 comparable
 chapters, is left as `unknown` and keeps both layers: saying nothing is
 not the same as failing.
 
-```bash
-dart run tool/build_versification.dart   # regenerate the table
-```
-
 ### What the EPUB converter does
 
-`lib/src/data/epub_import.dart` unzips the EPUB, follows
+`pwa/src/data/epubImport.ts` unzips the EPUB, follows
 `META-INF/container.xml` to the package document, and reads the spine in
 order.
 

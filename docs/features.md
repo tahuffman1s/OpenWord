@@ -2,7 +2,10 @@
 
 [← Back to the README](../README.md)
 
-The whole list, in detail. The web app and the native builds share all of it unless a line says otherwise; accounts and friends are the web app's alone, and Android Auto is the native Android build's.
+The whole list, in detail. OpenWord is a web app: it runs in a browser and
+installs from one. Everything here works without an account unless a line
+says otherwise; friends, reminders and a backup kept on the server are the
+three things that need one.
 
 - **Printed-Bible layout.** The text is built from USFX, so the translation's
   own structure survives: prose paragraphs that verses flow through, poetry
@@ -20,10 +23,6 @@ The whole list, in detail. The web app and the native builds share all of it unl
 - **Highlights in five colours, bookmarks and notes**, any combination on the
   same verse. Highlights tint the text in place; bookmarked and annotated
   verses are flagged in the margin and in the pickers.
-- **Updates from GitHub.** OpenWord asks GitHub once a day whether a newer
-  release is out, shows what is in it, and on Android downloads and hands it
-  to the system installer. It is the only thing here that uses the network,
-  and Settings can turn it off.
 - **Maps of the places a chapter names**, drawn from open data and bundled
   with the app. Drag, pinch, scroll or double-tap to move about; tap a place
   for what the data knows about it and for the verses of the chapter that name
@@ -37,7 +36,8 @@ The whole list, in detail. The web app and the native builds share all of it unl
   converts it to a `.bib` file — its own single-file format — and reads it
   like the ones that ship with it: search, compare, highlight, bookmark, map
   and all. `.bib` files import directly, and any imported translation can be
-  saved back out as one.
+  saved back out as one. The file is converted on the device and kept in the
+  browser's IndexedDB; it is never uploaded.
 - **The Hebrew and Greek behind any verse.** Tap a verse and it offers the
   original: every word with its Strong's number, how it is said, and its
   parsing spelled out. Tap a word for Strong's own entry, and from there
@@ -59,22 +59,26 @@ The whole list, in detail. The web app and the native builds share all of it unl
   *Listen* becomes *Resume* and carries on there even after the app has
   been closed. Started from a reading plan it reads the rest of that day and
   stops, and a plan chapter heard to its end is ticked off. It goes on with
-  the screen off: the lock screen, a headset and a car pause it and step it
-  verse by verse. **Android Auto** lists it as a media app: *Continue
-  listening*, today's plan reading, recent chapters and every book and
-  chapter, playable from the car's screen or by asking for "Psalm 23", with
-  no screen of the app open. The voice is [KittenTTS](https://github.com/KittenML/KittenTTS),
-  an open neural model with eight speakers, bundled with the app and run
-  with [sherpa-onnx](https://github.com/k2-fsa/sherpa-onnx); it speaks
-  English. In the browser the same model runs through ONNX Runtime's
-  WebAssembly build; Android Auto is the native Android build's alone.
+  the screen off: the lock screen, a headset and a car's media buttons pause
+  it and step it verse by verse, through the browser's Media Session. The
+  voice is [KittenTTS](https://github.com/KittenML/KittenTTS), an open
+  neural model with eight speakers; it speaks English. It runs in the
+  browser, with [ONNX Runtime](https://github.com/microsoft/onnxruntime)'s
+  WebAssembly build making the speech and
+  [eSpeak NG](https://github.com/espeak-ng/espeak-ng), by way of the
+  [`phonemizer`](https://github.com/xenova/phonemizer.js) package, working
+  out how each word is said. The model is fetched from the server once
+  (57 MB) and kept, so listening needs no connection after that. The
+  device's own voices are offered beside it, for a browser that cannot run
+  the model or a reader who prefers one.
 - **Select several verses and share them.** Hold a verse, then tap others
   to add them; a bar along the bottom cites the selection the way a printed
   Bible would — *John 3:16–18, 20* — and copies it, shares it, highlights it
   all at once, or makes a picture of it. The picture is a 1080 × 1350 card in
-  one of four styles, with the words, the reference and the translation,
-  shared through the system share sheet (saved as a file on Linux, which has
-  none). A single verse's sheet shares it in one tap too.
+  one of four styles, with the words, the reference and the translation.
+  Sharing goes through the browser's share sheet where there is one; where
+  there is not, the words are copied to the clipboard and the picture is
+  saved as a file. A single verse's sheet shares it in one tap too.
 - **Guess before you read.** A plan chapter not yet read offers two of its
   verses to finish before reading, and the same two after, since guessing
   at what is about to be read makes it stick.
@@ -135,8 +139,34 @@ The whole list, in detail. The web app and the native builds share all of it unl
   top of the screen are saved as you read and restored on the next launch.
 - **Backup without an account.** Copy everything you have saved as JSON to the
   clipboard and paste it back on another device; restoring merges rather than
-  overwrites.
-- **Material You.** The palette follows the system wallpaper where the platform
-  provides one, with a seed-colour picker everywhere else. Light, dark and
-  system themes; adjustable text size, line spacing and typeface, reachable
+  overwrites. An account, which is optional, can hold a backup as well, to
+  be restored on a new device the same way: merged in, nothing removed.
+- **Friends.** An account is optional — a username, and a photo if you
+  like — and with one you can add a friend by their username. The two of
+  you then keep a streak together: it counts the days on which both of you
+  learnt, and a day only one of you did does not count. A feed shows what
+  you and your friends have achieved — a badge, a level, a plan finished —
+  and each entry can be cheered.
+- **Reminders.** A notification each day at a time you choose, on the days
+  of the week you choose, and optionally only if you have not learnt yet;
+  and one in the evening when a streak you share with a friend is about to
+  end. They arrive as push notifications, so they come with the app closed,
+  and need an account for the server to know when to send them. On an
+  iPhone or iPad they reach only the installed app, on iOS 16.4 or later.
+- **A walkthrough on first launch, and an install guide.** The first time
+  it is opened the app shows what it does in seven cards, most with a
+  button to try the thing itself; Settings shows it again. The install
+  guide gives the steps for putting OpenWord on the home screen in the
+  browser you are actually using, by the names that browser gives its
+  menus, and offers the browser's own install prompt where it has one.
+- **Works offline once opened.** The first visit stores the app and
+  everything bundled with it — the translations, introductions, maps,
+  cross-references and the Hebrew and Greek — so reading needs no
+  connection from then on. The app updates itself: a service worker
+  fetches a newer build in the background and the app offers *Reload* to
+  switch to it, rather than changing under you.
+- **Material You.** A browser cannot read the system wallpaper's palette,
+  so the seed-colour picker is the palette: choose a colour and the whole
+  scheme is drawn from it. Light and dark follow the system, or can be
+  fixed; text size, line spacing and typeface are adjustable, and reachable
   from the reader itself.

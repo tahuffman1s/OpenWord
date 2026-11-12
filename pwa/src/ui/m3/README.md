@@ -1,10 +1,14 @@
 # The Material 3 kit (`src/ui/m3`)
 
-Flutter's Material widgets, as Preact components styled by `m3.css` with
-the colour roles `theme.ts` writes to `<html>` (`--md-sys-color-*`). Import
+Material 3's widgets as Preact components, styled by `m3.css` with the
+colour roles `theme.ts` writes to `<html>` (`--md-sys-color-*`). Import
 everything from `'../m3'` (or `'./m3'` from `src/ui`).
 
-| Flutter                              | Here                                                        |
+The left column names each widget as Material's own libraries do, which is
+the vocabulary most people who know Material already have; the right is
+what this kit calls it.
+
+| Material widget                      | Here                                                        |
 |--------------------------------------|-------------------------------------------------------------|
 | `Scaffold`                           | `<Screen appBar={…} bottom={…} fab={…} padded>`             |
 | `AppBar`                             | `<AppBar title leading="back|close|none" actions scrolled>` — use `appBar={(scrolled) => <AppBar scrolled={scrolled} …/>}` on `Screen` |
@@ -31,7 +35,7 @@ everything from `'../m3'` (or `'./m3'` from `src/ui`).
 | `PopupMenuButton`                    | `<PopupMenuButton items={() => <><MenuItem icon label value/>…</>} onSelected>`; or `showMenu(<>…</>, anchorElement)` |
 | `ScaffoldMessenger.showSnackBar`     | `showSnackBar('text', { action: { label, onPressed }, duration })` |
 | `Theme.of(context).colorScheme.x`    | CSS `var(--md-sys-color-x-in-kebab-case)`; in JS `currentScheme().x` (ARGB) + `hexOf()` |
-| `AppTheme.redLetter / highlights`    | `redLetter(brightness)`, `highlights(brightness)`, `highlightSwatch(i)`, `highlightNames` from `theme.ts` |
+| Red-letter and highlight colours     | `redLetter(brightness)`, `highlights(brightness)`, `highlightSwatch(i)`, `highlightNames` from `theme.ts` |
 | `textTheme.titleMedium` etc.         | classes `m3-title-medium`, `m3-body-large`, `m3-label-small`… |
 | `MediaQuery.of(context).size.width`  | CSS media queries; `useMediaQuery('(min-width: 840px)')` from `src/ui/hooks.ts` |
 
