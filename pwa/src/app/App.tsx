@@ -24,7 +24,16 @@ async function boot(): Promise<Booted> {
   const prefs = Prefs.open();
   const settings = await Settings.load(prefs);
   const reading = await ReadingStore.load({ prefs });
+  // The imported translations, read from this browser's own storage before
+  // anything is loaded: the one being read may be one of them, and a shelf
+  // not yet listed would send the library looking for it among the bundled
+  // files instead.
   const shelf = await Shelf.open();
+  try {
+    await shelf?.refresh();
+  } catch (error) {
+    console.warn('OpenWord: no shelf for imported translations', error);
+  }
   const library = new LibraryController({ bundle: rootBundle, shelf });
   // Reading the Scripture takes a fraction of a second; start it while the
   // first frame is being built.

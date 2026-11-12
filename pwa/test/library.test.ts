@@ -147,3 +147,27 @@ describe('the library', () => {
     expect(library.loadingComparison).toBe(false);
   });
 });
+
+describe('an imported translation across a restart', () => {
+  it('is read from the shelf once the shelf has been listed, as the app does at launch', async () => {
+    const { MemoryShelfStore } = await import('../src/data/shelfStore');
+    const { Shelf } = await import('../src/data/shelf');
+    const { LibraryController } = await import('../src/data/library');
+    const { BibFile } = await import('../src/model/bibFile');
+    const { sampleBible, FixtureBundle } = await import('./fixtures');
+    const store = new MemoryShelfStore();
+    const imported = sampleBible();
+    const renamed = new (await import('../src/model/bible')).Bible({
+      translation: imported.translation.copyWith({ id: 'import-mine', name: 'Mine' }),
+      books: [...imported.books],
+    });
+    await store.write('import-mine.bib', BibFile.encode(renamed));
+
+    // A new launch: a fresh shelf over the same store, listed before the load.
+    const shelf = new Shelf(store);
+    await shelf.refresh();
+    const library = new LibraryController({ bundle: new FixtureBundle(), shelf });
+    await library.load('import-mine');
+    expect(library.translation.id).toBe('import-mine');
+  });
+});
