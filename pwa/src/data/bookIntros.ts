@@ -1,4 +1,4 @@
-import { gunzipSync } from 'fflate';
+import { gunzipIfNeeded } from '../infra/gunzip';
 import { type AssetBundle, rootBundle } from '../infra/assets';
 import { utf8 } from '../model/byteIo';
 
@@ -55,7 +55,7 @@ export class BookIntros {
   private async read(): Promise<Map<string, string>> {
     try {
       const bytes = await this.bundle.load(BookIntros.assetPath);
-      const raw = gunzipSync(bytes);
+      const raw = gunzipIfNeeded(bytes);
       const decoded: unknown = JSON.parse(utf8.decode(raw));
       if (typeof decoded !== 'object' || decoded === null || Array.isArray(decoded)) return new Map();
       return new Map(Object.entries(decoded).map(([key, value]) => [`${key}`, `${value}`]));

@@ -1,4 +1,4 @@
-import { gunzipSync } from 'fflate';
+import { gunzipIfNeeded } from '../infra/gunzip';
 import { type AssetBundle, rootBundle } from '../infra/assets';
 import type { Bible, Reference } from '../model/bible';
 import { BookMeta, BookSection } from '../model/bookMeta';
@@ -148,5 +148,5 @@ const canon: readonly string[] = BookMeta.all
  * it.
  */
 export function decodeCrossReferences(bytes: Uint8Array): XrefEntry[] {
-  return XrefCodec.decode(gunzipSync(bytes));
+  return XrefCodec.decode(gunzipIfNeeded(bytes));
 }

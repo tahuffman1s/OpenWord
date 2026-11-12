@@ -206,6 +206,8 @@ class ReaderController extends ChangeNotifier {
    * since nobody listening can reach the button at the end of it.
    */
   private heardChapter(chapter: Reference): void {
+    // A day with listening in it, for the account's record of the day.
+    void this.account?.recordActivity('listen');
     const hit = this.planSlotFor(chapter);
     if (hit === null) return;
     this.reading.setPlanSlot(hit.progress.plan.id, hit.slot, true);
@@ -378,11 +380,15 @@ class ReaderController extends ChangeNotifier {
 
   private disposedNow = false;
 
+  /** The reader's account, where the app has one running. */
+  private readonly account: AppScopeValue['account'] | null;
+
   constructor(scope: AppScopeValue) {
     super();
     this.settings = scope.settings;
     this.reading = scope.reading;
     this.library = scope.library;
+    this.account = scope.account ?? null;
     const bundle = scope.library.bundle;
     this.intros = new BookIntros(bundle);
 

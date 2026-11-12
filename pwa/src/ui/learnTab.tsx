@@ -1,4 +1,6 @@
 import type { ComponentChildren, VNode } from 'preact';
+import { useAppScope } from '../app/scope';
+import { reminderDueNow } from '../data/account';
 import type { ReadingStore } from '../data/marks';
 import { useNotifier } from '../infra/changeNotifier';
 import type { Bible, Reference } from '../model/bible';
@@ -35,6 +37,27 @@ const quizIcons: Record<string, string> = {
  * Tells the library, through `onOpen`, when a verse or passage is opened
  * in the reader from any screen it leads to, so that it closes with it.
  */
+/**
+ * Today's reminder, where no notification could bring it: the time the
+ * reader set has passed and nothing is learnt yet. A browser tab that was
+ * refused notifications, or an iPhone that is not running the installed
+ * app, gets its reminder here instead.
+ */
+function ReminderNudge({ reading }: { reading: ReadingStore }) {
+  const { account } = useAppScope();
+  useNotifier(account, reading);
+  if (!account?.isSignedIn || !reminderDueNow(account.settings, reading, reading.today)) return null;
+  return (
+    <div class="m3-card m3-card--tertiary ow-row" style="margin:0 16px 12px;gap:12px" role="status">
+      <Icon name="alarm" />
+      <div class="m3-body-medium">
+        <div class="m3-title-small">Your reminder for today</div>
+        Nothing learnt yet. Today’s lesson takes about a minute.
+      </div>
+    </div>
+  );
+}
+
 export function LearnTab({ reading, bible, onOpen }: { reading: ReadingStore; bible: Bible | null; onOpen: (reference: Reference) => void }) {
   const today = reading.today;
   const verses = reading.memoryVerses;
@@ -91,6 +114,7 @@ export function LearnTab({ reading, bible, onOpen }: { reading: ReadingStore; bi
   return (
     <div class="ow-learn ow-content">
       <GoalStrip reading={reading} />
+      <ReminderNudge reading={reading} />
       <div class="ow-learn__lesson">
         <LessonCard
           due={due}

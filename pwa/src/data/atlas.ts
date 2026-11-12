@@ -1,4 +1,4 @@
-import { gunzipSync } from 'fflate';
+import { gunzipIfNeeded } from '../infra/gunzip';
 import { type AssetBundle, rootBundle } from '../infra/assets';
 import { FormatException, utf8 } from '../model/byteIo';
 import { compareCodeUnits } from '../model/searchIndex';
@@ -63,7 +63,7 @@ export class Atlas {
 
 /** Unpacks the asset. Top-level and free of the DOM, so a worker can import it. */
 export function decodeAtlas(bytes: Uint8Array): AtlasData {
-  const raw = gunzipSync(bytes);
+  const raw = gunzipIfNeeded(bytes);
   const decoded: unknown = JSON.parse(utf8.decode(raw));
   if (!isRecord(decoded)) return AtlasData.empty;
   return AtlasData.fromJson(decoded);
