@@ -100,6 +100,7 @@ tunnel, and the tunnel is a connection the Pi makes outwards.
 | `nginx.conf` | how the files are served and `/api/` is proxied |
 | `.env.example` | every setting, commented |
 | `backup.sh`, `restore.sh` | database dump and reload |
+| `smoke.sh` | tests a running stack from outside; CI runs it on every build, and so does `openword check` |
 
 The API's own image is `../server/Dockerfile`.
 
@@ -254,6 +255,7 @@ that clone where it is, and leaves its git state alone.
 ```
 openword update              pull the latest version, rebuild, restart
 openword status              what is running and how much memory it uses
+openword check               test the running app from outside
 openword logs [service]      follow the logs (web, api, db, cloudflared)
 openword backup              dump the database to deploy/backups/
 openword restore <file>      load a dump back in
@@ -457,6 +459,12 @@ bump it there from time to time.
 hashes. Store copies with the same care as the database.
 
 ## Troubleshooting
+
+**Start with `openword check`.** It tests the running app from outside, the
+way a browser meets it — the app's files, what it keeps for offline, the
+voice, the headers the voice's threads need, and the API with the database
+behind it — and names whatever fails. It makes one throwaway account and
+deletes it again.
 
 **The build dies with "Killed", exit code 137, or the Pi freezes.** Out of
 memory. Check `free -m`: if Swap is 0 or small, run the installer again and
