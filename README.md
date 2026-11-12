@@ -1,5 +1,7 @@
 # OpenWord
 
+**[openword.faith](https://openword.faith)**
+
 A free and open source Bible reader that you host yourself and install
 from the browser, themed with Material You. It reads offline, speaks in a
 voice that runs on the device, teaches verses by heart, and keeps a streak
