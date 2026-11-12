@@ -336,6 +336,25 @@ export class Chapter {
     }
     return parts.join(' ').trim();
   }
+
+  /**
+   * A single verse with its inline marks kept — the words of Jesus, the
+   * translators' additions, the divine name — and only the footnote
+   * callers removed: what `verseText` gives, for somewhere that sets the
+   * verse as Scripture rather than as a quotation.
+   */
+  verseMarked(verse: number): string {
+    const parts: string[] = [];
+    for (const block of this.blocks) {
+      if (!isVerseText(block.style)) continue;
+      for (const segment of block.segments) {
+        if (segment.verse !== verse) continue;
+        if (Markup.strip(segment.text).trim().length === 0) continue;
+        parts.push(segment.text.replace(Markup.noteMarker, '').replace(/\u001d/g, ' ').trim());
+      }
+    }
+    return parts.join(' ');
+  }
 }
 
 /**

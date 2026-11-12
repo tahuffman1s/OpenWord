@@ -201,6 +201,10 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 .ow-verse-sheet__text--absent { font-style: italic; }
+/* Another translation's words, looked at in place: all of them, since
+   the point is to read them against the first. */
+.ow-verse-sheet__text--peek { display: block; -webkit-line-clamp: unset; line-clamp: unset; color: var(--md-sys-color-on-surface); }
+.ow-verse-sheet__text .ow-run { padding-block: 0; }
 .ow-verse-sheet__swatches { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
 .ow-verse-sheet__actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
 .ow-verse-sheet__note {

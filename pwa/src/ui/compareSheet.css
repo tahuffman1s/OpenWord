@@ -1,0 +1,95 @@
+/* A verse beside itself in the other translations on the shelf. */
+.m3-sheet__body.ow-compare-sheet { padding: 0 16px 16px; }
+
+.ow-compare-sheet__head {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 48px;
+  padding-bottom: 4px;
+  /* Stays put while the translations scroll under it: the arrows are
+     pressed again and again, and should not have to be found each time. */
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--md-sys-color-surface-container-low);
+}
+.ow-compare-sheet__title { flex: 1; text-align: center; }
+
+.ow-compare-card {
+  margin-top: 10px;
+  padding: 10px 8px 14px 16px;
+  border-radius: 18px;
+  background: var(--md-sys-color-surface-container-high);
+}
+.ow-compare-card:first-of-type { margin-top: 0; }
+.ow-compare-card--reading {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-secondary-container);
+}
+.ow-compare-card__head { display: flex; align-items: center; gap: 8px; min-height: 40px; }
+.ow-compare-card__abbr { font: var(--md-sys-typescale-label-large); font-weight: 700; letter-spacing: 0.6px; }
+.ow-compare-card__name { flex: 1; min-width: 0; font: var(--md-sys-typescale-label-medium); opacity: 0.72; }
+.ow-compare-card__text {
+  padding-inline-end: 8px;
+  color: inherit;
+  /* Read here, and copied from here if someone wants a phrase of it. */
+  -webkit-user-select: text;
+  user-select: text;
+}
+.ow-compare-card--reading .ow-compare-card__text { color: var(--md-sys-color-on-secondary-container); }
+.ow-compare-card__absent {
+  padding-inline-end: 8px;
+  font: var(--md-sys-typescale-body-medium);
+  font-style: italic;
+  opacity: 0.72;
+}
+.ow-compare-card__waiting {
+  height: 1.2em;
+  width: 62%;
+  margin: 6px 0 2px;
+  border-radius: 6px;
+  background: currentColor;
+  opacity: 0.1;
+  animation: ow-compare-wait 1.1s ease-in-out infinite alternate;
+}
+@keyframes ow-compare-wait { to { opacity: 0.2; width: 80%; } }
+@media (prefers-reduced-motion: reduce) {
+  .ow-compare-card__waiting { animation: none; }
+}
+
+.ow-compare-sheet__differences {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin-top: 12px;
+  padding-inline-start: 4px;
+}
+.ow-compare-sheet__none { padding: 20px 8px 8px; text-align: center; }
+.ow-compare-sheet__hidden { margin-top: 16px; padding-inline-start: 4px; }
+.ow-compare-sheet__chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+
+/* A word the translation being read does not have: marked the way a
+   reader marks one with a pencil, under it and lightly behind it, so the
+   verse still reads as a verse. */
+.ow-diff {
+  color: inherit;
+  background: color-mix(in srgb, var(--md-sys-color-tertiary) 16%, transparent);
+  box-shadow: 0 1.5px 0 color-mix(in srgb, var(--md-sys-color-tertiary) 70%, transparent);
+  border-radius: 3px 3px 0 0;
+  padding: 0 1px;
+  margin: 0 -1px;
+}
+
+/* The translations offered under a verse that has been tapped. */
+.ow-verse-sheet__versions {
+  display: flex;
+  gap: 8px;
+  margin: 12px -24px 0;
+  padding: 0 24px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ow-verse-sheet__versions::-webkit-scrollbar { display: none; }
+.ow-verse-sheet__versions .m3-chip { flex: none; }
