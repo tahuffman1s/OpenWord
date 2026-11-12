@@ -36,8 +36,8 @@ function haptic(millis: number): void {
 
 /**
  * A practice session's state: the queue, the exercise under way and the
- * tally — what `_MemoryScreenState` holds in the Dart, kept apart from the
- * component so that each step reads as it does there.
+ * tally, kept apart from the component, which listens to it and draws
+ * what it holds.
  */
 class MemorySession extends ChangeNotifier {
   readonly queue: Reference[];

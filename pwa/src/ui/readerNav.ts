@@ -6,15 +6,14 @@ import type { PlanReading } from './plansScreen';
 /**
  * How the screens stacked over the reader send it somewhere.
  *
- * In the Flutter app every screen pops with a `Reference` and the reader,
- * which pushed it, goes there. The screens here still close with that
- * result, so a reader that awaits `nav.push` is answered as before. But a
- * reader can also register one function, and then any screen — the
- * library, a round of questions, a practice session, a friend's feed —
- * can send it somewhere outright: `openReference` closes whatever is above
- * the reader and hands it the place. A plan's chapter goes the same way
- * with the plan day it was opened from, so the reader can offer to tick
- * it off at the end (`_planFocus` in the Dart).
+ * A screen the reader pushed closes with a `Reference`, and a reader that
+ * awaits `nav.push` is answered with it and goes there. But a reader can
+ * also register one function, and then any screen — the library, a round
+ * of questions, a practice session, a friend's feed — can send it
+ * somewhere outright: `openReference` closes whatever is above the reader
+ * and hands it the place. A plan's chapter goes the same way with the
+ * plan day it was opened from, so the reader can offer to tick it off at
+ * the end (its `planFocus`).
  */
 export type ReaderGoTo = (reference: Reference, plan?: PlanReading) => void;
 

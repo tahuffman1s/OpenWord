@@ -97,14 +97,14 @@ class Pretest {
   constructor(readonly questions: QuizQuestion[]) {}
 }
 
-/** What the reader's state asks of the pages: Flutter's `PageController`. */
+/** What the reader's state asks of the pages. */
 interface PagerHandle {
   /** Slides to a neighbouring page; anything further is a jump. */
   animateToPage(page: number): void;
 }
 
 /**
- * The state of the reading surface — Flutter's `_ReaderScreenState`, kept
+ * The state of the reading surface, kept
  * as one object so that the dozens of things it holds change together and
  * are read by one render. `ReaderScreen` listens to it.
  */
@@ -417,9 +417,8 @@ class ReaderController extends ChangeNotifier {
   }
 
   /**
-   * Catches up with the stores before a render — what Flutter's
-   * `didChangeDependencies` did: the translation in hand, the matcher
-   * built for it, and the flattened list of its chapters.
+   * Catches up with the stores before a render: the translation in hand,
+   * the matcher built for it, and the flattened list of its chapters.
    */
   sync(): void {
     const bible = this.library.bible;
@@ -1316,7 +1315,7 @@ export function ReaderScreen() {
 }
 
 /**
- * Back ends a selection before it leaves anything — Flutter's `PopScope`.
+ * Back ends a selection before it leaves anything.
  *
  * The reader is the bottom of the app, so there is nothing for the back
  * button to go back to but out. While verses are selected the reader
@@ -1639,9 +1638,9 @@ function ChapterPage(props: ChapterPageProps) {
   };
 
   /**
-   * Brings `target` to `alignment` of the way down the page — Flutter's
-   * `Scrollable.ensureVisible`. `quiet` keeps the move from being taken
-   * for the reader's own scrolling, which would save the place it passes.
+   * Brings `target` to `alignment` of the way down the page. `quiet`
+   * keeps the move from being taken for the reader's own scrolling, which
+   * would save the place it passes.
    */
   const ensureVisible = (
     target: Element,

@@ -12,8 +12,8 @@ import './shared.css';
 import './learnProgressCard.css';
 
 /**
- * Today's goal as a ring: full is the day done. Flutter's determinate
- * `CircularProgressIndicator` with round caps over a track, filling its box.
+ * Today's goal as a ring: full is the day done. A determinate circular
+ * progress indicator with round caps over a track, filling its box.
  */
 function GoalRing({ value, size, stroke, children }: { value: number; size: number; stroke: number; children?: ComponentChildren }) {
   const radius = (size - stroke) / 2;

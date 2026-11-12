@@ -1,7 +1,7 @@
 import { rootBundle, type AssetBundle } from '../infra/assets';
 
-// Where releases are published. These belong with the app's version
-// (app_version.dart) once that is ported; kept here until it is.
+// Where the app's source is published: the repository the attribution
+// below points at.
 export const releaseOwner = 'tahuffman1s';
 export const releaseRepo = 'OpenWord';
 
@@ -35,9 +35,8 @@ export interface VoiceLicence {
 }
 
 /**
- * The licences of what the voice is made of, for the Licences screen.
- * Flutter listed its packages' own through the LicenseRegistry; here the
- * screen lists these alongside whatever else it shows.
+ * The licences of what the voice is made of, for the Licences screen,
+ * which lists these alongside whatever else it shows.
  */
 export async function voiceLicences(bundle: AssetBundle = rootBundle): Promise<VoiceLicence[]> {
   const [apache, gpl, mit] = await Promise.all([

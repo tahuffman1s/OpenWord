@@ -12,9 +12,8 @@ vi.mock('../src/ui/m3', () => ({
 import { GeoBox, Place } from '../src/data/atlas';
 import { AtlasPainter, MapCamera, boxAround, maxScale } from '../src/ui/widgets/atlasMap';
 
-// The camera and the framing of `test/atlas_test.dart`; the asset's own
-// tests are in atlas.test.ts, and the widget's gestures are tried in a
-// browser rather than here.
+// The camera and the framing; the asset's own tests are in atlas.test.ts,
+// and the widget's gestures are tried in a browser rather than here.
 describe('the camera', () => {
   const size = { width: 200, height: 200 };
   const box = new GeoBox(34, 31, 36, 33);

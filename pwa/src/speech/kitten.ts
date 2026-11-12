@@ -1,7 +1,8 @@
 /**
- * The pure part of running KittenTTS: what sherpa-onnx does for the native
- * app between the phonemes and the network, written out so that the worker
- * can do it and a test can check it without a model.
+ * The pure part of running KittenTTS: what has to happen between the
+ * phonemes and the network, written out so that the worker can do it and
+ * a test can check it without a model. sherpa-onnx, whose packaging of
+ * the model this is, is the reference for each step.
  *
  * KittenTTS nano v0.8 takes a row of token ids — one per IPA codepoint,
  * with punctuation among them, wrapped as the model's metadata asks — a
@@ -117,12 +118,13 @@ export function parseVoices(bytes: Uint8Array): Float32Array {
 }
 
 /**
- * The speed the model is handed. sherpa-onnx multiplies the speaker's
- * prior into whatever speed it is asked for, and the native app asks for
- * `rate / prior` so that the prior cancels and 1× is the pace the voice
- * was trained at (see `NeuralSpeechEngine._configure`). Here both steps
- * are ours, and the product is the same: the rate itself. Kept as one
- * function so the arithmetic is written down once.
+ * The speed the model is handed. The model's metadata gives each speaker
+ * a speed prior, which sherpa-onnx multiplies into whatever speed it is
+ * asked for. The engine asks for `rate / prior` so that the prior cancels
+ * and 1× is the pace the voice was trained at (see
+ * `NeuralSpeechEngine._configure`), and the prior is multiplied back in
+ * here: the product is the rate itself. Kept as one function so the
+ * arithmetic is written down once.
  */
 export function modelSpeed(requested: number, sid: number): number {
   const prior = kittenMeta.speedPriors[sid] ?? 1;

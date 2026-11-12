@@ -38,7 +38,7 @@ export class Passage {
     return `${name} ${this.firstChapter}–${this.lastChapter}`;
   }
 
-  /** Dart's `operator ==`. */
+  /** Whether `other` holds the same values as this. */
   equals(other: Passage | null | undefined): boolean {
     return (
       other != null &&
@@ -334,8 +334,7 @@ function booksIn(section: BookSection): string[] {
  * and a reader can change translation half way through without their
  * place moving.
  *
- * Each plan is built the first time it is asked for, as Dart's lazy
- * statics are.
+ * Each plan is built the first time it is asked for, and kept.
  */
 export const ReadingPlans = {
   _all: null as ReadingPlan[] | null,

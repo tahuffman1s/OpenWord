@@ -18,7 +18,7 @@ export interface ScreenProps {
   style?: string;
 }
 
-/** Flutter's Scaffold: an app bar, a scrolling body, something along the bottom, a FAB. */
+/** Material's Scaffold: an app bar, a scrolling body, something along the bottom, a FAB. */
 export function Screen({ appBar, children, bottom, fab, padded, bodyRef, onScroll, class: cls, bodyClass, style }: ScreenProps) {
   const [scrolled, setScrolled] = useState(false);
   const handleScroll = useCallback(

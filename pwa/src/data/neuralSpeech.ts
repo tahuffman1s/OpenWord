@@ -268,7 +268,7 @@ export class NeuralSpeechEngine implements SpeechEngine {
   ]);
 }
 
-/** A promise with its resolver to hand, as Dart's Completer. */
+/** A promise with its resolver to hand. */
 class Completer<T = void> {
   readonly promise: Promise<T>;
   private _resolve!: (value: T) => void;

@@ -75,7 +75,7 @@ export function tidyBib(bytes: Uint8Array): TidyResult {
   }
 }
 
-/** Dart's `'$error'`. */
+/** An error as words: its message, or whatever it prints as. */
 function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }

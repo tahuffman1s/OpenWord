@@ -4,7 +4,7 @@ import { Versification, type TranslationInfo } from '../model/bible';
 import { compareCodeUnits } from '../model/searchIndex';
 import { Translations } from './translations';
 
-/** Flutter's `ThemeMode`; the index is persisted. */
+/** Light, dark, or whichever the system is in; the index is persisted. */
 export enum ThemeMode {
   system = 0,
   light = 1,
@@ -67,12 +67,12 @@ const kOldSpeechRate = 'speechRate';
 const kSpeechVoice = 'speechVoice';
 const kLearnAutoSpeak = 'learnAutoSpeak';
 
-/** User preferences, persisted with `Prefs` (SharedPreferences). */
+/** User preferences, persisted with `Prefs`. */
 export class Settings extends ChangeNotifier {
   /**
-   * Fallback palette seeds offered where the platform has no Material You
-   * palette of its own (desktop, web, older Android, iOS). ARGB, as
-   * Flutter's `Color.toARGB32()` gives it.
+   * The palette seeds the colour picker offers. A browser has no system
+   * palette to read, so the one chosen is what the whole scheme is drawn
+   * from. Each is ARGB.
    */
   static readonly seedChoices: readonly number[] = [
     0xff6750a4, 0xff1b6c4f, 0xff8c4a2f, 0xff2d5fa8, 0xff7d5260, 0xff4e5b31, 0xff5b5891, 0xff8a5100,
@@ -251,9 +251,10 @@ export class Settings extends ChangeNotifier {
   }
 
   /**
-   * Whether to ask GitHub, once a day, whether there is a newer release.
-   * This is the only thing in the app that uses the network; turning it off
-   * leaves OpenWord entirely offline again.
+   * A stored preference that nothing in the app reads now: updates come
+   * through the service worker (`src/pwa/serviceWorker.ts`), which looks
+   * for a newer build by itself. `lastUpdateCheck` and `skippedUpdate`
+   * below are the same.
    */
   get checkForUpdates(): boolean {
     return this.prefs.getBool(kCheckUpdates) ?? true;
@@ -322,9 +323,9 @@ export class Settings extends ChangeNotifier {
     this.notifyListeners();
   }
 
-  // Dart's `_write` picks the SharedPreferences setter by the value's
-  // runtime type; JS cannot tell an int from a double, so each setter
-  // above says which it writes.
+  // One writer per type rather than one that looks at the value: JS
+  // cannot tell an int from a double, so each setter above says which
+  // it writes.
   private writeInt(key: string, value: number): void {
     this.prefs.setInt(key, value);
     this.notifyListeners();

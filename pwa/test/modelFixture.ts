@@ -2,9 +2,9 @@ import { Bible, Block, BlockStyle, Book, Chapter, Markup, TranslationInfo } from
 import { BookMeta } from '../src/model/bookMeta';
 
 /**
- * The Dart tests' `parseFixture()`, built by hand rather than parsed from
- * USFX (the parser is ported separately): the same three books with the
- * same verses, so the model tests read the same text.
+ * A small Bible for the model tests, built by hand rather than parsed
+ * from USFX: three books with the same verses every time, so the tests
+ * read a text they know.
  */
 export const testTranslation = new TranslationInfo({
   id: 'eng-web',

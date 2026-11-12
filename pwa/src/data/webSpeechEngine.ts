@@ -1,9 +1,9 @@
 import { SpeechVoice, type ConfigureOptions, type SpeakOptions, type SpeechEngine } from './readAloud';
 
 /**
- * The browser's own voices, through the Web Speech API: what the native
- * app read with before it had a voice of its own, and what a browser that
- * cannot run the neural one still has.
+ * The browser's own voices, through the Web Speech API: what a browser
+ * that cannot run the neural voice still has, and what speaks when a
+ * reader chooses one of the device's voices.
  *
  * Its quirks, and what is done about them:
  *

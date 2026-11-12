@@ -16,7 +16,7 @@
   color: var(--md-sys-color-on-surface-variant);
 }
 
-/* Flutter's DropdownButton: the value and an arrow, opening a menu. */
+/* A dropdown button: the value and an arrow, opening a menu. */
 .ow-dropdown {
   position: relative;
   display: inline-flex;

@@ -83,7 +83,7 @@ export class ScriptureStyle {
     set('--ow-reading-content', `${contentAreaOf(this.readingFont)}`);
   }
 
-  /** The body size in pixels, as the Dart's `body.fontSize`. */
+  /** The body size in pixels. */
   get bodySize(): number {
     return 17.5 * this.fontScale;
   }
@@ -152,8 +152,8 @@ export function tintLayer(color: string): string {
 }
 
 /**
- * A colour laid over whatever tint a verse already had — Flutter's
- * `Color.alphaBlend(over, under)`, as stacked background layers.
+ * A colour laid over whatever tint a verse already had, as stacked
+ * background layers.
  */
 export function tintOver(over: string, under: string | undefined): string {
   return under === undefined ? tintLayer(over) : `${tintLayer(over)}, ${under}`;

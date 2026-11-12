@@ -64,7 +64,7 @@ export class StrongsNumber {
     return this.key - other.key;
   }
 
-  /** Dart's `operator ==`: two numbers are the same when their keys are. */
+  /** Two numbers are the same when their keys are. */
   equals(other: StrongsNumber | null | undefined): boolean {
     return other != null && other.key === this.key;
   }

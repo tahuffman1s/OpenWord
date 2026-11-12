@@ -152,7 +152,7 @@ export class SleepPolicy {
     });
   }
 
-  /** Dart's `operator ==`. */
+  /** Whether `other` holds the same values as this. */
   equals(other: SleepPolicy | null | undefined): boolean {
     return (
       other != null &&

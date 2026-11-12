@@ -15,7 +15,7 @@ export interface ListTileProps extends Omit<JSX.ButtonHTMLAttributes<HTMLButtonE
   static?: boolean;
 }
 
-/** Flutter's ListTile. A button when it has an onClick, a div otherwise. */
+/** Material's ListTile. A button when it has an onClick, a div otherwise. */
 export function ListTile({ leading, icon, title, subtitle, trailing, selected, dense, threeLine, static: isStatic, class: cls, onClick, ...rest }: ListTileProps) {
   const classes = `m3-list-tile${onClick && !isStatic ? ' m3-interactive' : ''}${selected ? ' m3-list-tile--selected' : ''}${dense ? ' m3-list-tile--dense' : ''}${threeLine ? ' m3-list-tile--three' : ''}${cls ? ` ${cls}` : ''}`;
   const inner = (

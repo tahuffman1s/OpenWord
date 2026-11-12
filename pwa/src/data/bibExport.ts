@@ -49,9 +49,8 @@ export class AttachedLayers {
  * A translation carrying its own is better off than one leaning on the
  * app's assets in every way that matters: they travel with the file, so
  * any reader of the format has them without a 4 MB download, and they are
- * stored against the numbering of the very Bible they sit in. This is the
- * work the `tool/attach_*.dart` scripts do, which the app had no way of
- * doing for a reader who wanted a copy to hand on.
+ * stored against the numbering of the very Bible they sit in. This is how
+ * a reader who wants a copy to hand on gets one.
  *
  * Top-level, and taking nothing but bytes, because a worker cannot carry
  * a Bible across: a book of a version 2 file inflates when it is first
@@ -102,9 +101,9 @@ export function attachStudyLayers(file: Uint8Array, layers: StudyLayers): Attach
   // translation's own layers would be the worst kind of bug.
   const out = BibFile.encode(bible, { carry });
 
-  // Read it back before handing it over, the way the tools do. Encoding is
-  // deterministic, so this either holds always or never — but a file
-  // written for someone else to read should be read once first.
+  // Read it back before handing it over. Encoding is deterministic, so
+  // this either holds always or never — but a file written for someone
+  // else to read should be read once first.
   const check = BibFile.decode(out, true);
   if (crossReferences !== null) {
     const attached = check.extras.get(XrefCodec.chunkTag);

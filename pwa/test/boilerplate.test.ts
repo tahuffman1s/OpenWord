@@ -3,9 +3,8 @@ import { Block, BlockStyle, Book, Chapter } from '../src/model/bible';
 import { stripBoilerplate } from '../src/model/boilerplate';
 import { BookMeta } from '../src/model/bookMeta';
 
-// The Dart file's first two tests and its "already on the shelf" group go
-// through the EPUB importer and the .bib tidier, which are ported
-// separately; the rule itself is tested here as there.
+// Only the rule itself is tested here. The EPUB importer and the .bib
+// tidier, which apply it, have tests of their own.
 
 function book(code: string, chapters: string[][], firstVerse = 1): Book {
   return Book.of(

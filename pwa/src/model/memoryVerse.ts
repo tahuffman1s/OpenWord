@@ -212,7 +212,7 @@ export class MemoryVerse {
   retrievability(now: Date): number {
     const s = this.stability;
     if (s === null) return 1;
-    // Dart's `difference().inSeconds` truncates to whole seconds.
+    // The time since is counted in whole seconds, truncated, then put in days.
     const since = Math.trunc((now.getTime() - this.lastRecall.getTime()) / 1000) / 86400;
     if (since <= 0) return 1;
     return 1 / (1 + since / (9 * s));

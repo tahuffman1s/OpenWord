@@ -254,8 +254,8 @@ function identifier(name: string, identifier: string): string {
   const seed = identifier.length === 0 ? name : identifier;
   let hash = 0x811c9dc5;
   for (const unit of new TextEncoder().encode(seed)) {
-    // The low 32 bits of the product, which is what Dart's `& 0xffffffff`
-    // kept; a plain multiply here would lose bits past 2^53.
+    // The low 32 bits of the product, which is what FNV-1a keeps; a plain
+    // multiply here would lose bits past 2^53.
     hash = Math.imul(hash ^ unit, 0x01000193) >>> 0;
   }
   const slug = name
@@ -315,7 +315,7 @@ function resolve(base: string, href: string): string {
   return normalisePath(base.length === 0 ? target : `${base}/${target}`);
 }
 
-/** Dart's `Uri.decodeFull`: percent-encodings undone, a bad one left as it is. */
+/** Percent-encodings undone; text with a bad one in it is left as it is. */
 function decodePercent(text: string): string {
   try {
     return decodeURIComponent(text);
@@ -1975,7 +1975,7 @@ class BibleBuilder {
   }
 }
 
-/** Dart's `map[key] ??= make()`. */
+/** The value under `key`, made and stored first where there is none. */
 function getOrPut<K, V>(map: Map<K, V>, key: K, make: () => V): V {
   let value = map.get(key);
   if (value === undefined) {

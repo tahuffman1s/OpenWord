@@ -1,9 +1,9 @@
 /**
- * The little of SharedPreferences the stores need, over localStorage — or
+ * A small typed key-value store for the stores, over localStorage — or
  * over a map, for tests and for a browser that refuses storage.
  *
  * Every value is kept as JSON under a prefixed key, so an int stays an int
- * and a list stays a list, as SharedPreferences keeps them.
+ * and a list stays a list when it is read back.
  */
 export interface KeyValueStorage {
   getItem(key: string): string | null;

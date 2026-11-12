@@ -23,11 +23,10 @@ export class ShelfFile {
 /**
  * The little the shelf needs of a filesystem.
  *
- * Pulling it out of `Shelf` keeps the storage out of the widget tree. The
- * Flutter app keeps a directory of files; the web has no filesystem a
- * page can write to, so here the shelf is kept in IndexedDB — locally, in
- * the browser, uploaded nowhere — and `openShelfStore` answers null in a
- * browser without one.
+ * Pulling it out of `Shelf` keeps the storage out of the component tree.
+ * The web has no filesystem a page can write to, so the shelf is kept in
+ * IndexedDB — locally, in the browser, uploaded nowhere — and
+ * `openShelfStore` answers null in a browser without one.
  */
 export interface ShelfStore {
   /** Files ending in `extension`, each with its first `headLength` bytes. */

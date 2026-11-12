@@ -142,7 +142,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Dart's `DateTime.toIso8601String()` for a local time: no zone suffix. */
+/** ISO 8601 for a local time, to the millisecond, with no zone suffix. */
 function localIso8601(at: Date): string {
   const pad = (n: number, width = 2) => String(n).padStart(width, '0');
   return (
@@ -286,7 +286,7 @@ export class ReadingStore extends ChangeNotifier {
     if (Array.isArray(decoded)) {
       entries = decoded;
     } else if (isRecord(decoded)) {
-      // Dart's `decoded['marks'] as List?` throws on anything else.
+      // `marks` may be absent or a list; anything else is not a backup.
       const marks = decoded['marks'];
       if (marks == null) entries = [];
       else if (Array.isArray(marks)) entries = marks;
@@ -935,7 +935,8 @@ export class ReadingStore extends ChangeNotifier {
 
   /**
    * Everything the reader has added, as JSON they can keep anywhere. The
-   * shape is the Flutter app's, key for key, so a backup moves either way.
+   * shape is fixed, key for key, so a backup made by any earlier version
+   * of OpenWord still restores.
    */
   export(): string {
     return JSON.stringify(

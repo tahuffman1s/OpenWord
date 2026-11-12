@@ -4,15 +4,14 @@ import { WebSpeechEngine } from './webSpeechEngine';
 
 /**
  * OpenWord's own voice and the browser's, behind one engine: a voice
- * named `openword:…` — or none chosen — is spoken by the neural engine,
- * as the native app does (`NeuralModel.chosen` picks its first speaker
- * for no name), and any other name is one of the device's voices, spoken
- * by the browser. The voice picker lists the Kitten speakers first and
- * the device's after them.
+ * named `openword:…` — or none chosen — is spoken by the neural engine
+ * (`NeuralModel.chosen` picks its first speaker for no name), and any
+ * other name is one of the device's voices, spoken by the browser. The
+ * voice picker lists the Kitten speakers first and the device's after
+ * them.
  *
- * The native app has only the neural engine now; it offered the device's
- * voices before that existed, and a browser that cannot run the model
- * still has them, so here both are kept.
+ * Both are kept because a browser that cannot run the model still has
+ * the device's voices.
  */
 export class RoutedSpeechEngine implements SpeechEngine {
   private _current: SpeechEngine;

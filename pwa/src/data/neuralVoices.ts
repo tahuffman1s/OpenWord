@@ -30,10 +30,9 @@ export interface VoiceFiles {
  * The voice OpenWord reads aloud with: an open neural text-to-speech
  * model, run in the browser with onnxruntime-web.
  *
- * The native app ships it inside the package; here it is fetched from
- * `/voice/<archive>/` the first time it is needed and kept in Cache
- * Storage, so it comes over the network once. Nothing leaves the device:
- * the speech itself is made here.
+ * It is fetched from `/voice/<archive>/` the first time it is needed and
+ * kept in Cache Storage, so it comes over the network once. Nothing
+ * leaves the device: the speech itself is made here.
  */
 export class NeuralModel {
   /** Short and stable: it is part of the voice name kept in settings. */

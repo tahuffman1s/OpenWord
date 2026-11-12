@@ -1,23 +1,22 @@
 /**
  * The little of an XML document the EPUB importer reads.
  *
- * The Dart importer leans on `package:xml`; here the tree comes from
- * `htmlparser2` and `domhandler`, which run in a Web Worker — `DOMParser`
- * does not — and this is the thin layer that gives the port the handful of
- * operations the Dart uses, so it reads like the Dart: an element's local
+ * The tree comes from `htmlparser2` and `domhandler`, which run in a Web
+ * Worker — `DOMParser` does not — and this is the thin layer that gives
+ * the importer the handful of operations it uses: an element's local
  * name, its attributes, its children, its text, its descendants, and a
  * search by tag.
  *
  * Two parsing modes. A package file, a `container.xml` and an NCX are XML
  * and are read as XML. A content document is XHTML in name and HTML in
  * practice — unclosed `<br>`s, stray entities, tags in whatever case —
- * and is read tolerantly, which is more than the Dart managed: a document
- * the XML parser refused was skipped whole, and here it is read.
+ * and is read tolerantly: a document a strict XML parser would refuse,
+ * and the import would then have to skip whole, is read.
  *
  * Names are matched by local name, ignoring case and namespace prefix:
  * `dc:title` answers to `title`, `navPoint` to `navpoint`. The HTML mode
- * lowercases tag names and the XML mode keeps them, and the port compares
- * lowercase in either case, as the Dart does.
+ * lowercases tag names and the XML mode keeps them, so names are
+ * compared in lowercase in either case.
  */
 import { parseDocument } from 'htmlparser2';
 import { Document, Element, Text, isTag, isText, isCDATA, type ChildNode, type AnyNode } from 'domhandler';

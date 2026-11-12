@@ -116,7 +116,7 @@ describe('the reading store', () => {
     expect(fresh.all).toHaveLength(2);
   });
 
-  it('a backup keeps the Flutter app\'s keys, so one from the phone restores here', async () => {
+  it('a backup keeps its keys, so one made by an earlier version restores here', async () => {
     const phone = JSON.stringify({
       app: 'openword',
       version: 1,
@@ -239,7 +239,7 @@ describe('settings', () => {
     expect(reopened.themeMode).toBe(ThemeMode.dark);
     expect(reopened.readingFont).toBe(ReadingFont.sans);
     expect(reopened.seedColor).toBe(0xff1b6c4f);
-    // The same keys and shapes as the Flutter app's SharedPreferences.
+    // The keys and shapes settings have always been stored under.
     expect(prefs.getInt('themeMode')).toBe(2);
     expect(prefs.getInt('readingFont')).toBe(1);
     expect(prefs.getDouble('fontScale')).toBe(1.4);

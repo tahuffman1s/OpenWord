@@ -2,7 +2,7 @@ import { expect } from 'vitest';
 import type { ConfigureOptions, SpeakOptions, SpeechEngine } from '../src/data/readAloud';
 import { SpeechVoice } from '../src/data/readAloud';
 
-/** Dart's Completer: a promise with its resolver to hand. */
+/** A promise with its resolver to hand. */
 export class Completer<T = void> {
   readonly promise: Promise<T>;
   private _resolve!: (value: T) => void;
@@ -111,7 +111,7 @@ export class FakeSpeech implements SpeechEngine {
   }
 }
 
-/** Lets the controller's chain of awaits run through, as the Dart test does. */
+/** Lets the controller's chain of awaits run through. */
 export async function settle(): Promise<void> {
   for (let i = 0; i < 10; i++) {
     await new Promise<void>((resolve) => setTimeout(resolve, 0));

@@ -17,7 +17,7 @@ import { PlanReading, nextInDay, planMeta, planSlotFor } from '../src/ui/plansSc
 import { licenceBlocks, rateLabel } from '../src/ui/settingsScreen';
 import { hourLabel } from '../src/ui/sleepSheet';
 
-/** The words the learning screens put together, as the Dart's widget tests read them off the screen. */
+/** The words the learning screens put together, as they would be read off the screen. */
 const monday = new Date(2026, 8, 28, 9, 30);
 
 async function store(clock: { now: Date }): Promise<ReadingStore> {

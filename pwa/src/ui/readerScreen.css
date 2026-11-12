@@ -2,8 +2,8 @@
    column, the bars along the bottom, and the sheets that open over it. */
 
 /* ---- the app bar ---- */
-/* The place being read stands twelve pixels in, as Flutter's titleSpacing
-   set it, rather than at the kit's sixteen. */
+/* The place being read stands twelve pixels in, rather than at the kit's
+   sixteen. */
 .ow-reader__bar .m3-app-bar__title { padding: 0 4px 0 0; margin-left: -8px; display: flex; }
 .ow-reader__dotted { position: relative; display: inline-flex; }
 .ow-reader__dot {

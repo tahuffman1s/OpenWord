@@ -98,8 +98,8 @@ export class SearchIndex {
         }
       }
     }
-    // Sorted by UTF-16 code units, as Dart's String.compareTo sorts, so
-    // the same Bible always writes the same bytes.
+    // Sorted by UTF-16 code units, whatever the locale, so the same
+    // Bible always writes the same bytes.
     const words = [...inBooks.keys()].sort(compareCodeUnits);
     const out = new ByteWriter().byte(SearchIndex.version).uint32(textCrc).varint(bible.books.length).varint(words.length);
     for (const word of words) {
@@ -163,7 +163,7 @@ function intersection(a: Set<number>, b: Set<number>): Set<number> {
   return out;
 }
 
-/** Dart's `String.compareTo`: by UTF-16 code unit. */
+/** Orders two strings by UTF-16 code unit, whatever the locale. */
 export function compareCodeUnits(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
 }

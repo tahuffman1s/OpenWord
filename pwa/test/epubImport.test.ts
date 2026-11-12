@@ -4,7 +4,7 @@ import { EpubImport } from '../src/data/epubImport';
 import { type Bible, type Block, BlockStyle, type Chapter, Markup } from '../src/model/bible';
 import { epub, epubWithToc } from './epubFixtures';
 
-/** Dart's `.single`: the one element, and a failure where there is not exactly one. */
+/** The one element, and a failure where there is not exactly one. */
 function single<T>(items: readonly T[]): T {
   expect(items).toHaveLength(1);
   return items[0];

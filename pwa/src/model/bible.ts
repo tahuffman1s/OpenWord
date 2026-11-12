@@ -636,7 +636,7 @@ export class Reference {
   }
 }
 
-/** Dart's `int.tryParse`: the whole string, decimal, optional sign, or null. */
+/** A strict integer parse: the whole string, decimal, optional sign, or null. */
 export function parseIntStrict(s: string | null | undefined): number | null {
   if (s == null) return null;
   const t = s.trim();

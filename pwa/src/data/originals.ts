@@ -54,10 +54,9 @@ export class Originals {
    * its file carries one, the bundled layer where its numbering allows
    * (`anchored`), and none at all otherwise.
    *
-   * The same rule the Flutter reader applies in its `_originalLanguages`
-   * getter. Unpacking a translation's own layer is measured in megabytes,
-   * so it is read eagerly when the translation changes rather than when a
-   * verse is first tapped.
+   * Unpacking a translation's own layer is measured in megabytes, so it
+   * is read eagerly when the translation changes rather than when a verse
+   * is first tapped.
    */
   static async forTranslation(bible: Bible, bundled: Originals, anchored: boolean): Promise<Originals | null> {
     const chunk = bible.extras.get(Originals.chunkTag);
@@ -76,9 +75,9 @@ export class Originals {
     "Strong's dictionaries from Open Scriptures (CC BY-SA 4.0).";
 
   /**
-   * Below this the asset was unpacked where it stood in Flutter, so a
-   * fixture did not wait on an isolate. The PWA decodes inline either way
-   * and leaves a worker to the caller; the threshold is kept for whoever
+   * The size above which unpacking would be worth a worker of its own.
+   * Nothing uses it yet: the asset is unpacked inline whatever its size,
+   * and a worker is left to the caller. The threshold is kept for whoever
    * adds one.
    */
   static readonly isolateAbove = 64 * 1024;

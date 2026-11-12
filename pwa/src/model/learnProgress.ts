@@ -380,7 +380,7 @@ export class LearnProgress {
     });
   }
 
-  /** Dart's `operator ==`. */
+  /** Whether `other` holds the same values as this. */
   equals(other: LearnProgress | null | undefined): boolean {
     return (
       other != null &&

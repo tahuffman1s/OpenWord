@@ -23,9 +23,9 @@ export class Atlas {
     'Place locations from OpenBible.info Bible Geocoding, CC BY 4.0. Base map from Natural Earth, public domain.';
 
   /**
-   * Assets smaller than this were decoded where they were in Flutter. The
-   * PWA decodes inline either way and leaves a worker to the caller; the
-   * threshold is kept for whoever adds one.
+   * The size above which decoding would be worth a worker of its own.
+   * Nothing uses it yet: the asset is decoded inline whatever its size,
+   * and the threshold is kept for whoever adds a worker.
    */
   static readonly isolateAbove = 64 * 1024;
 
@@ -49,10 +49,9 @@ export class Atlas {
   private async read(): Promise<AtlasData> {
     try {
       const bytes = await this.bundle.load(Atlas.assetPath);
-      // A megabyte and a half of JSON is too much to unpack on the thread
-      // that is drawing, so in Flutter the real asset went to a worker —
-      // which on the web is the same thread. Here it is decoded inline and
-      // a caller that wants a worker imports `decodeAtlas` from one.
+      // A megabyte and a half of JSON is a lot to unpack on the thread
+      // that is drawing. It is decoded inline all the same, and a caller
+      // that wants a worker imports `decodeAtlas` from one.
       return decodeAtlas(bytes);
     } catch (error) {
       console.warn(`OpenWord: could not read the atlas: ${error}`);
@@ -444,8 +443,8 @@ export class AtlasData {
   }
 }
 
-// Dart's casts (`raw! as List<Object?>`) throw on the wrong shape, and the
-// loader turns that into an empty atlas; these do the same.
+// These throw on the wrong shape, and the loader turns that into an empty
+// atlas rather than a half-read one.
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);

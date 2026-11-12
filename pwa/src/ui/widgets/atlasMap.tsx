@@ -4,13 +4,13 @@ import { type AtlasData, type BaseMap, GeoBox, type GeoRun, type Place } from '.
 import { currentScheme, hexOf, rgba } from '../m3';
 import './atlasMap.css';
 
-/** A width and a height, in CSS pixels — Flutter's `Size`. */
+/** A width and a height, in CSS pixels. */
 export interface Size {
   readonly width: number;
   readonly height: number;
 }
 
-/** A point on the canvas, in CSS pixels — Flutter's `Offset`. */
+/** A point on the canvas, in CSS pixels. */
 export interface Offset {
   readonly x: number;
   readonly y: number;
@@ -140,7 +140,7 @@ export class MapCamera {
     });
   }
 
-  /** Dart's `operator ==`. */
+  /** Whether `other` holds the same values as this. */
   equals(other: MapCamera | null | undefined): boolean {
     return (
       other != null &&
@@ -176,7 +176,7 @@ export function boxAround(places: Iterable<Place>, options: { minimumSpan?: numb
   return new GeoBox(west - growX, south - growY, east + growX, north + growY);
 }
 
-/** What the map can be asked to do from outside — Flutter's `AtlasMapState`. */
+/** What the map can be asked to do from outside. */
 export interface AtlasMapHandle {
   readonly camera: MapCamera | null;
   zoomBy(factor: number): void;
@@ -527,7 +527,7 @@ export function AtlasMap({ data, places, selected = null, onSelected, controller
   );
 }
 
-/** Flutter's `Color.alphaBlend` of `fg` at `alpha` over an opaque `bg`, as ARGB. */
+/** `fg` at `alpha` laid over an opaque `bg`, as ARGB. */
 function alphaBlend(fg: number, alpha: number, bg: number): number {
   const mix = (shift: number) => {
     const f = (fg >> shift) & 0xff;

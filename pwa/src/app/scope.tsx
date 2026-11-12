@@ -7,8 +7,8 @@ import type { AppUpdates } from '../pwa/serviceWorker';
 import type { AccountController } from '../data/account';
 
 /**
- * Makes the app-wide stores available to the component tree — Flutter's
- * `AppScope.of(context)`, as a Preact context.
+ * Makes the app-wide stores available to the component tree, as a Preact
+ * context.
  *
  * Each store is a `ChangeNotifier`; a component listens to the one it
  * cares about with `useNotifier(store)` rather than re-rendering the whole

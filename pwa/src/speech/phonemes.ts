@@ -1,7 +1,6 @@
 /**
  * Words to IPA, through eSpeak NG — the same front end KittenTTS was
- * trained with and sherpa-onnx gives the native app — compiled to
- * WebAssembly by the `phonemizer` package.
+ * trained with — compiled to WebAssembly by the `phonemizer` package.
  *
  * eSpeak's phonemizer splits its output at every clause and drops the
  * punctuation, and the model wants the punctuation: a comma or a full stop

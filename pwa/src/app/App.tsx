@@ -20,7 +20,7 @@ interface Booted extends AppScopeValue {
   prefs: Prefs;
 }
 
-/** Loads the stores, as `main()` does in the Flutter app. */
+/** Loads the stores the whole app reads from. */
 async function boot(): Promise<Booted> {
   const prefs = Prefs.open();
   const settings = await Settings.load(prefs);
