@@ -4,8 +4,8 @@ import { appUpdates } from './serviceWorker';
  * Notifications: permission, push subscriptions through the service worker,
  * and a notification shown from the page.
  *
- * The one thing a web app cannot do is what the Flutter app's reminder
- * does — fire a notification at a chosen time with nothing running. A page
+ * The one thing a web app cannot do is fire a notification at a chosen
+ * time with nothing running. A page
  * can only schedule while it is open, and a service worker runs only in
  * answer to an event (a fetch, a push, a click). So a reminder before a
  * streak breaks has to come as a push from the server, which knows the

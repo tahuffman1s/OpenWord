@@ -1,6 +1,5 @@
-/* What the reader's bottom sheets share: the heights Flutter gave them as
-   a fraction of the screen (FractionallySizedBox), and a column that fills
-   the sheet under its handle. */
+/* What the reader's bottom sheets share: their heights, each a fraction
+   of the screen, and a column that fills the sheet under its handle. */
 .m3-sheet.ow-sheet--h92 { height: 92%; }
 .m3-sheet.ow-sheet--h90 { height: 90%; }
 .m3-sheet.ow-sheet--h88 { height: 88%; }

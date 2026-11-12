@@ -83,7 +83,13 @@ export const BibFile = {
 
   // ---------------------------------------------------------------- writing
 
-  /** Packs a whole Bible. See the Dart original for what each option does. */
+  /**
+   * Packs a whole Bible. `compress` gzips each book and the search index,
+   * and is on unless told otherwise; so is `searchable`, which writes the
+   * `srch` index. `created` is stamped into the metadata, and left out the
+   * same Bible encodes to the same bytes. `carry` is the ancillary chunks
+   * to write after the rest: the Bible's own where it is not given.
+   */
   encode(bible: Bible, options: EncodeOptions = {}): Uint8Array {
     const compress = options.compress ?? true;
     const searchable = options.searchable ?? true;

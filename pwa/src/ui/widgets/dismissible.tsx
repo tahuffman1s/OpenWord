@@ -4,9 +4,9 @@ import { Icon } from '../m3/icon';
 import './dismissible.css';
 
 /**
- * Flutter's `Dismissible`, end to start: a row that is swiped away to the
- * left, showing what the swipe does behind it — a bin on the error
- * colour — and gone once dragged far enough or flung.
+ * A row that is swiped away to the left, showing what the swipe does
+ * behind it — a bin on the error colour — and gone once dragged far
+ * enough or flung.
  *
  * A drag that is mostly up and down is left to the list, so the page still
  * scrolls under the finger; a tap that never became a drag is the row's own.

@@ -6,9 +6,9 @@ a phone app, and arranged so that opening one costs the book being read
 rather than the whole Bible.
 
 This document is the specification. The reference implementation is
-[`lib/src/model/bib_file.dart`](../lib/src/model/bib_file.dart) and
-[`lib/src/model/bible_codec.dart`](../lib/src/model/bible_codec.dart), both
-MIT, and [`test/corpus/`](../test/corpus/) holds files any other
+[`pwa/src/model/bibFile.ts`](../pwa/src/model/bibFile.ts) and
+[`pwa/src/model/bibleCodec.ts`](../pwa/src/model/bibleCodec.ts), both
+MIT, and [`pwa/test/corpus/`](../pwa/test/corpus/) holds files any other
 implementation can test itself against.
 
 All integers are unsigned. Fixed-width fields are big-endian. Everything
@@ -126,7 +126,7 @@ deuterocanon while agreeing about everything else, so counting it would
 raise a false alarm. Editions of the English Bible differ from each other
 over about 0.2% of chapters; a difference in *scheme* is an order of
 magnitude larger, so the line sits at 2%. See
-`lib/src/model/versification_check.dart`.
+[`pwa/src/model/versificationCheck.ts`](../pwa/src/model/versificationCheck.ts).
 
 ## `TEXT`
 
@@ -315,7 +315,7 @@ more than not having the index at all. The chunk is 116 kB gzipped on a
 Cross-references anchored to *this translation's* verse numbering. The
 payload is a gzipped `OWX` set — the same encoding the app's own bundled
 references use, specified in
-[`lib/src/model/xref_codec.dart`](../lib/src/model/xref_codec.dart).
+[`pwa/src/model/xrefCodec.ts`](../pwa/src/model/xrefCodec.ts).
 
 A reader should prefer these over any set of its own. They are right by
 construction: a reference set is anchored to one numbering, and the file
@@ -324,16 +324,11 @@ differently from a reader's built-in set, this is the difference between
 having cross-references and not — the alternative is to withhold them,
 since pointing at the wrong verse is worse than pointing nowhere.
 
-Attach a set with:
-
-```bash
-dart run tool/attach_xrefs.dart <file.bib> <xrefs.owx.gz>
-```
-
-It reads the set, rewrites the file, reads the result back and compares
-before replacing anything. OpenWord itself does the same to a copy, from a
-translation's menu in Settings, and refuses where the numbering it measured
-says the set would not fit.
+OpenWord attaches its own set to a copy of a translation, from the
+translation's menu in Settings (*Save a copy with the study layers…*,
+`pwa/src/data/bibExport.ts`). It reads the set, rewrites the file and reads
+the result back before handing it over, and refuses where the numbering it
+measured says the set would not fit.
 
 A writer must carry chunks it does not understand through a rewrite, or a
 translation would silently lose its references the first time anything
@@ -344,7 +339,7 @@ touched the file.
 The original-language text behind this translation's verses, keyed to
 *this translation's* verse numbering. The payload is a gzipped `OWS`
 layer — the same encoding the app's own bundled asset uses, specified in
-[`lib/src/model/strongs_codec.dart`](../lib/src/model/strongs_codec.dart).
+[`pwa/src/model/strongsCodec.ts`](../pwa/src/model/strongsCodec.ts).
 
 It holds three things, each indexed so that a reader can seek rather than
 unpack all of it:
@@ -370,16 +365,11 @@ not there are dead weight, and so is every dictionary entry and concordance
 line only they reached. Trimming the app's own layer takes it from 3.94 MB
 to 1.08 MB for a New Testament, and to 0.15 MB for a single gospel.
 
-Attach a layer with:
-
-```bash
-dart run tool/attach_originals.dart <file.bib> <originals.ows.gz>
-```
-
-It reads the layer, cuts it to the verses the Bible has, rewrites the file,
-reads the result back and compares before replacing anything. OpenWord does
-the same to a copy, from a translation's menu in Settings, and refuses where
-the numbering it measured says the layer would not fit.
+OpenWord attaches its own layer to a copy of a translation, from the same
+item of the translation's menu. It reads the layer, cuts it to the verses
+the Bible has, rewrites the file and reads the result back before handing
+it over, and refuses where the numbering it measured says the layer would
+not fit.
 
 The deuterocanonical books have no layer: they are in neither the Hebrew
 Bible nor the Greek New Testament as this app carries them. A verse with no
@@ -408,27 +398,27 @@ without unpacking all of them.
 A version 1 file says nothing about language, direction or versification. A
 reader must fall back rather than invent: `en`, `ltr`, unknown.
 
-`dart run tool/upgrade_bib.dart <file.bib>` rewrites one as version 2, and
-compares the result with the original verse by verse before replacing it.
+OpenWord still reads a version 1 file, and keeps one that is imported
+exactly as it came. Whatever it writes itself is version 2.
 
 ## Checking a file
 
-```bash
-dart run tool/bib_lint.dart <file.bib>
-```
-
-It reports the version, the chunks, whether every checksum matches, whether
-the outline agrees with the text it stands for, and whether the metadata's
-counts and `contentHash` describe what is actually in the file.
+A file is sound when its version is one the reader knows, every chunk's
+CRC-32 matches its payload, the outline agrees with the text it stands for,
+and the metadata's counts and `contentHash` describe what is actually in
+the file. OpenWord checks the version and every chunk's checksum when a
+`.bib` is imported — the one moment the whole file is in hand — and refuses
+a file that fails.
 
 ## The corpus
 
-[`test/corpus/`](../test/corpus/) holds small files — the same two books in
+[`pwa/test/corpus/`](../pwa/test/corpus/) holds small files — the same two books in
 every one — named for what a reader is supposed to do with them: the three
 that must read alike, the unknown ancillary chunk that must be skipped, the
 unknown critical chunk that must not be, and the damaged, truncated,
-too-new and not-a-`.bib` files that must be refused. Regenerate with
-`dart run tool/build_bib_corpus.dart`.
+too-new and not-a-`.bib` files that must be refused. They are fixed: the
+app's own tests read them (`pwa/test/bibCorpus.test.ts`), and they are not
+regenerated.
 
 ## What this format is not
 

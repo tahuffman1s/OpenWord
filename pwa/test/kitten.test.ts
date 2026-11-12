@@ -87,8 +87,8 @@ describe('the style row', () => {
 });
 
 describe('speed', () => {
-  it('hands the model the rate itself, the prior cancelling as in the native app', () => {
-    // The engine passes rate / prior, as neural_speech.dart does.
+  it('hands the model the rate itself, the prior of the speaker cancelling out', () => {
+    // The engine passes rate / prior (NeuralSpeechEngine._configure).
     expect(modelSpeed(1 / 0.8, 1)).toBeCloseTo(1, 6);
     expect(modelSpeed(1.5 / 0.9, 4)).toBeCloseTo(1.5, 6);
   });

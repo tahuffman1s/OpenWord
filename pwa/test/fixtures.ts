@@ -20,10 +20,9 @@ import { OriginalWord, StrongsCodec, StrongsEntry, StrongsNumber, StrongsWriter 
 import { XrefAnchor, XrefCodec, XrefEntry, XrefRange } from '../src/model/xrefCodec';
 
 /**
- * The TypeScript twin of `test/fixtures.dart`. The Dart tests parse a small
- * USFX document; the USFX parser is build tooling and is not ported, so
- * `sampleBible()` builds the very Bible that parse yields, block for block,
- * as `lib/src/data/usfx_parser.dart` lays it out.
+ * The fixtures the tests share. `sampleBible()` builds a small Bible by
+ * hand, block for block as a small USFX document would parse to: there is
+ * no USFX parser here, since the bundled translations are built already.
  */
 
 export const testTranslation = new TranslationInfo({

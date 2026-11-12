@@ -47,7 +47,7 @@ export interface PopupMenuButtonProps extends Omit<IconButtonProps, 'onClick' | 
   onSelected?: (value: unknown) => void;
 }
 
-/** Flutter's PopupMenuButton: an icon button that drops a menu. */
+/** Material's PopupMenuButton: an icon button that drops a menu. */
 export function PopupMenuButton({ icon = 'more_vert', items, onSelected, ...rest }: PopupMenuButtonProps) {
   const ref = useRef<HTMLButtonElement>(null);
   return (

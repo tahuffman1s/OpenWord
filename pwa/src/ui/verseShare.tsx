@@ -4,7 +4,7 @@ import { Button, Chip, Sheet, currentScheme, hexOf, showSnackBar, useOverlay } f
 import { openSheet } from './overlaySettle';
 import './verseShare.css';
 
-/** What is handed to the share sheet — share_plus's `ShareParams`, as far as the app uses it. */
+/** What is handed to the share sheet: words, a subject for them, and files. */
 export interface ShareParams {
   text?: string;
   subject?: string;

@@ -159,7 +159,7 @@ export class ReferenceSearch {
   }
 }
 
-/** Dart's `num.clamp`. */
+/** `value`, kept between `low` and `high`. */
 function clamp(value: number, low: number, high: number): number {
   return Math.min(Math.max(value, low), high);
 }
@@ -177,7 +177,7 @@ export class ReferenceMatch {
   }
 }
 
-/** Dart's `RegExp.escape`. */
+/** Escapes `text` to match literally in a RegExp. */
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

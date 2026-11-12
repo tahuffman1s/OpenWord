@@ -1,20 +1,12 @@
 // Draws the app's icons — the open book of the splash screen on the
 // theme's primary container — and writes the PNGs the manifest names.
-// The Flutter app only ever had the framework's default logo.
 //
 //   node scripts/gen-app-icons.mjs      (needs Playwright's Chromium)
-import { createRequire } from 'node:module';
+import { chromium } from './playwright.mjs';
 import { readFileSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
-const require = createRequire(import.meta.url);
-let chromium;
-try {
-  ({ chromium } = require('playwright'));
-} catch {
-  ({ chromium } = require('/opt/node-tools/node_modules/playwright'));
-}
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const glyph = readFileSync(join(root, 'node_modules/@material-design-icons/svg/round/auto_stories.svg'), 'utf8')
   .replace(/^<svg[^>]*>/, '')

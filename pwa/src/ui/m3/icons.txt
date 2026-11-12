@@ -1,5 +1,5 @@
 # One icon per line: "<style>/<name>" or just "<name>" for the rounded set.
-# Flutter's Icons.foo_rounded → foo, Icons.foo_outlined → outlined/foo,
+# Material's Icons.foo_rounded → foo, Icons.foo_outlined → outlined/foo,
 # Icons.foo → filled/foo. Re-run `node scripts/gen-icons.mjs` after editing.
 ac_unit
 account_circle

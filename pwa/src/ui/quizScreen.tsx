@@ -49,7 +49,7 @@ function haptic(millis: number): void {
   }
 }
 
-/** A round's state: what `_QuizScreenState` holds in the Dart. */
+/** A round's state: the questions, where the round has got to, and what was missed. */
 class QuizRound extends ChangeNotifier {
   questions: readonly QuizQuestion[] = [];
   index = 0;

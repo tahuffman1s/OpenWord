@@ -1,8 +1,7 @@
 /**
  * The voice's model, run on a worker of its own so that making speech never
- * holds up the screen — the native app's isolate (`Synthesiser._serve` in
- * neural_speech.dart), with sherpa-onnx swapped for onnxruntime-web and
- * eSpeak NG from the `phonemizer` package.
+ * holds up the screen: onnxruntime-web runs the network, and eSpeak NG
+ * from the `phonemizer` package makes the phonemes.
  *
  * Messages in:
  *   { type: 'load', files: { model, voices, tokens }, wasmPaths? }
@@ -15,8 +14,8 @@
  *       Answered by { type: 'audio', id, samples: Float32Array,
  *       sampleRate, ms } with the samples' buffer transferred, by
  *       { type: 'error', id, message }, or by { type: 'cancelled', id }.
- *       `speed` is what the native app hands sherpa-onnx: the rate over
- *       the speaker's prior; the prior is multiplied back in here.
+ *       `speed` is the rate over the speaker's prior, as the engine
+ *       sends it; the prior is multiplied back in here.
  *   { type: 'cancel', id }   Drops a request not yet begun.
  *   { type: 'close' }        Frees the model.
  *

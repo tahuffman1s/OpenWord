@@ -1,10 +1,12 @@
 # The voice
 
-How OpenWord reads aloud in the browser: the port of `lib/src/data/neural_speech.dart`,
-with sherpa-onnx and audioplayers swapped for a Web Worker running onnxruntime-web and
-the Web Audio API. The reader (`src/data/readAloud.ts`) and the engine
-(`src/data/neuralSpeech.ts`) keep the Dart's structure and names; only the two leaf
-layers — making the samples, and playing them — are new.
+How OpenWord reads aloud in the browser. A neural text-to-speech model, KittenTTS, runs
+on a Web Worker with onnxruntime-web; eSpeak NG, compiled to WebAssembly in the
+`phonemizer` package, turns the words into the sounds the model speaks; and the Web
+Audio API plays what comes back. Three layers sit on top of each other: the reader
+(`src/data/readAloud.ts`) decides what is read and where it has got to, the engine
+(`src/data/neuralSpeech.ts`) cuts the text into pieces and keeps them playing end to
+end, and this directory holds the two leaves — making the samples, and playing them.
 
 ## The pipeline
 
@@ -36,14 +38,16 @@ speakers
   model falls behind.
 - **Falling behind.** The worker reports how long each piece took; `Synthesiser` smooths
   `took / lasts` and after four pieces calls it `fallingBehind` above 1.05. `NeuralVoices`
-  tells the UI once per model, as the Dart does. On the machine this was written on,
+  tells the UI once per model. On the machine this was written on,
   single-threaded wasm made 4.2 s of speech in 3.3 s (0.8× real time).
 - **Phonemes.** eSpeak runs on the worker where it can. The worker's `ready` reply says
   whether it loaded; if not, `Synthesiser` phonemizes on the main thread and sends the
   phonemes with each request (`speak.phonemes`). In Chromium it loads on the worker.
-- **Speed.** The engine passes `rate / speaker.prior` exactly as the Dart does for
-  sherpa-onnx, and `modelSpeed` multiplies the prior back in before the tensor is made, so
-  1× is the pace the voice was trained at and the two apps sound the same.
+- **Speed.** The model's metadata gives each speaker a speed prior, which sherpa-onnx (the
+  runtime these model files were packaged for) multiplies into the speed it is asked for.
+  The engine passes `rate / speaker.prior` and `modelSpeed` multiplies the prior back in
+  before the tensor is made, so the prior cancels and 1× is the pace the voice was trained
+  at.
 
 ## Worker protocol (`ttsWorker.ts`)
 
@@ -106,8 +110,9 @@ the RMS (> 0.01), printing the synthesis time. `vite build` leaves the harness o
   makes and resumes the shared AudioContext on the first tap anywhere on the page.
 - **Media session.** Lock-screen and headset controls (`src/data/readAloudSession.ts`)
   are active only while the page plays audio; a silent loop at near-zero gain keeps the
-  context running between pieces. Android Auto / CarPlay listing (car.dart) is not
-  possible for a web page and is not ported.
+  context running between pieces. A web page cannot be an Android Auto or CarPlay app,
+  so there is no browsable list on a car's screen; a car's media buttons work like a
+  headset's, through the same session.
 - **Device voices.** `src/data/webSpeechEngine.ts` wraps `speechSynthesis` for browsers
   that cannot run the model, or when a device voice is chosen. It cannot pause reliably
   (`canPause` is false, so the reader resumes from the word reached), and Chrome's

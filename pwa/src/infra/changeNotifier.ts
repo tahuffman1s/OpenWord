@@ -3,7 +3,7 @@ import { useEffect, useReducer } from 'preact/hooks';
 export type Listener = () => void;
 
 /**
- * Flutter's ChangeNotifier, so the stores port one for one: anything with
+ * Something that can be listened to for changes: anything with
  * state the UI shows extends this and calls `notifyListeners()` after a
  * change, and a component reads it through `useNotifier`.
  */
@@ -57,7 +57,7 @@ export class ValueNotifier<T> extends ChangeNotifier {
 
 /**
  * Re-renders the calling component whenever any of the notifiers given
- * changes — Flutter's AnimatedBuilder, as a hook. Nulls are skipped, so a
+ * changes. Nulls are skipped, so a
  * component can listen to something that may not exist yet.
  */
 export function useNotifier(...notifiers: (ChangeNotifier | null | undefined)[]): void {

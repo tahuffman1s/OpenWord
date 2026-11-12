@@ -1,23 +1,23 @@
 /**
- * Dart's `Random`, as the port carries it: a source of numbers in [0, 1),
- * injected so that a test can fix what the app draws at random.
+ * A source of random numbers in [0, 1), injected so that a test can fix
+ * what the app draws at random.
  *
  * `Math.random` is the default everywhere; `seededRandom` stands in for
- * `Random(seed)` where a test wants the same draw twice.
+ * it where a test wants the same draw twice.
  */
 export type RandomSource = () => number;
 
-/** `Random.nextInt(max)`: an integer from 0 up to but not including `max`. */
+/** An integer from 0 up to but not including `max`. */
 export function nextInt(random: RandomSource, max: number): number {
   return Math.floor(random() * max);
 }
 
-/** `Random.nextBool()`. */
+/** True or false, as likely one as the other. */
 export function nextBool(random: RandomSource): boolean {
   return random() < 0.5;
 }
 
-/** Dart's `List.shuffle(random)`, in place and by the same walk. */
+/** Shuffles `list` in place, drawing from `random`: a Fisher–Yates walk from the end. */
 export function shuffle<T>(list: T[], random: RandomSource): T[] {
   let length = list.length;
   while (length > 1) {
@@ -32,7 +32,7 @@ export function shuffle<T>(list: T[], random: RandomSource): T[] {
 
 /**
  * A small, fast generator (mulberry32) that gives the same run of numbers
- * for the same seed: what `Random(seed)` is for in the Dart tests.
+ * for the same seed, which is what a test needs to ask for the same draws.
  */
 export function seededRandom(seed: number): RandomSource {
   let state = seed >>> 0;

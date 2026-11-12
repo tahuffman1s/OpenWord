@@ -10,7 +10,7 @@ interface TileText {
   class?: string;
 }
 
-/** Flutter's `RadioListTile`: the radio leads, and the whole row chooses. */
+/** A list row with a radio: the radio leads, and the whole row chooses. */
 export function RadioListTile({ checked, onSelect, trailing, ...text }: TileText & { checked: boolean; onSelect: () => void; trailing?: ComponentChildren }) {
   return (
     <ListTile
@@ -22,12 +22,12 @@ export function RadioListTile({ checked, onSelect, trailing, ...text }: TileText
   );
 }
 
-/** Flutter's `CheckboxListTile` with the box trailing. */
+/** A list row with a checkbox trailing; the whole row ticks and unticks it. */
 export function CheckboxListTile({ value, onChange, ...text }: TileText & { value: boolean; onChange: (value: boolean) => void }) {
   return <ListTile {...text} trailing={<Checkbox value={value} onChange={onChange} />} onClick={() => onChange(!value)} />;
 }
 
-/** Flutter's `SwitchListTile`. */
+/** A list row with a switch trailing; the whole row turns it on and off. */
 export function SwitchListTile({ value, onChange, icon, ...text }: TileText & { value: boolean; onChange: (value: boolean) => void; icon?: string }) {
   return <ListTile {...text} icon={icon} trailing={<Switch value={value} onChange={onChange} />} onClick={() => onChange(!value)} />;
 }

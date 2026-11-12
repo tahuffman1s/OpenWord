@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { parseInline, parseMarkdown, type MarkdownBlock } from '../src/ui/widgets/simpleMarkdown';
 
 /**
- * The plain text of everything a source renders as, in order: what the
- * Dart test reads off the screen's RichTexts. A list item is its marker,
- * then its text; a rule has no text at all.
+ * The plain text of everything a source renders as, in order: what would
+ * be read off the screen. A list item is its marker, then its text; a
+ * rule has no text at all.
  */
 function rendered(source: string): string[] {
   const out: string[] = [];

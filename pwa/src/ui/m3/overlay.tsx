@@ -4,7 +4,7 @@ import { ChangeNotifier, useNotifier } from '../../infra/changeNotifier';
 import { IconButton, TextButton } from './buttons';
 
 /**
- * Flutter's Navigator, bottom sheets, dialogs, menus and snackbars, as one
+ * Pushed screens, bottom sheets, dialogs, menus and snackbars, as one
  * stack of overlays over the root screen.
  *
  * Every pushed thing — a screen, a sheet, a dialog, a menu — is one entry
@@ -12,14 +12,14 @@ import { IconButton, TextButton } from './buttons';
  * button and the browser's back arrow close the top one, which is what a
  * reader expects of an installed app. `push` answers a promise that
  * settles with whatever `pop(result)` is given, so a sheet can be awaited
- * the way `showModalBottomSheet` is.
+ * for its answer.
  */
 export type OverlayKind = 'screen' | 'sheet' | 'dialog' | 'menu';
 
 export interface OverlayOptions {
   /** Tapping the scrim or pressing Escape closes it. Default true. */
   dismissible?: boolean;
-  /** A sheet that fills the height, as `isScrollControlled` + full height. */
+  /** A sheet that fills the height. */
   full?: boolean;
   /** Where a menu is anchored: the element it drops from. */
   anchor?: HTMLElement | { x: number; y: number };
@@ -234,7 +234,7 @@ class OverlayStack extends ChangeNotifier {
 
 export const overlays = new OverlayStack();
 
-/** Flutter's `Navigator.of(context)`, app-wide. */
+/** The app's one navigator: pushes full screens and pops whatever is on top. */
 export const nav = {
   /** Pushes a full screen; settles when it is popped. */
   push<T = void>(screen: VNode, options: OverlayOptions = {}): Promise<T | undefined> {
@@ -322,7 +322,7 @@ class SnackBarQueue extends ChangeNotifier {
 
 export const snackBars = new SnackBarQueue();
 
-/** Flutter's `ScaffoldMessenger.showSnackBar`. */
+/** Shows a snackbar: a line along the bottom, with an action if one is given. */
 export function showSnackBar(message: string, options?: SnackBarOptions): void {
   snackBars.show(message, options);
 }

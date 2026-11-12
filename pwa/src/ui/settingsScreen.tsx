@@ -538,9 +538,8 @@ function builtLine(builtAt: string): string {
  * The state of the app's own updating: which build is running, whether a
  * newer one is waiting, and the button that goes and looks.
  *
- * In the Flutter app this asked GitHub for a release to download; a web
- * app is updated by its service worker, which fetches the new build in the
- * background and waits to be let in.
+ * A web app is updated by its service worker, which fetches the new build
+ * in the background and waits to be let in.
  */
 function UpdateRow({ updates }: { updates: AppUpdates }) {
   const [looked, setLooked] = useState(false);
@@ -925,8 +924,8 @@ const libraries: readonly [string, string][] = [
 
 /**
  * Every licence in full: the app's own, the voice's — KittenTTS, eSpeak NG
- * and ONNX Runtime, read from the bundled texts — and the fonts'. Flutter
- * gathered its packages' licences into a page of its own; this is that page.
+ * and ONNX Runtime, read from the bundled texts — and the fonts', with the
+ * other libraries the page is built with named beside the licence of each.
  */
 export function LicencesScreen() {
   const { library, updates } = useAppScope();
@@ -978,7 +977,7 @@ export interface LicenceBlock {
  * A licence's text as paragraphs. The texts are wrapped by hand at some
  * seventy columns, which a phone would wrap again into ragged halves; the
  * lines of a paragraph are run together instead, and a line pushed well
- * in — a title — is set in the middle, as Flutter's licence page does it.
+ * in — a title — is set in the middle.
  */
 export function licenceBlocks(text: string): LicenceBlock[] {
   const blocks: LicenceBlock[] = [];

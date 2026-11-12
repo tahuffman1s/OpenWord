@@ -5,15 +5,15 @@ import type { QuizKind, QuizQuestion } from '../model/quiz';
 /**
  * The screens and widgets the reader opens but does not own.
  *
- * They are being ported alongside it, so each is looked for rather than
- * imported outright: `import.meta.glob` answers nothing for a file that is
- * not there yet, where a plain import would stop the reader compiling. As
- * each lands at the path named here, with the export named here, the
- * reader picks it up without a change. Once they are all in, these can
- * become ordinary imports.
+ * Each is looked for rather than imported outright: `import.meta.glob`
+ * answers nothing for a file that is not there, where a plain import
+ * would stop the reader compiling, so the reader builds and runs with any
+ * of them left out. Each is found at the path named here, by the export
+ * named here. All of them are in the tree now, so these could become
+ * ordinary imports.
  */
 
-/** A plan chapter the reader was sent to read — `PlanReading` of `plans_screen.dart`. */
+/** A plan chapter the reader was sent to read, and the plan day it belongs to. */
 export interface PlanReading {
   planId: string;
   day: number;
@@ -49,7 +49,7 @@ export interface PosttestCardProps {
 
 export interface SimpleMarkdownProps {
   source: string;
-  /** The typescale class the prose is set in, as the Dart's `baseStyle`. */
+  /** The typescale class the prose is set in. */
   baseStyle?: string;
 }
 

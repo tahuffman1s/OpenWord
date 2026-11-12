@@ -43,9 +43,20 @@
   refreshes it, or on reinstalling.
 
 ### Changed
-- `deploy/` now serves the PWA and its API. The Flutter web build is
-  still made by the release workflow, but is no longer what `deploy/`
-  runs.
+- **OpenWord is the web app and its two Docker images.** `main` is built
+  into `openword-web` and `openword-api`, started as a whole stack with
+  Postgres, tested over HTTP and in a browser, and only then published to
+  the GitHub Container Registry for arm64 and amd64. `latest` follows
+  `main`. `openword check` runs the same HTTP test against your own
+  instance.
+
+### Removed
+- **The native apps.** The Flutter builds for Android, iOS, Linux, macOS
+  and Windows, the Dart tools that built the bundled data, and the
+  release workflow for APKs and desktop bundles are gone; Android Auto
+  went with the Android build. The translations, maps, references and
+  originals under `assets/` stay as they are. Everything removed is in
+  the history at commit `51e8e36`.
 
 ## 1.30.0
 

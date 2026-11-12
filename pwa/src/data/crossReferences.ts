@@ -48,8 +48,8 @@ export class CrossReferences {
    * brought them, the bundled English set where its numbering allows
    * (`anchored`), and none at all otherwise.
    *
-   * The same rule the Flutter reader applies in its `_references` getter;
-   * here so every screen that wants references makes the same choice.
+   * Kept here, in one place, so every screen that wants references makes
+   * the same choice.
    */
   static forTranslation(bible: Bible, bundled: CrossReferences, anchored: boolean): CrossReferences | null {
     const chunk = bible.extras.get(CrossReferences.chunkTag);
@@ -67,10 +67,10 @@ export class CrossReferences {
     'Cross-references from CrossReferences.org, after the Treasury of Scripture Knowledge, CC BY 4.0.';
 
   /**
-   * Anything smaller than this was decoded where it stood in Flutter, so
-   * that a test fixture did not wait on an isolate. The PWA decodes inline
-   * either way and leaves a worker to the caller; the threshold is kept
-   * for whoever adds one.
+   * The size above which decoding would be worth a worker of its own.
+   * Nothing uses it yet: the asset is decoded inline whatever its size,
+   * and a worker is left to the caller. The threshold is kept for whoever
+   * adds one.
    */
   static readonly isolateAbove = 64 * 1024;
 

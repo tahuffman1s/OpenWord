@@ -100,6 +100,7 @@ tunnel, and the tunnel is a connection the Pi makes outwards.
 | `nginx.conf` | how the files are served and `/api/` is proxied |
 | `.env.example` | every setting, commented |
 | `backup.sh`, `restore.sh` | database dump and reload |
+| `smoke.sh` | tests a running stack from outside; CI runs it on every build, and so does `openword check` |
 
 The API's own image is `../server/Dockerfile`.
 
@@ -223,12 +224,16 @@ curl -fsSL .../install.sh | bash -s -- --lan
 questions again), `--prebuilt`, `--branch NAME`, `--dir PATH`,
 `--allow-root`, `--help`.
 
-**Prebuilt images.** Every release tag, GitHub Actions builds both images
-for arm64 and amd64 and pushes them to `ghcr.io/tahuffman1s/openword-web`
-and `openword-api` (`.github/workflows/deploy-images.yml`). With
-`OPENWORD_PREBUILT=1` the Pi pulls those instead of building: a few
-minutes rather than fifteen, and no need for swap. This only works once a
-release has been published and the two packages have been made public.
+**Prebuilt images.** Every change to `main` is built by GitHub Actions
+into two images, run as a whole stack and tested, and only then pushed to
+`ghcr.io/tahuffman1s/openword-web` and `openword-api`, for arm64 and amd64
+(`.github/workflows/ci.yml`). With `OPENWORD_PREBUILT=1` (or `--prebuilt`)
+the Pi pulls those instead of building: a few minutes rather than fifteen,
+and no need for swap. The tag `latest` follows `main`; a release tag such
+as `v2.0.0` is published under its own name. This only works once the two
+packages have been made public (repository → Packages → the package →
+Package settings → Change visibility); until then a Pi would need
+`docker login ghcr.io` to pull them.
 
 **Unattended.** With `OPENWORD_NONINTERACTIVE=1` (or with no terminal at
 all) nothing is asked and settings come from the environment:
@@ -250,6 +255,7 @@ that clone where it is, and leaves its git state alone.
 ```
 openword update              pull the latest version, rebuild, restart
 openword status              what is running and how much memory it uses
+openword check               test the running app from outside
 openword logs [service]      follow the logs (web, api, db, cloudflared)
 openword backup              dump the database to deploy/backups/
 openword restore <file>      load a dump back in
@@ -285,8 +291,9 @@ If `git pull` refuses because you edited a tracked file, `git -C ~/openword
 stash` puts your edit aside. `deploy/.env` and `deploy/backups/` are not
 tracked and are never touched by an update.
 
-To follow a release rather than `main` when using prebuilt images, set
-`OPENWORD_VERSION=v2.0.0` in `deploy/.env`.
+With prebuilt images, `latest` is whatever `main` last passed its tests
+as. To hold a Pi at one release instead, set `OPENWORD_VERSION=v2.0.0` in
+`deploy/.env`.
 
 ## Backups and restoring
 
@@ -452,6 +459,12 @@ bump it there from time to time.
 hashes. Store copies with the same care as the database.
 
 ## Troubleshooting
+
+**Start with `openword check`.** It tests the running app from outside, the
+way a browser meets it — the app's files, what it keeps for offline, the
+voice, the headers the voice's threads need, and the API with the database
+behind it — and names whatever fails. It makes one throwaway account and
+deletes it again.
 
 **The build dies with "Killed", exit code 137, or the Pi freezes.** Out of
 memory. Check `free -m`: if Swap is 0 or small, run the installer again and

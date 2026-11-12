@@ -2,9 +2,8 @@ import { ReadingFont, type Settings } from '../data/settings';
 
 /**
  * The reader's body type as an inline style, for Scripture shown outside
- * the reader: a verse to learn, a question's prompt. `ScriptureStyle.of
- * (context, settings).body` in the Dart: the reading face, 17.5 px times
- * the reader's scale, at their line spacing.
+ * the reader: a verse to learn, a question's prompt. It is the reading
+ * face, 17.5 px times the reader's scale, at their line spacing.
  */
 export function scriptureBodyStyle(settings: Settings, scale = 1): string {
   const family =

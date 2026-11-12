@@ -34,14 +34,14 @@ export const LocalDate = {
   },
 
   /**
-   * Dart's `later.difference(earlier).inDays`: whole days, truncated
+   * How many days `later` is after `earlier`: whole days, truncated
    * towards zero, so negative when `later` is the earlier of the two.
    */
   daysBetween(later: Date, earlier: Date): number {
     return Math.trunc((later.getTime() - earlier.getTime()) / millisPerDay);
   },
 
-  /** `date.add(Duration(days: days))`; negative days subtract. */
+  /** `date` moved on by `days` days; negative days go back. */
   addDays(date: Date, days: number): Date {
     return new Date(date.getTime() + days * millisPerDay);
   },

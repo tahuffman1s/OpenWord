@@ -30,7 +30,7 @@ function randomPiece(random: RandomSource, index: number): Piece {
   };
 }
 
-/** The pieces a shower is made of: the same every time, as `Random(7)` made them. */
+/** The pieces a shower is made of: the same every time, drawn from one fixed seed. */
 export function confettiPieces(count: number): Piece[] {
   const random = seededRandom(7);
   const pieces: Piece[] = [];

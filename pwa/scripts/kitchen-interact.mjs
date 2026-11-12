@@ -1,5 +1,4 @@
-import { createRequire } from 'node:module';
-const { chromium } = createRequire(import.meta.url)('/opt/node-tools/node_modules/playwright');
+import { chromium } from './playwright.mjs';
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 412, height: 915 } });
 const errors = [];

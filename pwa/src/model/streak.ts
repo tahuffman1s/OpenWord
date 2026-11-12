@@ -120,7 +120,7 @@ export class Streak {
     });
   }
 
-  /** Dart's `operator ==`. */
+  /** Whether `other` holds the same values as this. */
   equals(other: Streak | null | undefined): boolean {
     return (
       other != null &&

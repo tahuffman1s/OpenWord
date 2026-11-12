@@ -2,10 +2,10 @@ import { Bible, Block, BlockStyle, Book, Chapter, Markup, TranslationInfo, type 
 import { BookMeta } from '../src/model/bookMeta';
 
 /**
- * The Dart tests' USFX fixture, as the model it parses to: Genesis with
+ * A small Bible for the read-aloud tests, built by hand: Genesis with
  * two chapters, the first exercising a heading, a footnote, translator
- * additions and paragraph styles, and a Psalm. The USFX parser is not
- * ported yet; the verse texts here are what it would give.
+ * additions and paragraph styles, and a Psalm. The verse texts are what
+ * parsing the same passages from USFX would give.
  */
 export const testTranslation = new TranslationInfo({
   id: 'eng-web',

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { BibFile, BibFormatException } from '../src/model/bibFile';
 import { Versification, type Bible } from '../src/model/bible';
 
-const load = (name: string) => new Uint8Array(readFileSync(new URL(`../../test/corpus/${name}`, import.meta.url)));
+const load = (name: string) => new Uint8Array(readFileSync(new URL(`./corpus/${name}`, import.meta.url)));
 
 function expectTheSample(bible: Bible) {
   expect(bible.books.map((b) => b.code)).toEqual(['GEN', 'JHN']);

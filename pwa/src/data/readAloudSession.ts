@@ -11,12 +11,12 @@ import { ReadAloud, ReadAloudState } from './readAloud';
  * In a browser that is the Media Session API: the page's metadata and
  * action handlers are what the lock screen, the notification shade, a
  * Bluetooth headset's buttons and a car's steering-wheel controls drive,
- * and that is the extent of it. The native app's Android Auto and
- * CarPlay listing (car.dart) — a browsable tree of books and chapters,
- * and "play Psalm 23" said to the car — has no counterpart for a web
- * page: a browser cannot register as a media app with a car, so car.dart
- * is not ported. What a car does get is the same as a headset: play,
- * pause, next and previous, through the session.
+ * and that is the extent of it. A web app cannot be an Android Auto or
+ * CarPlay app: a browser cannot register as a media app with a car, so
+ * there is no browsable tree of books and chapters on the car's screen,
+ * and no "play Psalm 23" said to it. Media keys, headsets and a car's
+ * buttons work through the Media Session: play, pause, next and
+ * previous.
  *
  * A media session is only active while the page is playing audio. The
  * voice's own Web Audio output counts, but between pieces — while the

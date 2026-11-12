@@ -684,6 +684,7 @@ Usage: openword <command>
 
   update              pull the latest code (and images, if prebuilt), rebuild, restart
   status              what is running and how much memory it uses
+  check [url]         test the running app from outside: files, voice, API, database
   logs [service]      follow the logs (web, api, db, cloudflared)
   backup              dump the database to deploy/backups/<timestamp>.sql.gz
   restore <file>      load a dump back in (stops the API while it runs)
@@ -732,6 +733,7 @@ case "$cmd" in
     [ -z "$ids" ] || "${DOCKER[@]}" stats --no-stream $ids
     ;;
   logs) compose logs -f --tail=200 "$@" ;;
+  check) exec "$DEPLOY/smoke.sh" "${1:-$(app_url)}" ;;
   backup) exec "$DEPLOY/backup.sh" "$@" ;;
   restore) exec "$DEPLOY/restore.sh" "$@" ;;
   restart|stop|start) compose "$cmd" "$@" ;;

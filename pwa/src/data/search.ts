@@ -3,10 +3,10 @@ import { BookSection } from '../model/bookMeta';
 import { ScriptureText } from '../model/textNormal';
 
 /**
- * The pure half of the Flutter `search_screen.dart`: the scan, its scope and
- * what a hit is. The widget — the field, the chips, the list — belongs to
- * the UI port. Everything here is top-level and free of the DOM so a worker
- * can import it.
+ * The pure half of searching: the scan, its scope and what a hit is. The
+ * screen — the field, the chips, the list — is `src/ui/searchScreen.tsx`.
+ * Everything here is top-level and free of the DOM so a worker can import
+ * it.
  */
 
 /** Where a search looks. */
@@ -57,7 +57,7 @@ export interface SearchOptions {
 /** How many hits a search stops at unless told otherwise. */
 export const searchLimit = 400;
 
-/** Dart's `RegExp.escape`, safe under the `u` flag as well. */
+/** Escapes `text` to match literally in a RegExp, safe under the `u` flag as well. */
 function escapeRegExp(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }

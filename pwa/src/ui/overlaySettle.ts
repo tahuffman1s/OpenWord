@@ -12,8 +12,8 @@ import { nav, overlays, showDialog, showSheet, type OverlayOptions } from './m3'
  * landed, the step then lands on the wrong entry, and the stack, told it
  * is back at the bottom, closes what was just opened.
  *
- * Flutter's `Navigator.pop(); showModalBottomSheet(...)` has no such gap,
- * and the reader does it everywhere. So what the reader opens, it opens
+ * Closing one thing and opening another in the same breath is something
+ * the reader does everywhere. So what the reader opens, it opens
  * through these: they wait for a step back that is still on its way, and
  * are otherwise the kit's own `showSheet`, `showDialog` and `nav.push`.
  */

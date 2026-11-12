@@ -1,11 +1,12 @@
 import { Blend, Hct, MaterialDynamicColors, SchemeTonalSpot, type DynamicScheme } from '@material/material-color-utilities';
 
 /**
- * Builds the app's light and dark themes, Flutter's `ColorScheme.fromSeed`
- * done with the same library Flutter uses underneath (SchemeTonalSpot,
- * 2021 spec), and writes every role as a CSS custom property —
- * `--md-sys-color-primary` and the rest — on `<html>`, so the whole page
- * is themed by the same tokens Material 3 names.
+ * Builds the app's light and dark themes from one seed colour, with
+ * Material Color Utilities (SchemeTonalSpot, 2021 spec: the scheme
+ * Material's `ColorScheme.fromSeed` gives), and writes every role as a
+ * CSS custom property — `--md-sys-color-primary` and the rest — on
+ * `<html>`, so the whole page is themed by the same tokens Material 3
+ * names.
  *
  * The web has no wallpaper palette to read, so the seed colour the reader
  * picks is the seed everywhere, and light or dark follows the system

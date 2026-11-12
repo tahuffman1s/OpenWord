@@ -4,8 +4,7 @@
 // dev server first:
 //   npx vite --port 5204
 //   OUT=/tmp/library-demo/ node scripts/library-demo-drive.mjs [memory|quiz|plans|settings|library]…
-import { createRequire } from 'node:module';
-const { chromium } = createRequire(import.meta.url)('/opt/node-tools/node_modules/playwright');
+import { chromium } from './playwright.mjs';
 const base = process.env.BASE ?? 'http://localhost:5204/library-demo.html';
 import { execFileSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';

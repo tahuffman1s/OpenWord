@@ -2,10 +2,9 @@
  * The import, off the main thread.
  *
  * A module Web Worker that answers one request — convert this file, or
- * sweep this `.bib` — and posts the result back as plain data. The Flutter
- * app does the same with `compute` on an isolate; the shelf starts one of
- * these for any file big enough to be worth it, and does the work inline
- * for anything smaller, or anywhere there are no workers.
+ * sweep this `.bib` — and posts the result back as plain data. The shelf
+ * starts one of these for any file big enough to be worth it, and does
+ * the work inline for anything smaller, or anywhere there are no workers.
  *
  * Nothing here touches the DOM: `importFile` and `tidyBib` are pure, and
  * the XML comes through `htmlparser2`, which needs no `DOMParser`.

@@ -16,8 +16,8 @@ import './libraryScreen.css';
 
 /**
  * Whether the library has something waiting: a verse to practise now. What
- * the reader's library button carries a dot for (`reading.hasMemoryDue`
- * in the Dart; the plan button's dot is `reading.hasPlanReadingDue`).
+ * the reader's library button carries a dot for (the plan button's dot
+ * is `reading.hasPlanReadingDue`).
  */
 export function hasSomethingDue(reading: ReadingStore): boolean {
   return reading.hasMemoryDue;
