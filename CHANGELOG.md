@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+### Added
+- **Refresh cached copy.** Settings → Updates has a button that fetches
+  the app again from the server: the newer build where there is one, else
+  the same build afresh. Notes, highlights, imported translations and the
+  voice are kept.
+
+### Fixed
+- **An installed app stayed on the build it was installed with.** A newer
+  build was fetched and then waited for *Reload* to be tapped on a message
+  shown for ten seconds. It is now switched to by itself: at once when the
+  app opens with one already waiting, otherwise once the app has been out
+  of sight for a moment and nothing is being read aloud.
+
 ### Changed
 - **A release cuts itself.** When `main` carries a version in
   `pwa/package.json` that has no tag yet and CI has passed, the tag and

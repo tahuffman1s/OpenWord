@@ -2,15 +2,23 @@ import { Workbox } from 'workbox-window';
 import { ChangeNotifier, useNotifier, type Listener } from '../infra/changeNotifier';
 
 /**
- * Registers the service worker (`src/sw.ts`, built to `/sw.js`) and tells
- * the app when a newer build is waiting, so it can offer "Reload" rather
- * than swapping the page out from under the reader.
+ * Registers the service worker (`src/sw.ts`, built to `/sw.js`), and moves
+ * the app to a newer build when there is one.
  *
  * The worker is built with `skipWaiting` off: a new build installs, then
  * waits until `applyUpdate()` posts SKIP_WAITING, and the page reloads
  * once the new worker is in control, so every open tab moves to the new
  * version together instead of one tab running new code against another's
  * old caches.
+ *
+ * The switch is made without being asked, but not under the reader: a
+ * build found already waiting when the app opens is switched to at once,
+ * and one that arrives while it is open is switched to once the app has
+ * been put down for a moment and nothing is being read aloud. "Reload" is
+ * offered meanwhile for anyone who would rather not wait. An installed
+ * app is seldom closed outright, which is the only other time a browser
+ * lets a waiting worker in — so left to an offer nobody tapped, it stayed
+ * on the build it was installed with.
  */
 export interface VersionInfo {
   /** The package version, as `version.json` records it. */
@@ -25,6 +33,14 @@ export interface VersionInfo {
 const checkEvery = 60 * 60 * 1000;
 /** A check on return to the tab, if the last was at least this long ago. */
 const checkOnReturnAfter = 15 * 60 * 1000;
+/** How long the app must have been out of sight before a waiting build is switched to. */
+const settledAfter = 15 * 1000;
+/** No second switch unasked within this long of one, should the first not have taken. */
+const switchAgainAfter = 5 * 60 * 1000;
+const switchedKey = 'openword.update.switched';
+
+/** What "Refresh cached copy" came to. */
+export type RefreshOutcome = 'refreshed' | 'offline' | 'failed';
 
 export class AppUpdates extends ChangeNotifier {
   private wb: Workbox | null = null;
@@ -35,6 +51,9 @@ export class AppUpdates extends ChangeNotifier {
   private _version: VersionInfo | null = null;
   private _supported = false;
   private _checking = false;
+  private _refreshing = false;
+  private hiddenSince: number | null = null;
+  private settleTimer: ReturnType<typeof setTimeout> | undefined;
   private reloading = false;
   private reloaded = false;
   private lastCheck = 0;
@@ -99,6 +118,11 @@ export class AppUpdates extends ChangeNotifier {
     return this._checking;
   }
 
+  /** Whether `refreshCachedCopy()` is in flight. */
+  get refreshing(): boolean {
+    return this._refreshing;
+  }
+
   /** The registration, for push subscriptions and local notifications. */
   getRegistration(): ServiceWorkerRegistration | null {
     return this.registration;
@@ -143,6 +167,8 @@ export class AppUpdates extends ChangeNotifier {
     wb.addEventListener('waiting', () => {
       this._updateAvailable = true;
       this.notifyListeners();
+      // Arrived while the app was out of sight: counted from now.
+      if (this.hiddenSince !== null) this.settle();
     });
     wb.addEventListener('controlling', (event) => {
       // A new worker took over: reload so the page runs its build. Only
@@ -170,6 +196,9 @@ export class AppUpdates extends ChangeNotifier {
       }
       this.notifyListeners();
       this.schedule();
+      // Waiting since an earlier visit, and the app has only now opened:
+      // nothing is under way to interrupt.
+      if (this._updateAvailable) this.applyUnasked();
     } catch (error) {
       console.warn('OpenWord: service worker registration failed', error);
       this._supported = false;
@@ -179,11 +208,51 @@ export class AppUpdates extends ChangeNotifier {
 
   private schedule(): void {
     setInterval(() => void this.checkNow(), checkEvery);
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && Date.now() - this.lastCheck > checkOnReturnAfter) {
-        void this.checkNow();
+    const seen = () => {
+      if (document.visibilityState === 'visible') {
+        // A page out of sight may have had its timers stopped: what the
+        // timer would have done is done on the way back in.
+        const away = this.hiddenSince === null ? 0 : Date.now() - this.hiddenSince;
+        this.hiddenSince = null;
+        clearTimeout(this.settleTimer);
+        if (away >= settledAfter) this.applyUnasked();
+        if (Date.now() - this.lastCheck > checkOnReturnAfter) void this.checkNow();
+      } else {
+        this.hiddenSince = Date.now();
+        this.settle();
       }
-    });
+    };
+    document.addEventListener('visibilitychange', seen);
+    if (document.visibilityState !== 'visible') seen();
+  }
+
+  /** Out of sight: a waiting build is switched to if the app stays there. */
+  private settle(): void {
+    clearTimeout(this.settleTimer);
+    if (!this._updateAvailable) return;
+    this.settleTimer = setTimeout(() => {
+      if (this.hiddenSince !== null) this.applyUnasked();
+    }, settledAfter);
+  }
+
+  /**
+   * Switches to the waiting build without the reader having asked: not
+   * while something is being read aloud, which a reload would cut off, and
+   * not twice running, so a switch that does not take cannot turn into a
+   * page reloading itself for ever.
+   */
+  private applyUnasked(): void {
+    if (!this._updateAvailable || this.reloading || this._refreshing) return;
+    if (typeof navigator !== 'undefined' && navigator.mediaSession?.playbackState === 'playing') return;
+    try {
+      const last = Number(sessionStorage.getItem(switchedKey) ?? 0);
+      if (Date.now() - last < switchAgainAfter) return;
+      sessionStorage.setItem(switchedKey, String(Date.now()));
+    } catch {
+      // No storage to keep count in: left to the Reload that is offered.
+      return;
+    }
+    this.applyUpdate();
   }
 
   /** Asks the server for a newer worker now. */
@@ -215,6 +284,54 @@ export class AppUpdates extends ChangeNotifier {
     this.wb.messageSkipWaiting();
   }
 
+  /**
+   * Throws away the copy of the app kept on this device and has it again
+   * from the server: the newer build where there is one, else the same
+   * build fetched afresh. The reader's own things — marks, notes, imported
+   * translations, the voice — are not part of that copy and are left.
+   * Reloads the page when it has worked.
+   */
+  async refreshCachedCopy(): Promise<RefreshOutcome> {
+    const registration = this.registration;
+    if (!registration || this._refreshing) return 'failed';
+    this._refreshing = true;
+    this.notifyListeners();
+    try {
+      // Nothing is thrown away until the server has answered. The query
+      // keeps the worker from answering out of the very copy in question.
+      try {
+        const response = await fetch(`/version.json?fresh=${Date.now()}`, { cache: 'no-store' });
+        if (!response.ok || typeof ((await response.json()) as Partial<VersionInfo>).version !== 'string') return 'offline';
+      } catch {
+        return 'offline';
+      }
+      await registration.update();
+      const incoming = registration.installing ?? registration.waiting;
+      if (incoming) {
+        if (!(await installed(incoming))) return 'failed';
+      } else {
+        const active = registration.active;
+        if (!active || (await refetched(active)) !== 0) return 'failed';
+      }
+      // The voice's runtime is kept apart from the build, under names
+      // that do not change with it: fetched again when next listened to.
+      await caches.delete('openword-ort').catch(() => false);
+      if (incoming) {
+        this._updateAvailable = true;
+        this.applyUpdate();
+      } else {
+        this.reloadOnce();
+      }
+      return 'refreshed';
+    } catch (error) {
+      console.warn('OpenWord: could not refresh the cached copy', error);
+      return 'failed';
+    } finally {
+      this._refreshing = false;
+      this.notifyListeners();
+    }
+  }
+
   private reloadOnce(): void {
     if (this.reloaded) return;
     this.reloaded = true;
@@ -238,6 +355,32 @@ export class AppUpdates extends ChangeNotifier {
       // first install. Nothing to show.
     }
   }
+}
+
+/** Waits for a worker to finish installing; false where it could not. */
+function installed(worker: ServiceWorker): Promise<boolean> {
+  return new Promise((resolve) => {
+    const look = () => {
+      if (worker.state === 'installing') return;
+      worker.removeEventListener('statechange', look);
+      resolve(worker.state !== 'redundant');
+    };
+    worker.addEventListener('statechange', look);
+    look();
+  });
+}
+
+/** Has the worker fetch its build's files again; answers how many it could not, -1 for none of them. */
+function refetched(worker: ServiceWorker): Promise<number> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const timer = setTimeout(() => resolve(-1), 5 * 60 * 1000);
+    channel.port1.onmessage = (event: MessageEvent<{ failed?: number }>) => {
+      clearTimeout(timer);
+      resolve(event.data?.failed ?? -1);
+    };
+    worker.postMessage({ type: 'REFRESH_PRECACHE' }, [channel.port2]);
+  });
 }
 
 async function swIsServed(): Promise<boolean> {

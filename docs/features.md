@@ -168,8 +168,10 @@ three things that need one.
   everything bundled with it — the translations, introductions, maps,
   cross-references and the Hebrew and Greek — so reading needs no
   connection from then on. The app updates itself: a service worker
-  fetches a newer build in the background and the app offers *Reload* to
-  switch to it, rather than changing under you.
+  fetches a newer build in the background, and the app switches to it
+  once you have put it down, rather than changing under you; *Reload*
+  switches at once. Settings → Updates → *Refresh cached copy* fetches
+  the app again if the copy on a device ever seems out of date.
 - **Material You.** A browser cannot read the system wallpaper's palette,
   so the seed-colour picker is the palette: choose a colour and the whole
   scheme is drawn from it. Light and dark follow the system, or can be
