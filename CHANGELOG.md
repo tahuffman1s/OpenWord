@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### Changed
+- **A release cuts itself.** When `main` carries a version in
+  `pwa/package.json` that has no tag yet and CI has passed, the tag and
+  the GitHub release are made from that version's section here, and the
+  images are published under its name.
+
 ## 2.0.0
 
 ### Added

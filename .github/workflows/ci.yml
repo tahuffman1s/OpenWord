@@ -14,6 +14,8 @@ name: CI
 #             Raspberry Pi) and linux/amd64
 #
 # Nothing is published that has not been run.
+#
+# A v* tag is made by release.yml, which starts this workflow on it.
 
 on:
   push:
