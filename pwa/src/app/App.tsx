@@ -73,7 +73,8 @@ function Started({ booted }: { booted: Booted }) {
     [settings.seedColor, settings.themeMode, settings],
   );
 
-  // A new build, once the service worker has it: offered, never forced.
+  // A new build, once the service worker has it: offered now, and taken
+  // up unasked once the app has been put down (src/pwa/serviceWorker.ts).
   useEffect(() => {
     if (!updates.updateAvailable) return;
     showSnackBar('A new version of OpenWord is ready', {

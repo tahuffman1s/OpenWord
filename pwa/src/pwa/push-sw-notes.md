@@ -27,7 +27,7 @@ So the config now uses `strategies: 'injectManifest'`, `srcDir: 'src'`,
 `filename: 'sw.ts'`, and the worker is `src/sw.ts`. The page side
 (`src/pwa/serviceWorker.ts`) is the same either way: `workbox-window`
 registers `/sw.js`, reports a waiting worker, and posts SKIP_WAITING when
-the reader taps Reload.
+the reader taps Reload, or by itself once the app has been put down.
 
 ## What the worker handles
 
@@ -37,6 +37,8 @@ the reader taps Reload.
 - `notificationclick`: closes the notification and focuses an open window
   of the app at the payload's `url` (navigating it there), or opens one.
 - `message` `{ type: 'SKIP_WAITING' }`: the waiting worker activates.
+- `message` `{ type: 'REFRESH_PRECACHE' }`: every precached file is fetched
+  again and replaced; the count that failed is answered on the message's port.
 
 ## What a reminder needs
 

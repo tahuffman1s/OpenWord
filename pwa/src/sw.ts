@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
-import { clientsClaim } from 'workbox-core';
-import { cleanupOutdatedCaches, createHandlerBoundToURL, precacheAndRoute } from 'workbox-precaching';
+import { cacheNames, clientsClaim } from 'workbox-core';
+import { cleanupOutdatedCaches, createHandlerBoundToURL, getCacheKeyForURL, precacheAndRoute } from 'workbox-precaching';
 import { NavigationRoute, registerRoute } from 'workbox-routing';
 import { CacheFirst, StaleWhileRevalidate } from 'workbox-strategies';
 import { CacheableResponsePlugin } from 'workbox-cacheable-response';
@@ -16,8 +16,9 @@ import { RangeRequestsPlugin } from 'workbox-range-requests';
  * and the update handshake.
  *
  * It does not skip waiting on its own: a new build installs and waits
- * until the page, having shown "A new version is ready — Reload", posts
- * SKIP_WAITING (`src/pwa/serviceWorker.ts`).
+ * until the page posts SKIP_WAITING, which it does by itself once the
+ * reader has put the app down, or at once when they tap Reload
+ * (`src/pwa/serviceWorker.ts`).
  */
 declare const self: ServiceWorkerGlobalScope & { __WB_MANIFEST: Array<{ url: string; revision: string | null } | string> };
 
@@ -35,7 +36,9 @@ const appIcon = '/icons/Icon-192.png';
 
 // ---------------------------------------------------------------- caches
 
-precacheAndRoute(self.__WB_MANIFEST);
+// Named once: the build replaces this one mention with the list.
+const precached = self.__WB_MANIFEST;
+precacheAndRoute(precached);
 cleanupOutdatedCaches();
 clientsClaim();
 
@@ -81,7 +84,43 @@ registerRoute(
 self.addEventListener('message', (event) => {
   const data = event.data as { type?: string } | undefined;
   if (data?.type === 'SKIP_WAITING') void self.skipWaiting();
+  if (data?.type === 'REFRESH_PRECACHE') {
+    const port = event.ports[0];
+    event.waitUntil(
+      refreshPrecache().then(
+        (failed) => port?.postMessage({ failed }),
+        () => port?.postMessage({ failed: -1 }),
+      ),
+    );
+  }
 });
+
+/**
+ * Fetches this build's files again, past the browser's own cache, and
+ * puts each in place of the copy kept. For "Refresh cached copy" when the
+ * server has no newer build: the same files, had afresh. One that cannot
+ * be had keeps its old copy. Answers how many could not.
+ */
+async function refreshPrecache(): Promise<number> {
+  const cache = await caches.open(cacheNames.precache);
+  const urls = precached.map((entry) => (typeof entry === 'string' ? entry : entry.url));
+  let failed = 0;
+  const next = async (): Promise<void> => {
+    for (let url = urls.pop(); url !== undefined; url = urls.pop()) {
+      const key = getCacheKeyForURL(url);
+      if (key === undefined) continue;
+      try {
+        const response = await fetch(new URL(url, self.location.href).href, { cache: 'reload' });
+        if (!response.ok) throw new Error(String(response.status));
+        await cache.put(key, response);
+      } catch {
+        failed++;
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 6 }, next));
+  return failed;
+}
 
 // ------------------------------------------------------------------ push
 

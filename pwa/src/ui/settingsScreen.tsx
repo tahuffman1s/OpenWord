@@ -18,7 +18,7 @@ import { useNotifier } from '../infra/changeNotifier';
 import { BibFile } from '../model/bibFile';
 import { Versification, type TranslationInfo } from '../model/bible';
 import { SleepMode } from '../model/sleepPolicy';
-import type { AppUpdates } from '../pwa/serviceWorker';
+import type { AppUpdates, RefreshOutcome } from '../pwa/serviceWorker';
 import { historySettled } from './historySettled';
 import { useAsync } from './hooks';
 import { showImportSheet } from './importSheet';
@@ -543,19 +543,21 @@ function builtLine(builtAt: string): string {
  */
 function UpdateRow({ updates }: { updates: AppUpdates }) {
   const [looked, setLooked] = useState(false);
+  const [refresh, setRefresh] = useState<RefreshOutcome | null>(null);
   const version = updates.version;
   const title = version === null ? 'OpenWord' : `Version ${version.version}`;
   const built = version === null ? '' : `${builtLine(version.builtAt)}${version.commit ? ` Commit ${version.commit}.` : ''} `;
   const subtitle = updates.checking
     ? 'Checking for a newer version…'
     : updates.updateAvailable
-      ? 'A newer version is ready. Reload to switch to it.'
+      ? 'A newer version is ready. Reload to switch to it now, or it will switch by itself once the app is put down.'
       : !updates.supported
         ? `${built}Updates arrive when the page is reloaded.`.trim()
         : looked
           ? 'This is the newest version.'
           : `${built}${updates.offlineReady ? 'Ready to read offline.' : 'Checks for a newer version by itself.'}`.trim();
   return (
+    <>
     <ListTile
       static
       icon="system_update"
@@ -578,6 +580,25 @@ function UpdateRow({ updates }: { updates: AppUpdates }) {
         )
       }
     />
+    <ListTile
+      icon="cached"
+      title="Refresh cached copy"
+      subtitle={
+        updates.refreshing
+          ? 'Fetching the app again…'
+          : refresh === 'offline'
+            ? 'The server could not be reached. The copy kept here is untouched.'
+            : refresh === 'failed'
+              ? 'The app could not be fetched again. The copy kept here is still in use.'
+              : 'Fetch the app again from the server, if this copy seems out of date. Your notes, highlights and translations are kept.'
+      }
+      disabled={!updates.supported || updates.refreshing}
+      trailing={updates.refreshing ? <CircularProgress size={24} /> : undefined}
+      onClick={() => {
+        void updates.refreshCachedCopy().then(setRefresh);
+      }}
+    />
+    </>
   );
 }
 
