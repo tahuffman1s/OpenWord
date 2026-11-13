@@ -1,0 +1,106 @@
+name: Release
+
+# Cuts a release when main carries a version that has not been released.
+#
+# The version is the app's own: "version" in pwa/package.json. When CI has
+# passed on main and there is no tag v<version> yet, this makes that tag
+# on the commit CI ran, opens a GitHub release for it with that version's
+# section of CHANGELOG.md as its notes, and starts CI on the tag, which
+# is what publishes the two images under the release's name.
+#
+# So a release is made by merging a change that raises the version and
+# names its changelog section. Nothing has to be pushed by hand.
+#
+# CI is started on the tag deliberately rather than left to the tag's own
+# push: a tag made with the workflow's token does not start workflows,
+# and a dispatched run does.
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # By hand, for main as it stands: the same thing, without waiting on CI.
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Tag and release
+    # Only for a push to main that CI has passed; a pull request's run,
+    # or a red one, releases nothing.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # the tag and the release
+      actions: write    # starting CI on the tag
+    env:
+      GH_TOKEN: ${{ github.token }}
+      COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.COMMIT }}
+
+      - name: Which version this is, and whether it is out already
+        id: version
+        run: |
+          set -eu
+          version="$(jq -r .version pwa/package.json)"
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *) echo "pwa/package.json has no usable version: '$version'" >&2; exit 1 ;;
+          esac
+          tag="v$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
+            echo "$tag is already released; nothing to do."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: The notes, from the changelog
+        if: steps.version.outputs.new == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -eu
+          # This version's section: from its heading to the next one.
+          awk -v want="## $VERSION" '
+            $0 == want { found = 1; next }
+            found && /^## / { exit }
+            found { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            # A version with no section of its own is not ready to go out.
+            echo "CHANGELOG.md has no section '## $VERSION'" >&2
+            exit 1
+          fi
+
+      - name: Tag it and open the release
+        if: steps.version.outputs.new == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          gh release create "$TAG" \
+            --target "$COMMIT" \
+            --title "OpenWord $TAG" \
+            --notes-file notes.md
+
+      - name: Start CI on the tag, which publishes the images under it
+        if: steps.version.outputs.new == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: gh workflow run ci.yml --ref "$TAG"
